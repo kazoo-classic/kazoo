@@ -153,14 +153,26 @@ eavesdrop_cmd(TargetCallId) ->
 -spec find_sip_endpoints(kz_json:object(), kapps_call:call()) ->
                                 kz_term:ne_binaries().
 find_sip_endpoints(Data, Call) ->
-    case kz_json:get_ne_binary_value(<<"device_id">>, Data) of
-        'undefined' ->
-            UserId = kz_json:get_ne_binary_value(<<"user_id">>, Data),
-            sip_users_from_endpoints(
-              cf_util:find_user_endpoints([UserId], [], Call), Call);
-        DeviceId ->
-            sip_users_from_endpoints([DeviceId], Call)
-    end.
+    SipUsers = find_sip_endpoints(kz_json:to_map(Data), Call, []),
+    SipUsers.
+
+-spec find_sip_endpoints(map(), kapps_call:call(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
+find_sip_endpoints(#{<<"user_id">> := UserId} = Data, Call, Acc) ->
+    SipUsers = sip_users_from_endpoints(
+                  cf_util:find_user_endpoints([UserId], [], Call), Call),
+    find_sip_endpoints(maps:remove(<<"user_id">>, Data), Call, lists:append(SipUsers, Acc));
+find_sip_endpoints(#{<<"user_ids">> := UserIds} = Data, Call, Acc) ->
+    SipUsers = sip_users_from_endpoints(
+                  cf_util:find_user_endpoints(UserIds, [], Call), Call),
+    find_sip_endpoints(maps:remove(<<"user_ids">>, Data), Call, lists:append(SipUsers, Acc));
+find_sip_endpoints(#{<<"device_id">> := DeviceId} = Data, Call, Acc) ->
+    SipUsers = sip_users_from_endpoints([DeviceId], Call),
+    find_sip_endpoints(maps:remove(<<"device_id">>, Data), Call, lists:append(SipUsers, Acc));
+find_sip_endpoints(#{<<"device_ids">> := DeviceIds} = Data, Call, Acc) ->
+    SipUsers = sip_users_from_endpoints(DeviceIds, Call),
+    find_sip_endpoints(maps:remove(<<"device_ids">>, Data), Call, lists:append(SipUsers, Acc));
+find_sip_endpoints(_Data, _Call, Acc) ->
+    Acc.
 
 -spec sip_users_from_endpoints(kz_term:ne_binaries(), kapps_call:call()) ->
                                       kz_term:ne_binaries().

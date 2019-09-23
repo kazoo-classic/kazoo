@@ -50,10 +50,11 @@ handle(Data, Call) ->
     Table = fields_to_check(),
 
     case cf_util:check_value_of_fields(Table, 'false', Data, Call)
-        andalso maybe_correct_target(Target, kz_json:get_ne_binary_value(<<"group_id">>, Data), Call)
+        andalso Target /= 'error'
     of
         'true' ->
-            Flow = kz_json:from_list([{<<"data">>, build_data(Target, Call)}
+            NewData = maybe_correct_target(Target, kz_json:get_ne_binary_value(<<"group_id">>, Data), Call),
+            Flow = kz_json:from_list([{<<"data">>, build_flow_data(Call, NewData)}
                                      ,{<<"module">>, <<"eavesdrop">>}
                                      ,{<<"children">>, kz_json:new()}
                                      ]),
@@ -70,17 +71,7 @@ fields_to_check() ->
     ,{<<"approved_group_id">>, fun cf_util:caller_belongs_to_group/2}
     ].
 
--type target() :: {'ok', kz_term:ne_binary(), kz_term:ne_binary()} | 'error'.
-
--spec build_data(target(), kapps_call:call()) -> kz_json:object().
-build_data('error', _Call) -> kz_json:new();
-build_data({'ok', TargetId, <<"device">>}, Call) ->
-    build_flow_data(Call, [{<<"device_id">>, TargetId}]);
-build_data({'ok', TargetId, <<"user">>}, Call) ->
-    build_flow_data(Call, [{<<"user_id">>, TargetId}]);
-build_data({'ok', TargetId, _TargetType}, Call) ->
-    lager:debug("unknown target type ~s for ~s", [TargetId, _TargetType]),
-    build_flow_data(Call, []).
+-type target() :: {'ok', kz_term:proplist()} | 'error'.
 
 -spec build_flow_data(kapps_call:call(), kz_term:proplist()) -> kz_json:object().
 build_flow_data(Call, Data) ->
@@ -111,13 +102,17 @@ get_target_for_extension(Exten, Call) ->
     end.
 
 -spec maybe_correct_target(target(), kz_term:api_binary(), kapps_call:call()) ->
-                                  boolean().
-maybe_correct_target(_Target, 'undefined', _Call) ->
-    'true';
-maybe_correct_target('error', _GroupId, _Call) ->
-    'false';
-maybe_correct_target({'ok', TargetId, _}, GroupId, Call) ->
-    lists:member(TargetId, find_group_members(GroupId, Call)).
+                                  kz_term:proplist().
+maybe_correct_target({'ok', Data}, 'undefined', _Call) ->
+    Data;
+maybe_correct_target({'ok', Data}, GroupId, Call) ->
+    GroupMembers = find_group_members(GroupId, Call),
+    DeviceIds = props:get_value(<<"device_ids">>, Data, []),
+    UserIds = props:get_value(<<"user_ids">>, Data, []),
+    FilteredDeviceIds = lists:filter(fun(DeviceId) -> lists:member(DeviceId, GroupMembers) end, DeviceIds),
+    FilteredUserIds = lists:filter(fun(UserId) -> lists:member(UserId, GroupMembers) end, UserIds),
+    [{<<"device_ids">>, FilteredDeviceIds}
+    ,{<<"user_ids">>, FilteredUserIds}].
 
 -spec find_group_members(kz_term:ne_binary(), kapps_call:call()) -> kz_term:ne_binaries().
 find_group_members(GroupId, Call) ->
@@ -133,10 +128,28 @@ lookup_endpoint(Flow) ->
     lookup_endpoint(Flow, kz_json:get_ne_binary_value(<<"module">>, Flow)).
 
 -spec lookup_endpoint(kz_json:object(), kz_term:api_binary()) -> target().
-lookup_endpoint(Flow, <<"device">> = TargetType) ->
-    {'ok', kz_json:get_ne_binary_value([<<"data">>, <<"id">>], Flow), TargetType};
-lookup_endpoint(Flow, <<"user">> = TargetType) ->
-    {'ok', kz_json:get_ne_binary_value([<<"data">>, <<"id">>], Flow), TargetType};
+lookup_endpoint(Flow, <<"device">>) ->
+    DeviceId = kz_json:get_ne_binary_value([<<"data">>, <<"id">>], Flow),
+    Data = [{<<"device_ids">>, [DeviceId]}],
+    {'ok', Data};
+lookup_endpoint(Flow, <<"user">>) ->
+    UserId = kz_json:get_ne_binary_value([<<"data">>, <<"id">>], Flow),
+    Data = [{<<"user_ids">>, [UserId]}],
+    {'ok', Data};
+lookup_endpoint(Flow, <<"ring_group">>) ->
+    Endpoints = kz_json:get_list_value([<<"data">>, <<"endpoints">>], Flow),
+    DeviceIds = lists:filtermap(fun(JObj) -> get_targed_id(<<"device">>, JObj) end, Endpoints),
+    UserIds = lists:filtermap(fun(JObj) -> get_targed_id(<<"user">>, JObj) end, Endpoints),
+    Data = [{<<"device_ids">>, DeviceIds}
+           ,{<<"user_ids">>, UserIds}],
+    {'ok', Data};
 lookup_endpoint(Flow, _TargetType) ->
     Child = kz_json:get_json_value([<<"children">>, ?DEFAULT_CHILD_KEY], Flow),
     lookup_endpoint(Child).
+
+-spec get_targed_id(kz_term:api_binary(), kz_json:object()) -> boolean() | {'true', kz_term:api_binary()}.
+get_targed_id(TargetType, JObj) ->
+    case kz_json:get_binary_value(<<"endpoint_type">>, JObj) of
+        TargetType -> {'true', kz_json:get_binary_value(<<"id">>, JObj)};
+        _ -> 'false'
+    end.
