@@ -1,10 +1,12 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
-%%% @doc Handlers for various call events, acdc events, etc
-%%% @author James Aimonetti
-%%% @author Daniel Finke
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2012-2017, 2600Hz INC
+%%% @doc
+%%% Handlers for various call events, acdc events, etc
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%   Daniel Finke
+%%%-------------------------------------------------------------------
 -module(acdc_agent_handler).
 
 %% Listener callbacks
@@ -13,20 +15,20 @@
         ,handle_sync_resp/2
         ,handle_call_event/2
         ,handle_new_channel/2
+        ,handle_destroyed_channel/2
         ,handle_originate_resp/2
         ,handle_member_message/2
         ,handle_agent_message/2
         ,handle_config_change/2
         ,handle_presence_probe/2
-        ,handle_destroy/2
         ]).
 
 -include("acdc.hrl").
 -include_lib("kazoo_amqp/include/kapi_conf.hrl").
 
--define(DEFAULT_PAUSE, kapps_config:get_integer(?CONFIG_CAT, <<"default_agent_pause_timeout">>, 600)).
+-define(DEFAULT_PAUSE, kapps_config:get(?CONFIG_CAT, <<"default_agent_pause_timeout">>, 600)).
 
--spec handle_status_update(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_status_update(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_status_update(JObj, _Props) ->
     _ = kz_util:put_callid(JObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
@@ -43,14 +45,19 @@ handle_status_update(JObj, _Props) ->
             maybe_stop_agent(AccountId, AgentId, JObj);
         <<"pause">> ->
             'true' = kapi_acdc_agent:pause_v(JObj),
-            Timeout = kz_json:get_integer_value(<<"Time-Limit">>, JObj, ?DEFAULT_PAUSE),
-            maybe_pause_agent(AccountId, AgentId, Timeout, JObj);
+            Timeout = kz_json:get_value(<<"Time-Limit">>, JObj, ?DEFAULT_PAUSE),
+            Alias = kz_json:get_value(<<"Alias">>, JObj),
+            maybe_pause_agent(AccountId, AgentId, Timeout, Alias, JObj);
         <<"resume">> ->
             'true' = kapi_acdc_agent:resume_v(JObj),
             maybe_resume_agent(AccountId, AgentId, JObj);
         <<"end_wrapup">> ->
             'true' = kapi_acdc_agent:end_wrapup_v(JObj),
             maybe_end_wrapup_agent(AccountId, AgentId, JObj);
+        <<"restart">> ->
+            'true' = kapi_acdc_agent:restart_v(JObj),
+            _ = acdc_agents_sup:restart_agent(AccountId, AgentId),
+            'ok';
         Event -> maybe_agent_queue_change(AccountId, AgentId, Event
                                          ,kz_json:get_value(<<"Queue-ID">>, JObj)
                                          ,JObj
@@ -96,7 +103,11 @@ maybe_start_agent(AccountId, AgentId, JObj) ->
             end;
         {'exists', Sup} ->
             FSM = acdc_agent_sup:fsm(Sup),
-            acdc_agent_fsm:update_presence(FSM, presence_id(JObj), presence_state(JObj, 'undefined')),
+            acdc_agent_stats:agent_logged_in(AccountId, AgentId),
+            case presence_state(JObj, 'undefined') of
+                'undefined' -> 'ok';
+                PresenceState -> acdc_agent_fsm:update_presence(FSM, presence_id(JObj), PresenceState)
+            end,
             Sup;
         {'error', _E} ->
             acdc_agent_stats:agent_logged_out(AccountId, AgentId),
@@ -161,15 +172,18 @@ maybe_stop_agent(AccountId, AgentId, JObj) ->
 
     end.
 
-maybe_pause_agent(AccountId, AgentId, Timeout, JObj) ->
+maybe_pause_agent(AccountId, AgentId, Timeout, Alias, JObj) when is_integer(Timeout) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' -> lager:debug("agent ~s (~s) not found, nothing to do", [AgentId, AccountId]);
         Sup when is_pid(Sup) ->
-            lager:debug("agent ~s(~s) is pausing for ~p", [AccountId, AgentId, Timeout]),
+            lager:debug("agent ~s(~s) is pausing (~p) for ~p", [AccountId, AgentId, Alias, Timeout]),
             FSM = acdc_agent_sup:fsm(Sup),
             acdc_agent_fsm:update_presence(FSM,  presence_id(JObj), presence_state(JObj, 'undefined')),
-            acdc_agent_fsm:pause(FSM, Timeout)
-    end.
+            acdc_agent_fsm:pause(FSM, Timeout, Alias)
+    end;
+maybe_pause_agent(AccountId, AgentId, Timeout, _, _) ->
+    lager:error("Not pausing agent ~s(~s) invalid Timeout: ~p", [AccountId, AgentId, Timeout]),
+    ok.
 
 maybe_resume_agent(AccountId, AgentId, JObj) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
@@ -192,17 +206,17 @@ maybe_end_wrapup_agent(AccountId, AgentId, JObj) ->
             acdc_agent_fsm:end_wrapup(FSM)
     end.
 
--spec handle_sync_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_sync_req(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_sync_req(JObj, Props) ->
     'true' = kapi_acdc_agent:sync_req_v(JObj),
     acdc_agent_fsm:sync_req(props:get_value('fsm_pid', Props), JObj).
 
--spec handle_sync_resp(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_sync_resp(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_sync_resp(JObj, Props) ->
     'true' = kapi_acdc_agent:sync_resp_v(JObj),
     acdc_agent_fsm:sync_resp(props:get_value('fsm_pid', Props), JObj).
 
--spec handle_call_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_call_event(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_call_event(JObj, Props) ->
     _ = kz_util:put_callid(JObj),
     FSM = props:get_value('fsm_pid', Props),
@@ -219,7 +233,7 @@ handle_call_event(JObj, Props) ->
             end
     end.
 
--spec handle_call_event(kz_term:ne_binary(), kz_term:ne_binary(), kz_types:server_ref(), kz_json:object(), kz_term:proplist()) -> any().
+-spec handle_call_event(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:server_ref(), kz_json:object(), kz_term:kz_proplist()) -> any().
 handle_call_event(Category, <<"CHANNEL_DESTROY">> = Name, FSM, JObj, Props) ->
     Urls = props:get_value('cdr_urls', Props),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
@@ -252,7 +266,7 @@ handle_new_channel_acct(JObj, AccountId) ->
 
     lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
 
-    case kz_json:get_value(<<"Call-Direction">>, JObj) of
+    case kz_call_event:call_direction(JObj) of
         <<"inbound">> -> gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId));
         <<"outbound">> ->
             gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_TO(CallId, MemberCallId)),
@@ -260,7 +274,38 @@ handle_new_channel_acct(JObj, AccountId) ->
         _ -> lager:debug("invalid call direction for call ~s", [CallId])
     end.
 
--spec handle_originate_resp(kz_json:object(), kz_term:proplist()) -> 'ok'.
+%%--------------------------------------------------------------------
+%% @doc
+%% Send event to agent FSM when channels are destroyed. This occurs in
+%% addition to the above handle_call_event/2. Though this is redundant
+%% in most cases, it will keep the agent from becoming stuck in the
+%% outbound state if a channel is created and destroyed before the
+%% acdc_agent_listener gen_listener can bind to it.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_destroyed_channel(kz_json:object(), kz_term:api_binary()) -> 'ok'.
+handle_destroyed_channel(JObj, AccountId) ->
+    FromUser = hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>)),
+    ToUser = hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>)),
+
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+    HangupCause = acdc_util:hangup_cause(JObj),
+
+    lager:debug("destroyed channel in acct ~s: from ~s to ~s", [AccountId, FromUser, ToUser]),
+
+    case kz_call_event:call_direction(JObj) of
+        <<"inbound">> -> gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
+                                   ,?DESTROYED_CHANNEL(CallId, HangupCause));
+        <<"outbound">> ->
+            gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
+                      ,?DESTROYED_CHANNEL(CallId, HangupCause)),
+            gproc:send(?DESTROYED_CHANNEL_REG(AccountId, ToUser)
+                      ,?DESTROYED_CHANNEL(CallId, HangupCause));
+        _ -> 'ok'
+    end.
+
+-spec handle_originate_resp(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_originate_resp(JObj, Props) ->
     case kz_json:get_value(<<"Event-Name">>, JObj) of
         <<"originate_resp">> ->
@@ -274,32 +319,53 @@ handle_originate_resp(JObj, Props) ->
             acdc_agent_fsm:originate_uuid(props:get_value('fsm_pid', Props), JObj)
     end.
 
--spec handle_member_message(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_member_message(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
+-spec handle_member_message(kz_json:object(), kz_term:kz_proplist(), kz_term:ne_binary()) -> 'ok'.
 handle_member_message(JObj, Props) ->
     handle_member_message(JObj, Props, kz_json:get_value(<<"Event-Name">>, JObj)).
 
--spec handle_member_message(kz_json:object(), kz_term:proplist(), kz_term:ne_binary()) -> 'ok'.
 handle_member_message(JObj, Props, <<"connect_req">>) ->
     'true' = kapi_acdc_queue:member_connect_req_v(JObj),
     acdc_agent_fsm:member_connect_req(props:get_value('fsm_pid', Props), JObj);
 handle_member_message(JObj, Props, <<"connect_win">>) ->
     'true' = kapi_acdc_queue:member_connect_win_v(JObj),
-    acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj);
+    MyId = acdc_util:proc_id(props:get_value('fsm_pid', Props)),
+    lager:debug("myid ~p", [MyId]),
+    lager:debug("procids ~p", [kz_json:get_value(<<"Agent-Process-IDs">>, JObj)]),
+    case lists:member(MyId, kz_json:get_value(<<"Agent-Process-IDs">>, JObj)) of
+        true -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'same_node');
+        false -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'different_node')
+    end;
+handle_member_message(JObj, Props, <<"connect_satisfied">>) ->
+    'true' = kapi_acdc_queue:member_connect_satisfied_v(JObj),
+    MyId = acdc_util:proc_id(props:get_value('fsm_pid', Props)),
+    lager:debug("myid ~p", [MyId]),
+    lager:debug("procids ~p", [kz_json:get_value(<<"Agent-Process-IDs">>, JObj)]),
+    case lists:member(MyId, kz_json:get_value(<<"Agent-Process-IDs">>, JObj)) of
+        true -> acdc_agent_fsm:member_connect_satisfied(props:get_value('fsm_pid', Props), JObj, 'same_node');
+        false -> acdc_agent_fsm:member_connect_satisfied(props:get_value('fsm_pid', Props), JObj, 'different_node')
+    end;
 handle_member_message(_, _, EvtName) ->
     lager:debug("not handling member event ~s", [EvtName]).
 
--spec handle_agent_message(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_agent_message(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
+-spec handle_agent_message(kz_json:object(), kz_term:kz_proplist(), kz_term:ne_binary()) -> 'ok'.
 handle_agent_message(JObj, Props) ->
     handle_agent_message(JObj, Props, kz_json:get_value(<<"Event-Name">>, JObj)).
 
--spec handle_agent_message(kz_json:object(), kz_term:proplist(), kz_term:ne_binary()) -> 'ok'.
 handle_agent_message(JObj, Props, <<"connect_timeout">>) ->
     'true' = kapi_acdc_queue:agent_timeout_v(JObj),
     acdc_agent_fsm:agent_timeout(props:get_value('fsm_pid', Props), JObj);
+handle_agent_message(JObj, Props, <<"shared_failure">>) ->
+    'true' = kapi_acdc_agent:shared_originate_failure_v(JObj),
+    acdc_agent_fsm:shared_failure(props:get_value('fsm_pid', Props), JObj);
+handle_agent_message(JObj, Props, <<"shared_call_id">>) ->
+    'true' = kapi_acdc_agent:shared_call_id_v(JObj),
+    acdc_agent_fsm:shared_call_id(props:get_value('fsm_pid', Props), JObj);
 handle_agent_message(_, _, _EvtName) ->
     lager:debug("not handling agent event ~s", [_EvtName]).
 
--spec handle_config_change(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_config_change(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_config_change(JObj, _Props) ->
     'true' = kapi_conf:doc_update_v(JObj),
     handle_change(JObj, kz_json:get_value(<<"Type">>, JObj)).
@@ -395,7 +461,7 @@ handle_agent_change(_, AccountId, AgentId, ?DOC_DELETED) ->
             acdc_agent_stats:agent_logged_out(AccountId, AgentId)
     end.
 
--spec handle_presence_probe(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_presence_probe(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_presence_probe(JObj, _Props) ->
     'true' = kapi_presence:probe_v(JObj),
     Realm = kz_json:get_value(<<"Realm">>, JObj),
@@ -420,22 +486,15 @@ update_probe(JObj, P) when is_pid(P) ->
 
 send_probe(JObj, State) ->
     To = <<(kz_json:get_value(<<"Username">>, JObj))/binary
-          ,"@"
-          ,(kz_json:get_value(<<"Realm">>, JObj))/binary
-         >>,
+           ,"@"
+           ,(kz_json:get_value(<<"Realm">>, JObj))/binary>>,
     PresenceUpdate =
         [{<<"State">>, State}
         ,{<<"Presence-ID">>, To}
-        ,{<<"Call-ID">>, kz_term:to_hex_binary(crypto:hash('md5', To))}
+        ,{<<"Call-ID">>, kz_term:to_hex_binary(crypto:hash(md5, To))}
          | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
         ],
     kapi_presence:publish_update(PresenceUpdate).
-
--spec handle_destroy(kz_json:object(), kz_term:proplist()) -> 'ok'.
-handle_destroy(JObj, Props) ->
-    'true' = kapi_call:event_v(JObj),
-    FSM = props:get_value('fsm_pid', Props),
-    acdc_agent_fsm:call_event(FSM, <<"call_event">>, <<"CHANNEL_DESTROY">>, JObj).
 
 presence_id(JObj) ->
     presence_id(JObj, 'undefined').

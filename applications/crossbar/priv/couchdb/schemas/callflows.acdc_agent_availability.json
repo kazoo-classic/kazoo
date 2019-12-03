@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "callflows.acdc_agent_availability",
+    "description": "Validator for the acdc_agent_availability callflow's data object",
+    "properties": {
+        "id": {
+            "description": "ID of the ACDc Queue",
+            "type": "string"
+        }
+    },
+    "required": [
+        "id"
+    ],
+    "type": "object"
+}

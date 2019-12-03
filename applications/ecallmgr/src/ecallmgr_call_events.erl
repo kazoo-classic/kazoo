@@ -707,6 +707,10 @@ specific_call_event_props(<<"CHANNEL_DESTROY">>, _, Props) ->
     ,{<<"Fax-Info">>, maybe_fax_specific(Props)}
      | debug_channel_props(Props)
     ];
+specific_call_event_props(<<"PLAYBACK_STOP">>, Application, Props) ->
+    [{<<"Application-Name">>, props:get_value(Application, ?FS_APPLICATION_NAMES)}
+    ,{<<"Application-Response">>, props:get_value(<<"Application-Response">>, Props)}
+    ];
 specific_call_event_props(<<"RECORD_START">>, _, Props) ->
     [{<<"Application-Name">>, <<"record">>}
     ,{<<"Application-Response">>, props:get_first_defined([<<"Record-File-Path">>

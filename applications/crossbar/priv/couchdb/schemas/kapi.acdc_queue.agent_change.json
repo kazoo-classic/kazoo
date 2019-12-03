@@ -30,10 +30,16 @@
             ],
             "type": "string"
         },
+        "Priority": {
+            "type": "string"
+        },
         "Process-ID": {
             "type": "string"
         },
         "Queue-ID": {
+            "type": "string"
+        },
+        "Skills": {
             "type": "string"
         }
     },

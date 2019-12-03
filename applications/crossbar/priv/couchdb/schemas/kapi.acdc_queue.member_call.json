@@ -9,6 +9,12 @@
         "Call": {
             "type": "object"
         },
+        "Callback-Number": {
+            "type": "string"
+        },
+        "Enter-As-Callback": {
+            "type": "boolean"
+        },
         "Event-Category": {
             "enum": [
                 "member"

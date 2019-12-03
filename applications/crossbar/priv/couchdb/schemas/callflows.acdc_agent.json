@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
     "_id": "callflows.acdc_agent",
-    "description": "Validator for the acdc_agent callflow data object",
+    "description": "Validator for the acdc_agent callflow's data object",
     "properties": {
         "action": {
             "description": "Set which action to perform",
@@ -28,10 +28,6 @@
                 "green"
             ],
             "type": "string"
-        },
-        "skip_module": {
-            "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
-            "type": "boolean"
         },
         "timeout": {
             "description": "Time, in seconds, for 'paused' state",

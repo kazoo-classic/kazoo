@@ -3,6 +3,20 @@
     "_id": "users",
     "description": "Schema for a user",
     "properties": {
+        "acdc_agent_priority": {
+            "description": "A call distribution priority for this agent from -128 to 128",
+            "maximum": 128,
+            "minimum": -128,
+            "type": "integer"
+        },
+        "acdc_skills": {
+            "description": "Skills this agent has, to consider when distributing calls (requires a supporting queue strategy)",
+            "items": {
+                "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+        },
         "call_forward": {
             "description": "The device call forward parameters",
             "properties": {

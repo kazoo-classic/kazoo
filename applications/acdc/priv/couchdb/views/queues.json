@@ -4,13 +4,16 @@
         "view_map": [
             {
                 "classification": "account"
+            },
+            {
+                "database": "acdc"
             }
         ]
     },
     "language": "javascript",
     "views": {
         "agents_listing": {
-            "map": "function(doc) { if (doc.pvt_type !== 'user' || doc.pvt_deleted || typeof doc.queues !== 'object' ) return; for ( i in doc.queues ) { emit(doc.queues[i], doc._id); }}"
+            "map": "function(doc) { if (doc.pvt_type !== 'user' || doc.pvt_deleted || typeof doc.queues !== 'object' ) return; for ( i in doc.queues ) { emit(doc.queues[i], {'id': doc._id, 'agent_priority': doc.acdc_agent_priority, 'skills': doc.acdc_skills}); }}"
         },
         "crossbar_listing": {
             "map": "function(doc) { if (doc.pvt_type != 'queue' || doc.pvt_deleted) return; emit(doc._id, {'id': doc._id, 'name': doc.name}); }"

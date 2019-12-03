@@ -3,6 +3,9 @@
     "_id": "kapi.acdc_queue.member_connect_win",
     "description": "AMQP API for acdc_queue.member_connect_win",
     "properties": {
+        "Agent-ID": {
+            "type": "string"
+        },
         "Agent-Process-ID": {
             "type": "string"
         },
@@ -11,6 +14,9 @@
         },
         "Call": {
             "type": "object"
+        },
+        "Callback-Details": {
+            "type": "string"
         },
         "Caller-Exit-Key": {
             "type": "string"

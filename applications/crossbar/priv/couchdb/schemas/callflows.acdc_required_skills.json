@@ -1,0 +1,18 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "callflows.acdc_required_skills",
+    "description": "Validator for the acdc_required_skills callflow's data object",
+    "properties": {
+        "add": {
+            "default": [],
+            "description": "Skills to add to the required skills on the call",
+            "type": "array"
+        },
+        "remove": {
+            "default": [],
+            "description": "Skills to remove from the required skills on the call",
+            "type": "array"
+        }
+    },
+    "type": "object"
+}

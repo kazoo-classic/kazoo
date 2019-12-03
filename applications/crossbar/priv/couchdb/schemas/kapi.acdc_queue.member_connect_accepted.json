@@ -24,6 +24,9 @@
             ],
             "type": "string"
         },
+        "Old-Call-ID": {
+            "type": "string"
+        },
         "Process-ID": {
             "type": "string"
         }

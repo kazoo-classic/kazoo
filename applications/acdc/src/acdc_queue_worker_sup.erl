@@ -1,10 +1,12 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2012-2017, 2600Hz INC
 %%% @doc
-%%% @author James Aimonetti
-%%% @author Sponsored by GTNetwork LLC, Implemented by SIPLABS LLC
+%%%
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
+%%%-------------------------------------------------------------------
 -module(acdc_queue_worker_sup).
 -behaviour(supervisor).
 
@@ -26,15 +28,14 @@
 
 -define(CHILDREN, [?WORKER_ARGS('acdc_queue_listener', [self() | Args])]).
 
-%%%=============================================================================
+%%%===================================================================
 %%% API functions
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Starts the supervisor.
-%% @end
-%%------------------------------------------------------------------------------
--spec start_link(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:startlink_ret().
+%%--------------------------------------------------------------------
+%% @doc Starts the supervisor
+%%--------------------------------------------------------------------
+-spec start_link(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:startlink_ret().
 start_link(MgrPid, AcctId, QueueId) ->
     supervisor:start_link(?SERVER, [MgrPid, AcctId, QueueId]).
 
@@ -55,7 +56,7 @@ shared_queue(WorkerSup) ->
         [P] -> P
     end.
 
--spec start_shared_queue(pid(), pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_integer()) -> kz_types:sup_startchild_ret().
+-spec start_shared_queue(pid(), pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_integer()) -> kz_term:sup_startchild_ret().
 start_shared_queue(WorkerSup, FSMPid, AcctId, QueueId, Priority) ->
     supervisor:start_child(WorkerSup, ?WORKER_ARGS('acdc_queue_shared', [FSMPid, AcctId, QueueId, Priority])).
 
@@ -66,7 +67,7 @@ fsm(WorkerSup) ->
         [P] -> P
     end.
 
--spec start_fsm(pid(), pid(), kz_json:object()) -> kz_types:sup_startchild_ret().
+-spec start_fsm(pid(), pid(), kz_json:object()) -> kz_term:sup_startchild_ret().
 start_fsm(WorkerSup, MgrPid, QueueJObj) ->
     ListenerPid = self(),
     supervisor:start_child(WorkerSup, ?WORKER_ARGS('acdc_queue_fsm', [MgrPid, ListenerPid, QueueJObj])).
@@ -99,18 +100,20 @@ print_status([{K, V}|T]) ->
     ?PRINT("        ~s: ~p", [K, V]),
     print_status(T).
 
-%%%=============================================================================
+%%%===================================================================
 %%% Supervisor callbacks
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Whenever a supervisor is started using supervisor:start_link/[2,3],
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%------------------------------------------------------------------------------
--spec init(list()) -> kz_types:sup_init_ret().
+%%--------------------------------------------------------------------
+-spec init(list()) -> kz_term:sup_init_ret().
 init(Args) ->
     RestartStrategy = 'one_for_all',
     MaxRestarts = 2,
@@ -120,6 +123,6 @@ init(Args) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%=============================================================================
+%%%===================================================================
 %%% Internal functions
-%%%=============================================================================
+%%%===================================================================

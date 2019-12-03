@@ -1,9 +1,11 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
-%%% @doc Caller calls in and gets the first available call from the queue
-%%% @author James Aimonetti
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2017, 2600Hz
+%%% @doc
+%%% Caller calls in and gets the first available call from the queue
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%-------------------------------------------------------------------
 -module(acdc_queue_thief).
 
 -export([connect/2]).

@@ -3,7 +3,10 @@
     "kazoo": {
         "view_map": [
             {
-                "classification": "modb"
+                "classification": "account"
+            },
+            {
+                "database": "acdc"
             }
         ]
     },

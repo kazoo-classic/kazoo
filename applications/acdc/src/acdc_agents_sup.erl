@@ -1,9 +1,12 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2012-2017, 2600Hz INC
 %%% @doc
-%%% @author James Aimonetti
+%%%
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%   Daniel Finke
+%%%-------------------------------------------------------------------
 -module(acdc_agents_sup).
 
 -behaviour(supervisor).
@@ -31,15 +34,14 @@
 -define(CHILDREN, [?SUPER_TYPE('acdc_agent_sup', 'transient')
                   ]).
 
-%%%=============================================================================
+%%%===================================================================
 %%% API functions
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Starts the supervisor.
-%% @end
-%%------------------------------------------------------------------------------
--spec start_link() -> kz_types:startlink_ret().
+%%--------------------------------------------------------------------
+%% @doc Starts the supervisor
+%%--------------------------------------------------------------------
+-spec start_link() -> kz_term:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
@@ -50,43 +52,50 @@ status() ->
     _ = kz_util:spawn(fun() -> lists:foreach(fun acdc_agent_sup:status/1, Ws) end),
     'ok'.
 
--spec new(kz_json:object()) -> kz_types:sup_startchild_ret().
+-spec new(kz_json:object()) -> kz_term:sup_startchild_ret().
+-spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:sup_startchild_ret().
 new(JObj) ->
-    case find_agent_supervisor(kz_doc:account_id(JObj), kz_doc:id(JObj)) of
-        'undefined' -> supervisor:start_child(?SERVER, [JObj]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    acdc_agent_manager:start_agent(kz_doc:account_id(JObj)
+                                  ,kz_doc:id(JObj)
+                                  ,[JObj]
+                                  ).
 
--spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
 new(AcctId, AgentId) ->
-    case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' ->
-            {'ok', Agent} = kz_datamgr:open_doc(kz_util:format_account_id(AcctId, 'encoded'), AgentId),
-            supervisor:start_child(?SERVER, [Agent]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    {'ok', Agent} = kz_datamgr:open_doc(kz_util:format_account_id(AcctId, 'encoded'), AgentId),
+    acdc_agent_manager:start_agent(AcctId
+                                  ,AgentId
+                                  ,[Agent]
+                                  ).
 
--spec new(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kz_term:ne_binaries()) -> kz_types:sup_startchild_ret() | 'ok'.
+-spec new(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kz_term:ne_binaries()) -> kz_term:sup_startchild_ret() | 'ok'.
 new(AcctId, AgentId, AgentJObj, Queues) ->
-    case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' -> supervisor:start_child(?SERVER, [AgentJObj, AcctId, AgentId, Queues]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    acdc_agent_manager:start_agent(AcctId
+                                  ,AgentId
+                                  ,[AgentJObj, AcctId, AgentId, Queues]
+                                  ).
 
--spec new_thief(kapps_call:call(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
+-spec new_thief(kapps_call:call(), kz_term:ne_binary()) -> kz_term:sup_startchild_ret().
 new_thief(Call, QueueId) -> supervisor:start_child(?SERVER, [Call, QueueId]).
 
 -spec workers() -> kz_term:pids().
 workers() -> [Pid || {_, Pid, 'supervisor', [_]} <- supervisor:which_children(?SERVER)].
 
--spec restart_acct(kz_term:ne_binary()) -> [kz_types:sup_startchild_ret()].
-restart_acct(AcctId) -> [acdc_agent_sup:restart(S) || S <- workers(), is_agent_in_acct(S, AcctId)].
+-spec restart_acct(kz_term:ne_binary()) -> [kz_term:sup_startchild_ret()].
+restart_acct(AcctId) ->
+    [restart_agent(AcctId, AgentId)
+     || {_, {AcctId1, AgentId, _}} <- agents_running()
+            ,AcctId =:= AcctId1
+    ].
 
--spec restart_agent(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret() | 'ok'.
+-spec restart_agent(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:sup_startchild_ret().
 restart_agent(AcctId, AgentId) ->
     case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' -> lager:info("no supervisor for agent ~s(~s) to restart", [AgentId, AcctId]);
-        S -> acdc_agent_sup:restart(S)
+        'undefined' ->
+            lager:info("no supervisor for agent ~s(~s) to restart", [AgentId, AcctId]),
+            new(AcctId, AgentId);
+        S ->
+            acdc_agent_sup:stop(S),
+            new(AcctId, AgentId)
     end.
 
 -spec find_acct_supervisors(kz_term:ne_binary()) -> kz_term:pids().
@@ -105,9 +114,9 @@ agents_running() ->
     [{W, catch acdc_agent_listener:config(acdc_agent_sup:listener(W))} || W <- workers()].
 
 -spec find_agent_supervisor(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:api_pid().
+-spec find_agent_supervisor(kz_term:api_binary(), kz_term:api_binary(), kz_term:pids()) -> kz_term:api_pid().
 find_agent_supervisor(AcctId, AgentId) -> find_agent_supervisor(AcctId, AgentId, workers()).
 
--spec find_agent_supervisor(kz_term:api_binary(), kz_term:api_binary(), kz_term:pids()) -> kz_term:api_pid().
 find_agent_supervisor(_AcctId, _AgentId, []) ->
     lager:debug("ran out of supers"),
     'undefined';
@@ -122,18 +131,20 @@ find_agent_supervisor(AcctId, AgentId, [Super|Rest]) ->
         _E -> find_agent_supervisor(AcctId, AgentId, Rest)
     end.
 
-%%%=============================================================================
+%%%===================================================================
 %%% Supervisor callbacks
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Whenever a supervisor is started using supervisor:start_link/[2,3],
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%------------------------------------------------------------------------------
--spec init(any()) -> kz_types:sup_init_ret().
+%%--------------------------------------------------------------------
+-spec init(any()) -> kz_term:sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 1,
@@ -143,6 +154,6 @@ init([]) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%=============================================================================
+%%%===================================================================
 %%% Internal functions
-%%%=============================================================================
+%%%===================================================================

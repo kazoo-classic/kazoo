@@ -1,8 +1,12 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
     "_id": "callflows.acdc_member",
-    "description": "Validator for the acdc_member callflow data object",
+    "description": "Validator for the acdc_member callflow's data object",
     "properties": {
+        "enter_as_callback": {
+            "description": "Immediately register the call as a callback and hang up",
+            "type": "boolean"
+        },
         "id": {
             "description": "ID of the ACDc Queue",
             "type": "string"
@@ -10,10 +14,6 @@
         "priority": {
             "description": "assign a priority to the caller",
             "type": "integer"
-        },
-        "skip_module": {
-            "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
-            "type": "boolean"
         }
     },
     "type": "object"

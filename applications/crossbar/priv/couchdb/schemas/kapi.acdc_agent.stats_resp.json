@@ -6,6 +6,9 @@
         "Account-ID": {
             "type": "string"
         },
+        "Agent-Call-IDs": {
+            "type": "string"
+        },
         "Current-Calls": {
             "type": "string"
         },

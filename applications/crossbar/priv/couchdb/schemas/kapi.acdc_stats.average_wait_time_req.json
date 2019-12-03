@@ -23,6 +23,12 @@
             "minLength": 1,
             "type": "string"
         },
+        "Skills": {
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
         "Window": {
             "type": "integer"
         }

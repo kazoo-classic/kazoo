@@ -1,15 +1,15 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
     "_id": "callflows.acdc_wait_time",
-    "description": "Validator for the acdc_wait_time callflow data object",
+    "description": "Validator for the acdc_wait_time callflow's data object",
     "properties": {
         "id": {
             "description": "Queue ID",
             "type": "string"
         },
-        "skip_module": {
-            "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
-            "type": "boolean"
+        "var": {
+            "description": "Custom KV whose value to use instead of \"id\"",
+            "type": "string"
         },
         "window": {
             "description": "Window over which average wait time is calculated (in seconds)",

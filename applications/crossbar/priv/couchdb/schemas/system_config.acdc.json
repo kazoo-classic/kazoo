@@ -41,6 +41,10 @@
             "description": "acdc default agent pause timeout",
             "type": "integer"
         },
+        "default_queue_max_priority": {
+            "description": "Maximum Call-Priority level supported by queues unless overridden on a per-queue basis",
+            "type": "integer"
+        },
         "max_connect_failures": {
             "default": 3,
             "description": "acdc maximum connect failures",

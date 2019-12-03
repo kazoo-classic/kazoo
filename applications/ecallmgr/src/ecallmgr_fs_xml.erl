@@ -38,6 +38,8 @@
 -include("ecallmgr.hrl").
 
 -define(DEFAULT_USER_CACHE_TIME_IN_MS, ?MILLISECONDS_IN_HOUR). %% 1 hour
+-define(ALEG_CALLID_HEADER, kapps_config:get_ne_binary(?APP_NAME, <<"aleg_callid_header">>)).
+
 
 -spec acl_xml(kz_json:object()) -> {'ok', iolist()}.
 acl_xml(AclsJObj) ->
@@ -300,6 +302,7 @@ route_resp_xml(<<"park">>, _Routes, JObj, Props) ->
              | route_resp_ccvs(JObj)
              ++ route_resp_cavs(JObj)
              ++ unset_custom_sip_headers(Props)
+             ++ maybe_emit_aleg_callid()
              ++ [action_el(<<"park">>)]
             ],
     ParkExtEl = extension_el(<<"park">>, 'undefined', [condition_el(Exten)]),
@@ -307,6 +310,7 @@ route_resp_xml(<<"park">>, _Routes, JObj, Props) ->
     ContextEl = context_el(Context, [ParkExtEl]),
     SectionEl = section_el(<<"dialplan">>, <<"Route Park Response">>, ContextEl),
     {'ok', xmerl:export([SectionEl], 'fs_xml')};
+
 
 route_resp_xml(<<"error">>, _Routes, JObj, Props) ->
     Section = kz_json:get_value(<<"Fetch-Section">>, JObj, <<"dialplan">>),
@@ -408,6 +412,13 @@ route_resp_ringback(JObj) ->
             MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
             Stream = ecallmgr_util:media_path(Media, 'extant', MsgId, JObj),
             action_el(<<"set">>, <<"ringback=", (kz_term:to_binary(Stream))/binary>>)
+    end.
+
+-spec maybe_emit_aleg_callid() -> kz_types:xml_el() | 'undefined'.
+maybe_emit_aleg_callid() ->
+    case ?ALEG_CALLID_HEADER of
+        'undefined' -> [];
+        HeaderName -> [action_el(<<"set">>, <<"sip_h_", HeaderName/binary, "=${uuid}">>)]
     end.
 
 -spec route_resp_ccvs(kz_json:object()) -> kz_types:xml_els().

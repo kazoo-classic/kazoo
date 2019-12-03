@@ -376,6 +376,7 @@
                    ,['RECORD_START', 'RECORD_STOP']
                    ,['CHANNEL_BRIDGE', 'CHANNEL_UNBRIDGE', 'CHANNEL_EXECUTE_COMPLETE']
                    ,['CHANNEL_DATA','CALL_UPDATE', 'CALL_SECURE']
+                   ,['PLAYBACK_START', 'PLAYBACK_STOP']
                    ,['CHANNEL_HOLD', 'CHANNEL_UNHOLD']
                    ,['PRESENCE_IN']
                    ]).

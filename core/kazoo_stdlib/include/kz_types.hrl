@@ -75,6 +75,7 @@
         ,<<"DETECTED_TONE">>,<<"DTMF">>
         ,<<"LEG_CREATED">>, <<"LEG_DESTROYED">>
         ,<<"RECORD_START">>,<<"RECORD_STOP">>
+        ,<<"PLAYBACK_START">>, <<"PLAYBACK_STOP">>
         ,<<"dialplan">> %% errors are sent with this
         ]).
 

@@ -6,6 +6,9 @@
         "Abandoned": {
             "type": "string"
         },
+        "Entered-Position": {
+            "type": "string"
+        },
         "Event-Category": {
             "enum": [
                 "acdc_stat"
@@ -16,6 +19,9 @@
             "enum": [
                 "current_calls_resp"
             ],
+            "type": "string"
+        },
+        "Exited-Position": {
             "type": "string"
         },
         "Handled": {

@@ -1,9 +1,11 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2012-2017, 2600Hz INC
 %%% @doc
-%%% @author James Aimonetti
+%%%
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%-------------------------------------------------------------------
 -module(acdc_queues_sup).
 
 -behaviour(supervisor).
@@ -27,19 +29,18 @@
 
 -define(CHILDREN, [?SUPER_TYPE('acdc_queue_sup', 'transient')]).
 
-%%%=============================================================================
+%%%===================================================================
 %%% API functions
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Starts the supervisor.
-%% @end
-%%------------------------------------------------------------------------------
--spec start_link() -> kz_types:startlink_ret().
+%%--------------------------------------------------------------------
+%% @doc Starts the supervisor
+%%--------------------------------------------------------------------
+-spec start_link() -> kz_term:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:startlink_ret().
+-spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:startlink_ret().
 new(AcctId, QueueId) ->
     case find_queue_supervisor(AcctId, QueueId) of
         P when is_pid(P) -> {'ok', P};
@@ -63,10 +64,10 @@ is_queue_in_acct(Super, AcctId) ->
     end.
 
 -spec find_queue_supervisor(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_pid().
+-spec find_queue_supervisor(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:pids()) -> kz_term:api_pid().
 find_queue_supervisor(AcctId, QueueId) ->
     find_queue_supervisor(AcctId, QueueId, workers()).
 
--spec find_queue_supervisor(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:pids()) -> kz_term:api_pid().
 find_queue_supervisor(_AcctId, _QueueId, []) -> 'undefined';
 find_queue_supervisor(AcctId, QueueId, [Super|Rest]) ->
     case catch acdc_queue_manager:config(acdc_queue_sup:manager(Super)) of
@@ -86,18 +87,20 @@ status() ->
 queues_running() ->
     [{W, catch acdc_queue_manager:config(acdc_queue_sup:manager(W))} || W <- workers()].
 
-%%%=============================================================================
+%%%===================================================================
 %%% Supervisor callbacks
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Whenever a supervisor is started using supervisor:start_link/[2,3],
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%------------------------------------------------------------------------------
--spec init(any()) -> kz_types:sup_init_ret().
+%%--------------------------------------------------------------------
+-spec init(any()) -> kz_term:sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 1,
@@ -107,6 +110,6 @@ init([]) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%=============================================================================
+%%%===================================================================
 %%% Internal functions
-%%%=============================================================================
+%%%===================================================================

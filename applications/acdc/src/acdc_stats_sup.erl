@@ -1,9 +1,11 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
-%%% @doc Manage the bucket servers
-%%% @author James Aimonetti
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2013-2017, 2600Hz
+%%% @doc
+%%% Manage the bucket servers
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%-------------------------------------------------------------------
 -module(acdc_stats_sup).
 
 -behaviour(supervisor).
@@ -21,19 +23,21 @@
 -define(SERVER, ?MODULE).
 
 -define(CHILDREN, [?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_call', [acdc_stats:call_table_id(), acdc_stats:call_table_opts()])
+                  ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_call_summary', [acdc_stats:call_summary_table_id(), acdc_stats:call_summary_table_opts()])
+                  ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_agent_call', [acdc_stats:agent_call_table_id(), acdc_stats:agent_call_table_opts()])
                   ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_status', [acdc_agent_stats:status_table_id(), acdc_agent_stats:status_table_opts()])
+                  ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_agent_cur_status', [acdc_agent_stats:agent_cur_status_table_id(), acdc_agent_stats:agent_cur_status_table_opts()])
                   ,?WORKER('acdc_stats')
                   ]).
 
-%%%=============================================================================
+%%%===================================================================
 %%% API functions
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Starts the supervisor.
-%% @end
-%%------------------------------------------------------------------------------
--spec start_link() -> kz_types:startlink_ret().
+%%--------------------------------------------------------------------
+%% @doc Starts the supervisor
+%%--------------------------------------------------------------------
+-spec start_link() -> kz_term:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
@@ -46,18 +50,20 @@ stats_srv() ->
         _ -> {'error', 'not_found'}
     end.
 
-%%%=============================================================================
+%%%===================================================================
 %%% Supervisor callbacks
-%%%=============================================================================
+%%%===================================================================
 
-%%------------------------------------------------------------------------------
-%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Whenever a supervisor is started using supervisor:start_link/[2,3],
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%------------------------------------------------------------------------------
--spec init(any()) -> kz_types:sup_init_ret().
+%%--------------------------------------------------------------------
+-spec init(any()) -> kz_term:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 1,
@@ -67,6 +73,6 @@ init([]) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%=============================================================================
+%%%===================================================================
 %%% Internal functions
-%%%=============================================================================
+%%%===================================================================

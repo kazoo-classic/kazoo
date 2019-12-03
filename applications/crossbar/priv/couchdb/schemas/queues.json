@@ -67,6 +67,44 @@
             },
             "type": "object"
         },
+        "breakout": {
+            "properties": {
+                "dtmf": {
+                    "description": "Digit that puts caller into breakout menu",
+                    "type": "string"
+                },
+                "media": {
+                    "description": "Media overrides for breakout menu prompts",
+                    "properties": {
+                        "call_back_at": {
+                            "description": "You will be called back at:",
+                            "type": "string"
+                        },
+                        "callback_registered": {
+                            "description": "Your callback has been registered. Goodbye!",
+                            "type": "string"
+                        },
+                        "enter_callback_number": {
+                            "description": "Enter a callback number, followed by the pound sign.",
+                            "type": "string"
+                        },
+                        "number_correct": {
+                            "description": "If this is correct, press 1. Otherwise, press 2.",
+                            "type": "string"
+                        },
+                        "prompt": {
+                            "description": "Press 1 to receive a callback.",
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
+                }
+            },
+            "required": [
+                "dtmf"
+            ],
+            "type": "object"
+        },
         "caller_exit_key": {
             "default": "#",
             "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
@@ -144,7 +182,9 @@
             "description": "The queue strategy for connecting agents to callers",
             "enum": [
                 "round_robin",
-                "most_idle"
+                "most_idle",
+                "skills_based_round_robin",
+                "ring_all"
             ],
             "type": "string"
         }

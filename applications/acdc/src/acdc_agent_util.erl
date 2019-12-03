@@ -18,6 +18,8 @@
         ,most_recent_db_statuses/1, most_recent_db_statuses/2, most_recent_db_statuses/3
 
         ,changed/2, find_most_recent_fold/3
+
+	,agent_priority/1
         ]).
 
 -include("acdc.hrl").
@@ -43,7 +45,10 @@ most_recent_status(AccountId, AgentId) ->
     case most_recent_ets_status(AccountId, AgentId) of
         {'ok', _}=OK -> OK;
         {'error', _ErrJObj} ->
-            lager:debug("failed to get ETS stats: ~p", [kz_json:get_value(<<"Error-Reason">>, _ErrJObj)]),
+            case kz_json:is_valid_json_object(_ErrJObj) of
+                true  -> lager:debug("failed to get ETS stats: ~p", [kz_json:get_value(<<"Error-Reason">>, _ErrJObj)]);
+                false -> lager:debug("failed to get ETS stats: ~p", [_ErrJObj])
+            end,
             most_recent_db_status(AccountId, AgentId)
     end.
 
@@ -405,3 +410,8 @@ changed([F|From], To, Add, Rm) ->
         'true' -> changed(From, lists:delete(F, To), Add, Rm);
         'false' -> changed(From, To, Add, [F|Rm])
     end.
+
+-spec agent_priority(wh_json:object()) -> agent_priority().
+agent_priority(AgentJObj) ->
+    -1 * kz_json:get_integer_value(<<"acdc_agent_priority">>, AgentJObj, 0).
+

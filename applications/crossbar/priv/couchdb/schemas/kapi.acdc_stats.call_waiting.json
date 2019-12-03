@@ -18,6 +18,9 @@
         "Caller-Priority": {
             "type": "string"
         },
+        "Entered-Position": {
+            "type": "string"
+        },
         "Entered-Timestamp": {
             "type": "string"
         },
@@ -35,6 +38,12 @@
         },
         "Queue-ID": {
             "type": "string"
+        },
+        "Required-Skills": {
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
         }
     },
     "required": [

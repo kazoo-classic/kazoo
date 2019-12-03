@@ -1,9 +1,11 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2013-2017, 2600Hz
 %%% @doc
-%%% @author James Aimonetti
+%%%
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%-------------------------------------------------------------------
 -module(acdc_agent_maintenance).
 
 -export([acct_restart/1
@@ -66,6 +68,6 @@ agent_restart(AcctId, AgentId) ->
             lager:info("Terminating existing agent process ~p", [S]),
             exit(S, 'kill'),
             lager:info("Restarting agent ~s in ~s", [AgentId, AcctId]),
-            _ = acdc_agents_sup:new(AcctId, AgentId),
+            acdc_agents_sup:new(AcctId, AgentId),
             'ok'
     end.

@@ -5,7 +5,8 @@
 -include_lib("kazoo/include/kz_api_literals.hrl").
 -include("acdc_config.hrl").
 
--define(APP_NAME, <<"acdc">>).
+-define(APP, acdc).
+-define(APP_NAME, (atom_to_binary(?APP, utf8))).
 -define(APP_VERSION, <<"4.0.0">>).
 -define(CONFIG_CAT, ?APP_NAME).
 
@@ -31,6 +32,9 @@
 -define(NEW_CHANNEL_FROM(CallId), {'call_from', CallId}).
 -define(NEW_CHANNEL_TO(CallId, MemberCallId), {'call_to', CallId, MemberCallId}).
 
+-define(DESTROYED_CHANNEL_REG(AcctId, User), {'p', 'l', {'destroyed_channel', AcctId, User}}).
+-define(DESTROYED_CHANNEL(CallId, HangupCause), {'call_down', CallId, HangupCause}).
+
 -type abandon_reason() :: ?ABANDON_TIMEOUT | ?ABANDON_EXIT |
                           ?ABANDON_HANGUP.
 
@@ -41,6 +45,8 @@
 -type fsm_state_name() :: 'wait' | 'sync' | 'ready' | 'ringing' |
                           'ringing_callback' | 'awaiting_callback' |
                           'answered' | 'wrapup' | 'paused' | 'outbound'.
+
+-type agent_priority() :: -128..128.
 
 %% Check for cleanup every 5 minutes
 -define(CLEANUP_PERIOD, kapps_config:get_integer(?CONFIG_CAT, <<"cleanup_period_ms">>, 360000)).

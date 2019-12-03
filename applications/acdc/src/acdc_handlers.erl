@@ -1,9 +1,11 @@
-%%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2012-2017, 2600Hz
 %%% @doc
-%%% @author James Aimonetti
+%%%
 %%% @end
-%%%-----------------------------------------------------------------------------
+%%% @contributors
+%%%   James Aimonetti
+%%%-------------------------------------------------------------------
 -module(acdc_handlers).
 
 -export([handle_route_req/2
@@ -11,7 +13,7 @@
 
 -include("acdc.hrl").
 
--spec handle_route_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
+-spec handle_route_req(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 handle_route_req(JObj, Props) ->
     'true' = kapi_route:req_v(JObj),
     _ = kz_util:put_callid(JObj),
@@ -38,7 +40,7 @@ maybe_route_respond(ReqJObj, Call, AccountId, AgentId, <<"user">> = T) ->
 maybe_route_respond(_ReqJObj, _Call, _AccountId, _Id, _) -> 'ok'.
 
 send_route_response(ReqJObj, Call, AccountId, Id, Type) ->
-    lager:debug("sending route response to park the call for ~s(~s)", [Id, AccountId]),
+    lager:debug("sendig route response to park the call for ~s(~s)", [Id, AccountId]),
     CCVs = [{<<"ACDc-ID">>, Id}
            ,{<<"ACDc-Type">>, Type}
            ],
@@ -47,7 +49,7 @@ send_route_response(ReqJObj, Call, AccountId, Id, Type) ->
            ,{<<"Routes">>, []}
            ,{<<"Method">>, <<"park">>}
            ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
-           ,{<<"From-Realm">>, kzd_accounts:fetch_realm(AccountId)}
+           ,{<<"From-Realm">>, kz_util:get_account_realm(AccountId)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     ServerId = kz_api:server_id(ReqJObj),
@@ -78,13 +80,12 @@ update_agent(Call) ->
     end.
 
 -spec update_acdc_actor(kapps_call:call()) -> any().
+-spec update_acdc_actor(kapps_call:call(), kz_term:api_binary(), kz_term:api_binary()) -> any().
 update_acdc_actor(Call) ->
     update_acdc_actor(Call
                      ,kapps_call:custom_channel_var(<<"ACDc-ID">>, Call)
                      ,kapps_call:custom_channel_var(<<"ACDc-Type">>, Call)
                      ).
-
--spec update_acdc_actor(kapps_call:call(), kz_term:api_binary(), kz_term:api_binary()) -> any().
 update_acdc_actor(_Call, 'undefined', _) -> 'ok';
 update_acdc_actor(_Call, _, 'undefined') -> 'ok';
 update_acdc_actor(Call, QueueId, <<"queue">>) ->

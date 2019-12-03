@@ -9,6 +9,9 @@
         "Agent-ID": {
             "type": "string"
         },
+        "Call-ID": {
+            "type": "string"
+        },
         "Event-Category": {
             "enum": [
                 "agent"
