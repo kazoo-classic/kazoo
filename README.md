@@ -55,8 +55,8 @@
 	systemctl stop kazoo-applications
 	cd /opt
 	mv kazoo kazoo-4.3.18
-	tar xvzf ~/kazoo-itlevel3-4.3.58.tgz
-	rm ~/kazoo-itlevel3-4.3.58.tgz
+	tar -xvzf ~/kazoo-itlevel3-4.3.58.tgz
+	rm ~/kazoo.itlevel3-4.3.58.tgz
 	chown -R kazoo:daemon kazoo.itlevel3-4.3.58
 	ln -s kazoo.itlevel3-4.3.58 kazoo
 	systemctl start kazoo-applications
