@@ -16,6 +16,8 @@
 ```
     git clone https://github.com/itlevel3/kazoo.git kazoo.itlevel3
     cd kazoo.itlevel3
+    git remote add upstream https://github.com/2600hz/kazoo.git
+    git pull upstream
     git checkout 4.3.58-acdc
 ```
 ###   Build the release 
