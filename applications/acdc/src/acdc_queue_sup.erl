@@ -62,10 +62,22 @@ status(Supervisor) ->
     ?PRINT("  Supervisor: ~p", [Supervisor]),
     ?PRINT("  Manager: ~p", [Manager]),
 
-    ?PRINT("    Known Agents:"),
-    _ = case acdc_queue_manager:status(Manager) of
+    {Available, Busy} = acdc_queue_manager:status(Manager),
+    ?PRINT("    Available Agents: (Total : ~p) ", [length(Available)]),
+    _ = case Available of
             [] -> ?PRINT("      NONE");
             As -> [?PRINT("      ~s", [A]) || A <- As]
+        end,
+    ?PRINT("    Busy Agents: (Total : ~p) ", [length(Busy)]),
+    _ = case Busy of
+            [] -> ?PRINT("      NONE");
+            Bs -> [?PRINT("      ~s", [B]) || B <- Bs]
+        end,
+    Queued_calls = acdc_queue_manager:calls(Manager),
+    ?PRINT("    Queued Calls: (Total : ~p) ", [length(Queued_calls)]),
+    _ = case Queued_calls of
+            [] -> ?PRINT("      NONE");
+            Cs -> [?PRINT("      ~s", [C]) || C <- Cs]
         end,
 
     _ = acdc_queue_workers_sup:status(WorkersSup),

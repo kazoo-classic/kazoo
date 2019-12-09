@@ -30,6 +30,7 @@
         ,up_next/2
         ,config/1
         ,status/1
+        ,calls/1
         ,current_agents/1
         ,refresh/2
         ,callback_details/2
@@ -302,6 +303,9 @@ current_agents(Srv) -> gen_listener:call(Srv, 'current_agents').
 -spec status(pid()) -> kz_term:ne_binaries().
 status(Srv) -> gen_listener:call(Srv, 'status').
 
+-spec calls(pid()) -> kz_term:ne_binaries().
+calls(Srv) -> gen_listener:call(Srv, 'calls').
+
 -spec refresh(pid(), kz_json:object()) -> 'ok'.
 refresh(Mgr, QueueJObj) -> gen_listener:cast(Mgr, {'refresh', QueueJObj}).
 
@@ -410,8 +414,13 @@ handle_call('config', _, #state{account_id=AccountId
     {'reply', {AccountId, QueueId}, State};
 
 handle_call('status', _, #state{strategy_state=#strategy_state{details=Details}}=State) ->
-    Known = [A || {A, {N, _}} <- dict:to_list(Details), N > 0],
-    {'reply', Known, State};
+    Available = [A || {A, {N, _}} <- dict:to_list(Details), N > 0],
+    Busy = [A || {A, {_, 'busy'}} <- dict:to_list(Details)],
+    {'reply', {Available, Busy}, State};
+
+handle_call('calls', _, #state{current_member_calls=Calls}=State) ->
+    Call_ids = [kapps_call:call_id(Call) || {_, Call} <- Calls],
+    {'reply', Call_ids, State};
 
 handle_call('strategy', _, #state{strategy=Strategy}=State) ->
     {'reply', Strategy, State, 'hibernate'};
@@ -974,6 +983,9 @@ start_agent_and_worker(WorkersSup, AccountId, QueueId, AgentJObj) ->
 %% Really sophisticated selection algorithm
 -spec pick_winner_(kz_json:objects(), queue_strategy(), kz_term:api_binary()) ->
                           {kz_json:objects(), kz_json:objects()}.
+pick_winner_(_, S, 'undefined') ->
+    lager:error("No next_agent (~p) available; try again", [S]),
+    'undefined';
 pick_winner_(CRs, 'rr', AgentId) ->
     case split_agents(AgentId, CRs) of
         {[], _O} ->
