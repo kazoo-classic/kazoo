@@ -1150,7 +1150,8 @@ send_member_connect_retry(Queue, CallId, MyId, AgentId) ->
              ,{<<"Agent-ID">>, AgentId}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapi_acdc_queue:publish_member_connect_retry(Queue, Resp).
+%% Delay the retry by 0.5 secs to allow agents to settle after RING timeout
+    timer:apply_after(2000, kapi_acdc_queue, publish_member_connect_retry, [Queue, Resp]).
 
 -spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 -spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
