@@ -1539,8 +1539,10 @@ update_properties(QueueJObj, State) ->
 
 -spec announcements_config(kz_json:object()) -> kz_term:kz_proplist().
 announcements_config(Config) ->
+    AC = 
     kz_json:recursive_to_proplist(
-      kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())).
+      kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())),
+    props:set_value(<<"moh">>, kz_json:get_value(<<"moh">>, Config), AC).
 
 -spec maybe_schedule_position_announcements(kz_json:object(), kapps_call:call(), mgr_state()) -> mgr_state().
 maybe_schedule_position_announcements(JObj, Call, #state{announcements_config=AnnouncementsConfig
