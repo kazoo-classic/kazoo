@@ -68,7 +68,8 @@ create_modbs(Year, Month) ->
 -spec create_modbs(kz_time:year(), kz_time:month(), {'ok', non_neg_integer()} | kz_datamgr:data_error()) -> 'ok'.
 create_modbs(_Year, _Month, {'ok', 0}) -> 'ok';
 create_modbs(Year, Month, {'ok', NumAccounts}) ->
-    NextMonthS = calendar:datetime_to_gregorian_seconds({kz_date:normalize({Year, Month+1, 1}), {0,0,0}}),
+    {NextYear, NextMonth, 1} = kz_date:normalize({Year, Month+1, 1}),
+    NextMonthS = calendar:datetime_to_gregorian_seconds({{NextYear, NextMonth, 1}, {0,0,0}}),
     NowS = kz_time:now_s(),
     SecondsLeft = NextMonthS - NowS,
 
@@ -80,7 +81,7 @@ create_modbs(Year, Month, {'ok', NumAccounts}) ->
     lager:info("creating ~p modbs (~p per pass), ~p seconds delay between passes"
               ,[NumAccounts, AccountsPerPass, SecondsPerPass]
               ),
-    create_modbs_metered(Year, Month, AccountsPerPass, SecondsPerPass).
+    create_modbs_metered(NextYear, NextMonth, AccountsPerPass, SecondsPerPass).
 
 create_modbs_metered(Year, Month, AccountsPerPass, SecondsPerPass) ->
     create_modbs_metered(Year, Month, AccountsPerPass, SecondsPerPass
