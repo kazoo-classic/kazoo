@@ -136,7 +136,7 @@
                ,fsm_call_id :: kz_term:api_binary() % used when no call-ids are available
                ,endpoints = [] :: kz_json:objects()
                ,outbound_call_ids = [] :: kz_term:ne_binaries()
-               ,max_connect_failures :: kz_term:kz_timeout()
+               ,max_connect_failures :: kz_term:kz_timeout() | 'infinity'
                ,connect_failures = 0 :: non_neg_integer()
                ,agent_state_updates = [] :: list()
                ,monitoring = 'false' :: boolean()
@@ -472,14 +472,18 @@ init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
            }
     }.
 
--spec max_failures(kz_term:ne_binary() | kz_json:object()) -> non_neg_integer().
+-spec max_failures(kz_term:ne_binary() | kz_json:object()) -> non_neg_integer() | 'infinity'.
 max_failures(Account) when is_binary(Account) ->
     case kzd_accounts:fetch(Account) of
         {'ok', AccountJObj} -> max_failures(AccountJObj);
         {'error', _} -> ?MAX_FAILURES
     end;
+max_failures(0) ->
+    'infinity';
+max_failures(V) when is_integer(V), V > 0 ->
+    V;
 max_failures(JObj) ->
-    kz_json:get_integer_value(?MAX_CONNECT_FAILURES, JObj, ?MAX_FAILURES).
+    max_failures(kz_json:get_integer_value(?MAX_CONNECT_FAILURES, JObj, ?MAX_FAILURES)).
 
 -spec wait_for_listener(pid(), pid(), kz_term:kz_proplist(), boolean()) -> 'ok'.
 wait_for_listener(Supervisor, FSM, Props, IsThief) ->
@@ -2142,7 +2146,7 @@ clear_call(#state{connect_failures=Fails
 clear_call(#state{connect_failures=Fails
                  ,max_connect_failures=_MaxFails
                  }=State, 'failed') ->
-    lager:debug("agent has failed to connect ~b times(~b)", [Fails+1, _MaxFails]),
+    lager:debug("agent has failed to connect ~b times(~p)", [Fails+1, _MaxFails]),
     clear_call(State#state{connect_failures=Fails+1}, 'ready');
 clear_call(#state{fsm_call_id=FSMemberCallId
                  ,wrapup_ref=WRef
@@ -2378,7 +2382,9 @@ get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
             {'error', E}
     end.
 
--spec return_to_state(non_neg_integer(), pos_integer()) -> 'paused' | 'ready'.
+-spec return_to_state(non_neg_integer(), pos_integer() | 'infinity') -> 'paused' | 'ready'.
+return_to_state(_, 'infinity') ->
+    'ready';
 return_to_state(Fails, MaxFails) ->
     lager:debug("fails ~b max ~b going to pause", [Fails, MaxFails]),
     case is_integer(MaxFails)
