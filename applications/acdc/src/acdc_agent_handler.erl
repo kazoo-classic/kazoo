@@ -257,8 +257,18 @@ handle_new_channel(JObj, AccountId) ->
 -spec handle_new_channel_acct(kz_json:object(), kz_term:api_binary()) -> 'ok'.
 handle_new_channel_acct(_, 'undefined') -> 'ok';
 handle_new_channel_acct(JObj, AccountId) ->
-    FromUser = hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>)),
-    ToUser = hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>)),
+    FromUser = 
+    case kz_json:is_defined(<<"From-Uri">>, JObj) of
+        false -> hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>));
+        true -> hd(binary:split(kz_json:get_value(<<"From-Uri">>, JObj), <<"@">>))
+    end,
+
+    ToUser =
+    case kz_json:is_defined(<<"To-Uri">>, JObj) of
+        false -> hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>));
+        true -> hd(binary:split(kz_json:get_value(<<"To-Uri">>, JObj), <<"@">>))
+    end,
+
     ReqUser = hd(binary:split(kz_json:get_value(<<"Request">>, JObj), <<"@">>)),
 
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
@@ -286,8 +296,17 @@ handle_new_channel_acct(JObj, AccountId) ->
 %%--------------------------------------------------------------------
 -spec handle_destroyed_channel(kz_json:object(), kz_term:api_binary()) -> 'ok'.
 handle_destroyed_channel(JObj, AccountId) ->
-    FromUser = hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>)),
-    ToUser = hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>)),
+    FromUser = 
+    case kz_json:is_defined(<<"From-Uri">>, JObj) of
+        false -> hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>));
+        true -> hd(binary:split(kz_json:get_value(<<"From-Uri">>, JObj), <<"@">>))
+    end,
+
+    ToUser =
+    case kz_json:is_defined(<<"To-Uri">>, JObj) of
+        false -> hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>));
+        true -> hd(binary:split(kz_json:get_value(<<"To-Uri">>, JObj), <<"@">>))
+    end,
 
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     HangupCause = acdc_util:hangup_cause(JObj),
@@ -318,6 +337,7 @@ handle_originate_resp(JObj, Props) ->
             'true' = kapi_resource:originate_uuid_v(JObj),
             acdc_agent_fsm:originate_uuid(props:get_value('fsm_pid', Props), JObj)
     end.
+
 
 -spec handle_member_message(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 -spec handle_member_message(kz_json:object(), kz_term:kz_proplist(), kz_term:ne_binary()) -> 'ok'.

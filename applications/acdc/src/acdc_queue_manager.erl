@@ -349,7 +349,7 @@ init([Super, AccountId, QueueId]) ->
     init(Super, AccountId, QueueId, QueueJObj).
 
 init(Super, AccountId, QueueId, QueueJObj) ->
-    process_flag('trap_exit', 'false'),
+    process_flag('trap_exit', 'true'),
 
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     kz_datamgr:add_to_doc_cache(AccountDb, QueueId, QueueJObj),
@@ -825,8 +825,9 @@ handle_event(_JObj, #state{enter_when_empty=EnterWhenEmpty
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(any(), mgr_state()) -> 'ok'.
-terminate(_Reason, _State) ->
-    lager:debug("queue manager terminating: ~p", [_Reason]).
+terminate(_Reason, #state{queue_id = QueueId}) ->
+    lager:debug("queue manager terminating: ~p", [_Reason]),
+    gen_listener:rm_queue(self(), ?SECONDARY_QUEUE_NAME(QueueId)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -991,25 +992,33 @@ pick_winner_(CRs, 'rr', AgentId) ->
         {[], _O} ->
             lager:debug("oops, (rr) agent ~s appears to have not responded; try again", [AgentId]),
             'undefined';
-        {Winners, OtherAgents} ->
+        {[Winner|_], OtherAgents} ->
             lager:debug("found winning responders for agent: ~s", [AgentId]),
-            {Winners, OtherAgents}
+            {[Winner], OtherAgents}
     end;
 pick_winner_(CRs, 'mi', _) ->
     [MostIdle | Rest] = lists:usort(fun sort_agent/2, CRs),
-    AgentId = kz_json:get_value(<<"Agent-ID">>, MostIdle),
-    {Same, Other} = split_agents(AgentId, Rest),
-    {[MostIdle|Same], Other};
+%%    AgentId = kz_json:get_value(<<"Agent-ID">>, MostIdle),
+%%    {Same, Other} = split_agents(AgentId, Rest),
+%%    {[MostIdle|Same], Other};
+    {[MostIdle], Rest};
 pick_winner_(CRs, 'sbrr', AgentId) ->
     pick_winner_(CRs, 'rr', AgentId);
 pick_winner_(CRs, 'all', Agents) ->
-    case lists:flatten([lists:filter(fun(R) -> AgentId =:= kz_json:get_value(<<"Agent-ID">>, R) end, CRs) || AgentId <- Agents]) of
+%%    case lists:flatten([lists:last(lists:filter(fun(R) -> AgentId =:= kz_json:get_value(<<"Agent-ID">>, R) end, CRs)) || AgentId <- Agents]) of
+    case lists:flatten([filter_winners(CRs, AgentId) || AgentId <- Agents]) of
         [] ->
             lager:debug("oops, (all) agent(s) ~p appears to have not responded; try again", [Agents]),
             'undefined';
         Winners ->
             lager:debug("found winning responders for agent(s): ~p", [Agents]),
             {Winners, []}
+    end.
+
+filter_winners(CRs, AgentId) ->
+    case lists:filter(fun(R) -> AgentId =:= kz_json:get_value(<<"Agent-ID">>, R) end, CRs) of
+        [] -> [];
+        Winners -> lists:last(Winners)
     end.
 
 -spec update_strategy_with_agent(mgr_state(), kz_term:ne_binary(), agent_priority(), kz_term:ne_binaries(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
