@@ -390,7 +390,6 @@ fetch_current_status(Context, AgentId) ->
             ]),
     case kz_amqp_worker:call(Req
                                      ,fun kapi_acdc_stats:publish_agent_cur_status_req/1
-                                     ,fun kapi_acdc_stats:agent_cur_status_resp_v/1
                                      )
     of
         {'error', E} ->
@@ -401,9 +400,14 @@ fetch_current_status(Context, AgentId) ->
                                   ,Context
                                   );
         {'ok', Resp} ->
-            Agents = kz_json:get_value(<<"Agents">>, Resp, kz_json:new()),
-            crossbar_util:response(Agents, Context)
+            Data = fetch_current_status_response(kz_json:get_value(<<"Event-Category">>, Resp), kz_json:get_value(<<"Event-Name">>, Resp), Resp),
+            crossbar_util:response(Data, Context)
     end.
+fetch_current_status_response(<<"acdc_stat">>, <<"agent_cur_status_resp">>, Resp) ->
+    kz_json:get_value(<<"Agents">>, Resp, kz_json:new());
+fetch_current_status_response(<<"acdc_stat">>, <<"agent_cur_status_err">>, Resp) ->
+    kz_json:get_value(<<"Error-Reason">>, Resp, kz_json:new()).
+
 
 -spec fetch_all_current_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
                                         cb_context:context().
