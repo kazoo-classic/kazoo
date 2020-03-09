@@ -115,7 +115,12 @@ maybe_login_agent(Call, AgentId, Data) ->
     end.
 
 maybe_pause_agent(Call, AgentId, <<"ready">>, Data) ->
-    pause_agent(Call, AgentId, Data);
+    Timeout = kapps_call:kvs_fetch('cf_capture_group', Call),
+    lager:info("Agent pause time: ~p", [Timeout]),
+    case Timeout of
+        undefined -> pause_agent(Call, AgentId, Data);
+        T -> pause_agent(Call, AgentId, Data, binary_to_integer(T) * 60)
+    end;
 maybe_pause_agent(Call, _AgentId, FromStatus, _Data) ->
     lager:info("unable to go from ~s to paused", [FromStatus]),
     play_agent_invalid(Call).
