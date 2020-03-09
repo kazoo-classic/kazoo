@@ -405,8 +405,8 @@ fetch_current_status(Context, AgentId) ->
     end.
 fetch_current_status_response(<<"acdc_stat">>, <<"agent_cur_status_resp">>, Resp) ->
     kz_json:get_value(<<"Agents">>, Resp, kz_json:new());
-fetch_current_status_response(<<"acdc_stat">>, <<"agent_cur_status_err">>, Resp) ->
-    kz_json:get_value(<<"Error-Reason">>, Resp, kz_json:new()).
+fetch_current_status_response(<<"acdc_stat">>, <<"agent_cur_status_err">>, _Resp) ->
+    kz_json:new().
 
 
 -spec fetch_all_current_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
