@@ -698,7 +698,7 @@ props_to_record(Props, Node) ->
             ,reseller_billing=props:get_value(<<"Reseller-Billing">>, CCVs)
             ,precedence=kz_term:to_integer(props:get_value(<<"Precedence">>, CCVs, 5))
             ,realm=get_realm(Props, CCVs)
-            ,username=props:get_value(<<"Username">>, CCVs, get_username(Props))
+            ,username=kz_term:to_lower_binary(props:get_value(<<"Username">>, CCVs, get_username(Props)))
             ,import_moh=props:get_value(<<"variable_hold_music">>, Props) =:= 'undefined'
             ,answered=props:get_value(<<"Answer-State">>, Props) =:= <<"answered">>
             ,node=Node
@@ -816,7 +816,7 @@ props_to_update(Props) ->
       ,{#channel.reseller_id, props:get_value(<<"Reseller-ID">>, CCVs)}
       ,{#channel.resource_id, props:get_value(<<"Resource-ID">>, CCVs)}
       ,{#channel.to_tag, props:get_value(<<"variable_sip_to_tag">>, Props)}
-      ,{#channel.username, props:get_value(<<"Username">>, CCVs, get_username(Props))}
+      ,{#channel.username, kz_term:to_lower_binary(props:get_value(<<"Username">>, CCVs, get_username(Props)))}
        | update_callee_and_caller(UUID, Props)
       ]).
 
