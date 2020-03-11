@@ -30,6 +30,7 @@
 	mkdir _rel/kazoo/log
 	cd _rel
 	mv kazoo kazoo.itlevel3-4.3.58
+        chown -R kazoo:daemon kazoo.itlevel3-4.3.58
 	tar cvzf kazoo-itlevel3-4.3.58.tgz kazoo.itlevel3-4.3.58
 ```
 ###   copy release tarball and sup completion to production servers 
@@ -50,6 +51,10 @@
 *	yum info kazoo-kamailio
 		make sure installed version of kamialio is kazoo-kamailio-4.3-25.el7.centos
 
+####  This release only 4.3.59.rc3 ############
+1) Need to manually delete acdc queue in rabbitmq, these should have been auto deleted when kazoo was stopped
+2) Need to delete system_data/account-acdc-queues and system_data/account-acdc-agents as we now use system_data/multi_db-acdc-queues and system_data/multi_db-acdc-agents
+
 ####  Flight:
 ```
 	systemctl stop kazoo-applications
@@ -57,7 +62,6 @@
 	mv kazoo kazoo-4.3.18
 	tar -xvzf ~/kazoo-itlevel3-4.3.58.tgz
 	rm ~/kazoo.itlevel3-4.3.58.tgz
-	chown -R kazoo:daemon kazoo.itlevel3-4.3.58
 	ln -s kazoo.itlevel3-4.3.58 kazoo
 	systemctl start kazoo-applications
 	

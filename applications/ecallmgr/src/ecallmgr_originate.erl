@@ -471,7 +471,7 @@ get_eavesdrop_action(JObj) ->
     case kz_json:get_value(<<"Eavesdrop-Mode">>, JObj) of
         <<"whisper">> -> <<Group/binary, "queue_dtmf:w2@500,eavesdrop:", CallId/binary, " inline">>;
         <<"full">> -> <<Group/binary, "queue_dtmf:w3@500,eavesdrop:", CallId/binary, " inline">>;
-        <<"listen">> -> <<Group/binary, "eavesdrop:", CallId/binary, " inline">>;
+        <<"listen">> -> <<Group/binary, "set:eavesdrop_enable_dtmf=true,eavesdrop:", CallId/binary, " inline">>;
         'undefined' -> <<Group/binary, "eavesdrop:", CallId/binary, " inline">>
     end.
 
