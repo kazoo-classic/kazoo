@@ -50,8 +50,11 @@
                            ,queue_id :: kz_term:api_binary() | '$2' | '_'
                            ,call_id :: kz_term:api_binary() | '_'
                            ,status :: kz_term:api_binary() | '$3' | '_'
+                           ,entered_position :: kz_term:api_integer() | '_'
                            ,wait_time :: kz_term:api_integer() | '_'
+                           ,talk_time :: kz_term:api_integer() | '_'
                            ,timestamp :: kz_term:api_integer() | '_'
+                           ,is_archived = 'false' :: boolean() | '$1' | '$2' | '_'
                            }).
 -type call_summary_stat() :: #call_summary_stat{}.
 

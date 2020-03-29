@@ -684,6 +684,13 @@ fetch_all_queue_stats(Context) ->
 
 -spec fetch_stats_summary(cb_context:context()) -> cb_context:context().
 fetch_stats_summary(Context) ->
+    case cb_context:req_value(Context, <<"start_range">>) of
+        'undefined' -> fetch_current_stats_summary(Context);
+        StartRange -> fetch_ranged_stats_summary(Context, StartRange)
+    end.
+
+-spec fetch_current_stats_summary(cb_context:context()) -> cb_context:context().
+fetch_current_stats_summary(Context) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
@@ -703,37 +710,64 @@ fetch_stats_summary(Context) ->
         {'ok', Resp} ->
             RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_time:current_tstamp()}
                                           ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
-                                          ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
-                                          ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
+%%                                          ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
+%%                                          ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
                                           ], kz_json:new()),
             crossbar_util:response(RespJObj, Context)
     end.
 
--spec fetch_all_current_queue_stats(cb_context:context()) -> cb_context:context().
-fetch_all_current_queue_stats(Context) ->
-    lager:debug("querying for all recent stats"),
+
+fetch_ranged_stats_summary(Context, StartRange) ->
+    MaxRange = 2682000 * 12,
+
+    Now = kz_time:current_tstamp(),
+%%    Past = Now - MaxRange,
+
+    To = kz_term:to_integer(cb_context:req_value(Context, <<"end_range">>, Now)),
+
+    case kz_term:to_integer(StartRange) of
+        F when F > To ->
+            %% start_range is larger than end_range
+            Msg = kz_json:from_list([{<<"message">>, <<"value is greater than start_range">>}
+                                    ,{<<"cause">>, StartRange}
+                                    ]),
+            cb_context:add_validation_error(<<"end_range">>, <<"maximum">>, Msg, Context);
+        F when (To - F) >= MaxRange ->
+            %% range is too large
+            Msg = kz_term:to_binary(io_lib:format("end_range ~b is more than ~b seconds from start_range ~b", [To, MaxRange, F])),
+            JObj = kz_json:from_list([{<<"message">>, Msg}, {<<"cause">>, StartRange}]),
+            cb_context:add_validation_error(<<"end_range">>, <<"date_range">>, JObj, Context);               
+        F ->
+            fetch_ranged_stats_summary(Context, F, To)
+    end.
+
+fetch_ranged_stats_summary(Context, From, To) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
-            ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+            ,{<<"Queue-ID">>, cb_context:req_value(Context, <<"queue_id">>)}
+            ,{<<"Start-Range">>, From}
+            ,{<<"End-Range">>, To}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    fetch_from_amqp(Context, Req).
-
-format_stats(Context, Resp) ->
-    Stats = kz_json:from_list([{<<"current_timestamp">>, kz_time:current_tstamp()}
-                              ,{<<"stats">>,
-                                kz_doc:public_fields(
-                                  kz_json:get_value(<<"Handled">>, Resp, []) ++
-                                      kz_json:get_value(<<"Abandoned">>, Resp, []) ++
-                                      kz_json:get_value(<<"Waiting">>, Resp, []) ++
-                                      kz_json:get_value(<<"Processed">>, Resp, [])
-                                 )}
-                              ]),
-    cb_context:set_resp_status(
-      cb_context:set_resp_data(Context, Stats)
-                              ,'success'
-     ).
+    case kz_amqp_worker:call(Req
+                                     ,fun kapi_acdc_stats:publish_call_summary_req/1
+                                     ,fun kapi_acdc_stats:call_summary_resp_v/1
+                                     )
+    of
+        {'error', E} ->
+            crossbar_util:response('error', <<"stat request had errors">>, 400
+                                  ,kz_json:get_value(<<"Error-Reason">>, E)
+                                  ,Context
+                                  );
+        {'ok', Resp} ->
+            RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_time:current_tstamp()}
+                                          ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
+%%                                          ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
+%%                                          ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
+                                          ], kz_json:new()),
+            crossbar_util:response(RespJObj, Context)
+    end.
 
 fetch_ranged_queue_stats(Context, StartRange) ->
     MaxRange = ?ACDC_CLEANUP_WINDOW,
@@ -771,6 +805,33 @@ fetch_ranged_queue_stats(Context, From, To, 'true') ->
 fetch_ranged_queue_stats(Context, From, To, 'false') ->
     lager:debug("ranged query from ~b to ~b of archived stats", [From, To]),
     Context.
+
+-spec fetch_all_current_queue_stats(cb_context:context()) -> cb_context:context().
+fetch_all_current_queue_stats(Context) ->
+    lager:debug("querying for all recent stats"),
+    Req = props:filter_undefined(
+            [{<<"Account-ID">>, cb_context:account_id(Context)}
+            ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
+            ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ]),
+    fetch_from_amqp(Context, Req).
+
+format_stats(Context, Resp) ->
+    Stats = kz_json:from_list([{<<"current_timestamp">>, kz_time:current_tstamp()}
+                              ,{<<"stats">>,
+                                kz_doc:public_fields(
+                                  kz_json:get_value(<<"Handled">>, Resp, []) ++
+                                      kz_json:get_value(<<"Abandoned">>, Resp, []) ++
+                                      kz_json:get_value(<<"Waiting">>, Resp, []) ++
+                                      kz_json:get_value(<<"Processed">>, Resp, [])
+                                 )}
+                              ]),
+    cb_context:set_resp_status(
+      cb_context:set_resp_data(Context, Stats)
+                              ,'success'
+     ).
+
 
 -spec fetch_from_amqp(cb_context:context(), kz_term:kz_proplist()) -> cb_context:context().
 fetch_from_amqp(Context, Req) ->
