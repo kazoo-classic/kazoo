@@ -55,6 +55,7 @@
         ,status_wrapup/1, status_wrapup_v/1
         ,status_paused/1, status_paused_v/1
         ,status_outbound/1, status_outbound_v/1
+        ,status_inbound/1, status_inbound_v/1
         ,status_update/1, status_update_v/1
         ]).
 
@@ -107,6 +108,7 @@
         ,publish_status_wrapup/1, publish_status_wrapup/2
         ,publish_status_paused/1, publish_status_paused/2
         ,publish_status_outbound/1, publish_status_outbound/2
+        ,publish_status_inbound/1, publish_status_inbound/2
         ,publish_status_update/1, publish_status_update/2
         ]).
 
@@ -922,6 +924,23 @@ status_outbound_v(Prop) when is_list(Prop) ->
 status_outbound_v(JObj) ->
     status_outbound_v(kz_json:to_proplist(JObj)).
 
+-spec status_inbound(kz_term:api_terms()) ->
+                             {'ok', iolist()} |
+                             {'error', string()}.
+status_inbound(Props) when is_list(Props) ->
+    case status_inbound_v(Props) of
+        'true' -> kz_api:build_message(Props, ?STATUS_HEADERS, ?STATUS_OPTIONAL_HEADERS);
+        'false' -> {'error', "Proplist failed validation for status_inbound"}
+    end;
+status_inbound(JObj) ->
+    status_inbound(kz_json:to_proplist(JObj)).
+
+-spec status_inbound_v(kz_term:api_terms()) -> boolean().
+status_inbound_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?STATUS_HEADERS, ?STATUS_VALUES(<<"inbound">>), ?STATUS_TYPES);
+status_inbound_v(JObj) ->
+    status_inbound_v(kz_json:to_proplist(JObj)).
+
 -spec bind_q(kz_term:ne_binary(), kz_term:kz_proplist()) -> 'ok'.
 bind_q(Q, Props) ->
     QID = props:get_value('queue_id', Props, <<"*">>),
@@ -1132,6 +1151,14 @@ publish_status_outbound(JObj) ->
     publish_status_outbound(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_status_outbound(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?STATUS_VALUES(<<"outbound">>), fun status_outbound/1),
+    kz_amqp_util:kapps_publish(status_stat_routing_key(API), Payload, ContentType).
+
+-spec publish_status_inbound(kz_term:api_terms()) -> 'ok'.
+-spec publish_status_inbound(kz_term:api_terms(), binary()) -> 'ok'.
+publish_status_inbound(JObj) ->
+    publish_status_inbound(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_status_inbound(API, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?STATUS_VALUES(<<"inbound">>), fun status_inbound/1),
     kz_amqp_util:kapps_publish(status_stat_routing_key(API), Payload, ContentType).
 
 -spec publish_current_calls_req(kz_term:api_terms()) -> 'ok'.

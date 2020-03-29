@@ -272,15 +272,20 @@ handle_new_channel_acct(JObj, AccountId) ->
     ReqUser = hd(binary:split(kz_json:get_value(<<"Request">>, JObj), <<"@">>)),
 
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+
     MemberCallId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj),
 
     lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
 
     case kz_call_event:call_direction(JObj) of
-        <<"inbound">> -> gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId));
+        <<"inbound">> -> 
+            [CE_IDNumber,_] = binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>),
+            gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_TO(CallId, CE_IDNumber, <<"unknown">>));
         <<"outbound">> ->
-            gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_TO(CallId, MemberCallId)),
-            gproc:send(?NEW_CHANNEL_REG(AccountId, ReqUser), ?NEW_CHANNEL_TO(CallId, MemberCallId));
+            CR_IDNumber  =  kz_json:get_value(<<"Caller-ID-Number">>, JObj),
+            CR_IDName  =  kz_json:get_value(<<"Caller-ID-Name">>, JObj),
+            gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_FROM(CallId, CR_IDNumber, CR_IDName, MemberCallId)),
+            gproc:send(?NEW_CHANNEL_REG(AccountId, ReqUser),?NEW_CHANNEL_FROM(CallId, CR_IDNumber, CR_IDName, MemberCallId));
         _ -> lager:debug("invalid call direction for call ~s", [CallId])
     end.
 

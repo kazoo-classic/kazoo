@@ -18,6 +18,7 @@
         ,agent_wrapup/3
         ,agent_paused/4
         ,agent_outbound/3
+        ,agent_inbound/3
 
         ,handle_status_stat/2
         ,handle_status_query/2
@@ -197,6 +198,20 @@ agent_outbound(AccountId, AgentId, CallId) ->
              ]),
     kz_amqp_worker:cast(Prop
                              ,fun kapi_acdc_stats:publish_status_outbound/1
+                             ).
+
+-spec agent_inbound(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+agent_inbound(AccountId, AgentId, CallId) ->
+    Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+             ,{<<"Agent-ID">>, AgentId}
+             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Status">>, <<"inbound">>}
+             ,{<<"Call-ID">>, CallId}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+    kz_amqp_worker:cast(Prop
+                             ,fun kapi_acdc_stats:publish_status_inbound/1
                              ).
 
 -spec handle_status_stat(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.

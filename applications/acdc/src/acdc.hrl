@@ -29,8 +29,8 @@
 -define(OWNER_UPDATE_REG(AcctId, OwnerId), {'p', 'l', {'owner_update', AcctId, OwnerId}}).
 
 -define(NEW_CHANNEL_REG(AcctId, User), {'p', 'l', {'new_channel', AcctId, User}}).
--define(NEW_CHANNEL_FROM(CallId), {'call_from', CallId}).
--define(NEW_CHANNEL_TO(CallId, MemberCallId), {'call_to', CallId, MemberCallId}).
+-define(NEW_CHANNEL_TO(CallId, Number, Name), {{'call_to', Number, Name},  CallId}).
+-define(NEW_CHANNEL_FROM(CallId, Number, Name, MemberCallId), {{'call_from', Number, Name}, CallId, MemberCallId}).
 
 -define(DESTROYED_CHANNEL_REG(AcctId, User), {'p', 'l', {'destroyed_channel', AcctId, User}}).
 -define(DESTROYED_CHANNEL(CallId, HangupCause), {'call_down', CallId, HangupCause}).

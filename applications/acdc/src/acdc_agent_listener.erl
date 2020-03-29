@@ -28,7 +28,8 @@
         ,unbind_from_events/2
         ,originate_execute/2
         ,originate_uuid/3
-        ,outbound_call/2
+        ,outbound_call/4
+        ,inbound_call/4
         ,send_agent_available/1
         ,send_agent_busy/1
         ,send_sync_req/1
@@ -281,9 +282,13 @@ originate_execute(Srv, JObj) ->
 originate_uuid(Srv, UUID, CtlQ) ->
     gen_listener:cast(Srv, {'originate_uuid', UUID, CtlQ}).
 
--spec outbound_call(pid(), kz_term:ne_binary()) -> 'ok'.
-outbound_call(Srv, CallId) ->
-    gen_listener:cast(Srv, {'outbound_call', CallId}).
+-spec outbound_call(pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+outbound_call(Srv, CallId, Number, Name) ->
+    gen_listener:cast(Srv, {'outbound_call', CallId, Number, Name}).
+
+-spec inbound_call(pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+inbound_call(Srv, CallId, Number, Name) ->
+    gen_listener:cast(Srv, {'inbound_call', CallId, Number, Name}).
 
 -spec send_agent_available(pid()) -> 'ok'.
 send_agent_available(Srv) ->
@@ -682,7 +687,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
                                                    ]),
 
     lager:debug("originate sent, waiting on successful bridge now"),
-    update_my_queues_of_change(AcctId, AgentId, Qs),
+    update_my_queues_of_change(AcctId, AgentId, Call, Qs),
     {'noreply', State#state{call=Call
                            ,acdc_queue_id=kz_json:get_value(<<"Queue-ID">>, WinJObj)
                            ,record_calls=ShouldRecord
@@ -761,7 +766,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
                                ,ACallIds),
 
     lager:debug("originate sent, waiting on bridge of agent and callback call"),
-    update_my_queues_of_change(AcctId, AgentId, Qs),
+    update_my_queues_of_change(AcctId, AgentId, Call, Qs),
     {'noreply', State#state{call=Call
                            ,record_calls=ShouldRecord
                            ,acdc_queue_id=kz_json:get_value(<<"Queue-ID">>, WinJObj)
@@ -788,7 +793,7 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
     maybe_start_recording(Call, ShouldRecord, RecordingUrl),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
-    [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
+    [send_agent_busy(AcctId, AgentId, QueueId, Call) || QueueId <- Qs],
     {'noreply', State};
 
 handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
@@ -809,7 +814,7 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
-    [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
+    [send_agent_busy(AcctId, AgentId, QueueId, Call) || QueueId <- Qs],
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
 
 handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
@@ -830,7 +835,7 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), call_id(NewCall), AcctId, AgentId, MyId),
-    [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
+    [send_agent_busy(AcctId, AgentId, QueueId, Call) || QueueId <- Qs],
     {'noreply', State#state{call=NewCall
                            ,original_call=Call
                            ,agent_call_ids=ACallIds1
@@ -910,16 +915,29 @@ handle_cast({'originate_uuid', UUID, CtlQ}, #state{agent_call_ids=ACallIds}=Stat
     lager:debug("updating ~s with ~s in ~p", [UUID, CtlQ, ACallIds]),
     {'noreply', State#state{agent_call_ids=props:set_value(UUID, CtlQ, ACallIds)}};
 
-handle_cast({'outbound_call', CallId}, #state{agent_id=AgentId
+handle_cast({'outbound_call', CallId, Number, Name}, #state{agent_id=AgentId
                                              ,acct_id=AcctId
                                              ,agent_queues=Qs
                                              }=State) ->
     _ = kz_util:put_callid(CallId),
     acdc_util:bind_to_call_events(CallId),
-    [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
+    Call = kapps_call:set_call_id(CallId, kapps_call:new()),
+    [send_agent_busy(AcctId, AgentId, QueueId, Call, 'outbound', Number, Name) || QueueId <- Qs],
 
     lager:debug("bound to agent's outbound call ~s", [CallId]),
-    {'noreply', State#state{call=kapps_call:set_call_id(CallId, kapps_call:new())}, 'hibernate'};
+    {'noreply', State#state{call=Call}, 'hibernate'};
+
+handle_cast({'inbound_call', CallId, Number, Name}, #state{agent_id=AgentId
+                                             ,acct_id=AcctId
+                                             ,agent_queues=Qs
+                                             }=State) ->
+    _ = kz_util:put_callid(CallId),
+    acdc_util:bind_to_call_events(CallId),
+    Call = kapps_call:set_call_id(CallId, kapps_call:new()),
+    [send_agent_busy(AcctId, AgentId, QueueId, Call, 'inbound', Number, Name) || QueueId <- Qs],
+
+    lager:debug("bound to agent's outbound call ~s", [CallId]),
+    {'noreply', State#state{call=Call}, 'hibernate'};
 
 handle_cast('send_agent_available', #state{agent_id=AgentId
                                           ,agent_priority=Priority
@@ -1495,6 +1513,39 @@ send_agent_busy(AcctId, AgentId, QueueId) ->
            ],
     kapi_acdc_queue:publish_agent_change(Prop).
 
+send_agent_busy(AcctId, AgentId, QueueId, Call) ->
+    Direction = kapps_call:direction(Call),
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
+    send_agent_busy(AcctId, AgentId, QueueId, Call, Direction, CIDNumber, CIDName).
+
+send_agent_busy(AcctId, AgentId, QueueId, _Call, <<"outbound">>, Number, Name) ->
+    send_agent_busy(AcctId, AgentId, QueueId, _Call, 'outbound', Number, Name);
+send_agent_busy(AcctId, AgentId, QueueId, _Call, 'outbound', Number, Name) ->
+    Prop = [{<<"Account-ID">>, AcctId}
+           ,{<<"Agent-ID">>, AgentId}
+           ,{<<"Queue-ID">>, QueueId}
+           ,{<<"Change">>, <<"busy">>}
+           ,{<<"Call-Direction">>, <<"outbound">>}
+           ,{<<"Callee-ID-Number">>, Number}
+           ,{<<"Callee-ID-Name">>, Name}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    kapi_acdc_queue:publish_agent_change(Prop);
+send_agent_busy(AcctId, AgentId, QueueId, _Call, <<"inbound">>, Number, Name) ->
+    send_agent_busy(AcctId, AgentId, QueueId, _Call, 'inbound', Number, Name);
+send_agent_busy(AcctId, AgentId, QueueId, _Call, 'inbound', Number, Name) ->
+    Prop = [{<<"Account-ID">>, AcctId}
+           ,{<<"Agent-ID">>, AgentId}
+           ,{<<"Queue-ID">>, QueueId}
+           ,{<<"Change">>, <<"busy">>}
+           ,{<<"Call-Direction">>, <<"inbound">>}
+           ,{<<"Caller-ID-Number">>, Number}
+           ,{<<"Caller-ID-Name">>, Name}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    kapi_acdc_queue:publish_agent_change(Prop).
+
+
 -spec send_agent_unavailable(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_agent_unavailable(AcctId, AgentId, QueueId) ->
     Prop = [{<<"Account-ID">>, AcctId}
@@ -1505,9 +1556,12 @@ send_agent_unavailable(AcctId, AgentId, QueueId) ->
            ],
     kapi_acdc_queue:publish_agent_change(Prop).
 
-update_my_queues_of_change(AcctId, AgentId, Qs) ->
+update_my_queues_of_change(AcctId, AgentId, Call, Qs) ->
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
     Props = [{<<"Account-ID">>, AcctId}
             ,{<<"Agent-ID">>, AgentId}
+            ,{<<"Caller-ID-Number">>, CIDNumber}
+            ,{<<"Caller-ID-Name">>, CIDName}
             ,{<<"Change">>, <<"ringing">>}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],

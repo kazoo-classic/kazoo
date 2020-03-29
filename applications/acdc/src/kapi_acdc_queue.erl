@@ -599,7 +599,9 @@ agent_change_busy() -> ?AGENT_CHANGE_BUSY.
 agent_change_unavailable() -> ?AGENT_CHANGE_UNAVAILABLE.
 
 -define(AGENT_CHANGE_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Queue-ID">>, <<"Change">>]).
--define(OPTIONAL_AGENT_CHANGE_HEADERS, [<<"Priority">>, <<"Process-ID">>, <<"Skills">>]).
+-define(OPTIONAL_AGENT_CHANGE_HEADERS, [<<"Priority">>, <<"Process-ID">>, <<"Skills">>, <<"Call-Direction">>,
+                                        <<"Caller-ID-Number">>, <<"Caller-ID-Name">>,
+                                        <<"Callee-ID-Number">>, <<"Callee-ID-Name">>]).
 -define(AGENT_CHANGE_VALUES, [{<<"Event-Category">>, <<"queue">>}
                              ,{<<"Event-Name">>, <<"agent_change">>}
                              ,{<<"Change">>, ?AGENT_CHANGES}
