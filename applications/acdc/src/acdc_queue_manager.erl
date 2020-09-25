@@ -707,7 +707,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     kapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj1),
     lager:debug("put call into shared messaging queue"),
 
-    gen_listener:cast(self(), {'monitor_call', Call1}),
+%%    gen_listener:cast(self(), {'monitor_call', Call1}),
 
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
