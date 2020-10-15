@@ -1,0 +1,24 @@
+{
+    "has_next_page": false,
+    "page": 1,
+    "rows": [
+        {
+            "account_location_id": "integer",
+            "carrier_id": "text",
+            "carrier_name": "thinQ TF",
+            "didSummary": "(877) XXX-XXXX",
+            "id": "877000000",
+            "lerg": {
+                "company": null,
+                "ratecenter": null
+            },
+            "monthly": 1,
+            "oneTime": 1,
+            "price": 1,
+            "thinq_tier": "text",
+            "tollfree_prefix": "877"
+        }
+    ],
+    "rows_per_page": 25,
+    "total_rows": 1
+}

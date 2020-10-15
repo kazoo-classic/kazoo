@@ -1,0 +1,25 @@
+{
+    "has_next_page": false,
+    "page": 1,
+    "rows": [
+        {
+            "account_id": null,
+            "block_id": null,
+            "carrier_id": 75,
+            "carrier_name": "Inteliquent",
+            "didSummary": "(919) 123-4567",
+            "id": "9191234567",
+            "lerg": {
+                "company": "LEVEL 3 COMMUNICATIONS",
+                "lata": "426",
+                "ocn": "3235",
+                "ratecenter": "WAKEFOREST",
+                "state": "NC"
+            },
+            "route_id": null,
+            "thinq_tier": 1
+        }
+    ],
+    "rows_per_page": 25,
+    "total_rows": 1
+}
