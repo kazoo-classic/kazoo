@@ -91,6 +91,7 @@
 -define(ORDER_NAME_XPATH, "Name/text()").
 -define(BW_ORDER_ID_XPATH, "Order/id/text()").
 -define(BW_ORDER_STATUS_XPATH, "OrderStatus/text()").
+-define(BW_DISC_ORDER_ID_XPATH, "orderRequest/id/text()").
 
 -type search_ret() :: {'ok', knm_number:knm_numbers()} | {'error', any()}.
 
@@ -257,6 +258,37 @@ check_order(_OrderId, OrderStatus, _Response, PhoneNumber, _Number) ->
     Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
     knm_errors:by_carrier(?MODULE, Error, Num).
 
+-spec check_disconnect_order(kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number(), knm_number:knm_number()) -> knm_number:knm_number().
+check_disconnect_order(OrderId, <<"RECEIVED">>, _Response, PhoneNumber, Number) ->
+    timer:sleep(?BW2_ORDER_POLL_INTERVAL),
+    Url = ["disconnects/", kz_term:to_list(OrderId)],
+    case api_get(url(Url)) of
+        {'error', Reason} ->
+            Error = <<"Unable to disconnect number: ", (kz_term:to_binary(Reason))/binary>>,
+            Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
+            knm_errors:by_carrier(?MODULE, Error, Num);
+        {'ok', Xml} ->
+            Response = xmerl_xpath:string("orderRequest", Xml),
+            OrderStatus = kz_xml:get_value(?BW_ORDER_STATUS_XPATH, Xml),
+            check_disconnect_order(OrderId, OrderStatus, Response, PhoneNumber, Number)
+    end;
+
+check_disconnect_order(_OrderId, <<"COMPLETE">>, Response, PhoneNumber, Number) ->
+    OrderData = number_order_response_to_json(Response),
+    PN = knm_phone_number:update_carrier_data(PhoneNumber, OrderData),
+    knm_number:set_phone_number(Number, PN);
+
+check_disconnect_order(_OrderId, <<"FAILED">>, _Response, PhoneNumber, _Number) ->
+    Reason = <<"FAILED">>,
+    Error = <<"Unable to disconnect number: ", (kz_term:to_binary(Reason))/binary>>,
+    Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
+    knm_errors:by_carrier(?MODULE, Error, Num);
+
+check_disconnect_order(_OrderId, OrderStatus, _Response, PhoneNumber, _Number) ->
+    Error = <<"Unable to disconnect number: ", (kz_term:to_binary(OrderStatus))/binary>>,
+    Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
+    knm_errors:by_carrier(?MODULE, Error, Num).
+
 -spec to_bandwidth2(kz_term:ne_binary()) -> kz_term:ne_binary().
 to_bandwidth2(<<"+1", Number/binary>>) -> Number;
 to_bandwidth2(Number) -> Number.
@@ -270,8 +302,37 @@ from_bandwidth2(Number) -> <<"+1", Number/binary>>.
 %% @end
 %%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
-disconnect_number(_Number) -> _Number.
+disconnect_number(Number) -> 
+    Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
+    case ?IS_PROVISIONING_ENABLED of
+        'false' when Debug ->
+            lager:debug("allowing sandbox provisioning"),
+            Number;
+        'false' ->
+            knm_errors:unspecified('provisioning_disabled', Number);
+        'true' ->
+            PhoneNumber = knm_number:phone_number(Number),
+            Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
+            ON = lists:flatten([?BW2_ORDER_NAME_PREFIX, "-", integer_to_list(kz_time:now_s())]),
 
+            Props = [{'Name', [ON]}
+                    ,{'DisconnectTelephoneNumberOrderType',
+                      [{'TelephoneNumberList', [{'TelephoneNumber', [binary_to_list(Num)]}]}
+                      ]}
+                    ],
+            Body = xmerl:export_simple([{'DisconnectTelephoneNumberOrder', Props}], 'xmerl_xml'),
+
+            case api_post(url(["disconnects"]), Body) of
+                {'error', Reason} ->
+                    Error = <<"Unable to disconnect number: ", (kz_term:to_binary(Reason))/binary>>,
+                    knm_errors:by_carrier(?MODULE, Error, Num);
+                {'ok', Xml} ->
+                    Response = xmerl_xpath:string("Order", Xml),
+                    OrderId = kz_xml:get_value(?BW_DISC_ORDER_ID_XPATH, Xml),
+                    OrderStatus = kz_xml:get_value(?BW_ORDER_STATUS_XPATH, Xml),
+                    check_disconnect_order(OrderId, OrderStatus, Response, PhoneNumber, Number)
+            end
+    end.
 
 -spec sites() -> 'ok'.
 sites() ->
