@@ -754,7 +754,8 @@ handle_cast({'handle_queue_member_remove', CallId}, #state{current_member_calls=
     State1 = State#state{announcements_pids=cancel_position_announcements(Call, Pids)},
     State2 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
                         ,State1
-                        ,[{fun remove_queue_member/2, [CallId]}
+                        ,[{fun maybe_remove_ignored_member_call/2, [CallId]}
+                         ,{fun remove_queue_member/2, [CallId]}
                          ,{fun maybe_remove_callback_reg/2, [CallId]}
                          ,{fun maybe_reseed_sbrrss_maps/1, []}
                          ]
@@ -931,6 +932,19 @@ remove_queue_member(CallId, #state{current_member_calls=Calls}=State) when is_bi
     State#state{current_member_calls=Calls1};
 remove_queue_member(Call, State) ->
     remove_queue_member(kapps_call:call_id(Call), State).
+
+-spec maybe_remove_ignored_member_call(kz_term:ne_binary() | kapps_call:call(), mgr_state()) -> mgr_state().
+maybe_remove_ignored_member_call(CallId, #state{account_id = AccountId,
+                                                queue_id = QueueId,
+                                                ignored_member_calls=Dict}=State) when is_binary(CallId) ->
+    K = make_ignore_key(AccountId ,QueueId ,CallId),
+    case catch dict:fetch(K, Dict) of
+        {'EXIT', _} -> State;
+        _Res ->
+            State#state{ignored_member_calls=dict:erase(K, Dict)}
+    end;
+maybe_remove_ignored_member_call(Call, State) ->
+    maybe_remove_ignored_member_call(kapps_call:call_id(Call), State).
 
 -spec publish_agents_available_resp(kz_term:ne_binary(), kz_term:ne_binary(), non_neg_integer(), kz_json:object()) -> 'ok'.
 publish_agents_available_resp(AccountId, QueueId, AgentCount, JObj) ->
