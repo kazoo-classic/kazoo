@@ -19,6 +19,9 @@
 
 -define(THQ_BASE_URL, "https://api.thinq.com").
 
+-define(CNAM_ID, <<"cnam_id">>).
+-define(ADDRESS_ID, <<"address_id">>).
+
 -ifdef(TEST).
 -define(THQ_ACCOUNT_ID, "eunit_testing_account").
 -else.
@@ -36,7 +39,6 @@
 -define(THQ_ORDER_NAME_PREFIX
        ,kapps_config:get_string(?KNM_THQ_CONFIG_CAT, <<"order_name_prefix">>, "Kazoo")
        ).
-
 -define(THQ_API_USERNAME
        ,kapps_config:get_binary(?KNM_THQ_CONFIG_CAT, <<"api_username">>, <<>>)
        ).
@@ -52,4 +54,11 @@
 
 -define(MAX_SEARCH_QUANTITY
        ,kapps_config:get_pos_integer(?KNM_THQ_CONFIG_CAT, <<"max_search_quantity">>, 500)
+       ).
+
+-define(ENABLE_SMS
+       ,kapps_config:get_is_true(?KNM_THQ_CONFIG_CAT, <<"enable_sms">>, 'false')
+       ).
+-define(TF_ENABLE_SMS
+       ,kapps_config:get_is_true(?KNM_THQ_CONFIG_CAT, <<"tf_enable_sms">>, 'false')
        ).

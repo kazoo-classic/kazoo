@@ -134,12 +134,14 @@ process_search_response(JObj, Options) ->
 -spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
 acquire_number(Number) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
+    IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     case ?IS_PROVISIONING_ENABLED of
         'false' when Debug ->
             lager:debug("allowing sandbox provisioning"),
             Number;
         'false' ->
             knm_errors:unspecified('provisioning_disabled', Number);
+        'true' when IsDryRun -> Number;
         'true' ->
             PhoneNumber = knm_number:phone_number(Number),
             Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
@@ -148,7 +150,7 @@ acquire_number(Number) ->
                                       {<<"account_location_id">>, 'null'},
                                       {<<"sms_routing_profile_id">>, 'null'},
                                       {<<"route_id">>, ?THQ_SITE_ID},
-                                      {<<"features">>, features()},
+                                      {<<"features">>, features(Num)},
                                       {<<"did">>, Num}
                                      ])],
             Setters = [{fun(J, V) -> kz_json:set_value(<<"blocks">>, V, J) end, []},
@@ -161,21 +163,35 @@ acquire_number(Number) ->
                 {'ok', Results} -> 
                     OrderId = kz_json:get_value(<<"id">>, Results),
                     OrderStatus = kz_json:get_value(<<"status">>, Results),
-                    complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number);
+                    complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number),
+                    maybe_activate_sms(Number);
                 {'error', Reason} -> 
                     Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
                     knm_errors:by_carrier(?MODULE, Error, Num)
             end
     end.
+maybe_activate_sms(Number) ->
+    PhoneNumber = knm_number:phone_number(Number),
+    Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
+    JObj = features(Num),
+    case kz_json:get_boolean_value(<<"sms">>, JObj) of
+        'true' ->
+            knm_providers:activate_feature(Number, {?FEATURE_SMS,
+                                                    kz_json:from_list([{<<"enable">>, 'true'}])}
+                                          );
+        _ -> Number
+    end.
 
-features() ->
+features(<<Prefix:3/binary, _/binary>>) when ?IS_US_TOLLFREE(Prefix) ->
     kz_json:from_list([{<<"cnam">>, 'false'},
-                       {<<"sms">>, 'true'},
+                       {<<"sms">>, ?TF_ENABLE_SMS},
+                       {<<"e911">>, 'false'}
+                      ]);
+features(_Num)  ->
+    kz_json:from_list([{<<"cnam">>, 'false'},
+                       {<<"sms">>, ?ENABLE_SMS},
                        {<<"e911">>, 'false'}
                       ]).
-
-
-
 
 -spec complete_order(kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number(), knm_number:knm_number()) -> knm_number:knm_number().
 complete_order(OrderId, <<"created">>, _Response, PhoneNumber, Number) ->

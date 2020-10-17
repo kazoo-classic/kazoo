@@ -13,8 +13,6 @@
 -include("knm.hrl").
 -include("knm_thinq.hrl").
 
--define(ADDRESS_ID, <<"address_id">>).
-
 %%------------------------------------------------------------------------------
 %% @doc This function is called each time a number is saved, and will
 %% provision e911 or remove the number depending on the state
@@ -136,7 +134,8 @@ create_address(Number, AddressJObj) ->
             {'ok', AddressId};
         {'error', Reason} -> 
             Error = <<"Unable to create e911 address : ", (kz_term:to_binary(Reason))/binary>>,
-            knm_errors:by_carrier(?MODULE, Error, Number)
+            Num = knm_phone_number:number(knm_number:phone_number(Number)),
+            knm_errors:invalid(Num, Error)
         end.           
 
 -spec assign_address(knm_number:knm_number(), kz_term:ne_binary() | 'null') ->
@@ -158,7 +157,8 @@ assign_address(Number, AddressId) ->
         {'ok', Results} -> 
             OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
             OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-            complete_feature_order(AddressId, OrderId, OrderStatus, Results, knm_number:phone_number(Number), Number);
+            'ok' = complete_feature_order(OrderId, OrderStatus, Results, knm_number:phone_number(Number)),
+            {'ok', set_address_id(Number, AddressId)};
         {'error', Reason} -> 
             Error = <<"Unable to assign e911 address: ", (kz_term:to_binary(Reason))/binary>>,
             knm_errors:by_carrier(?MODULE, Error, Num)
@@ -182,7 +182,8 @@ remove_address(Number) ->
         {'ok', Results} -> 
             OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
             OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-            complete_feature_order('null', OrderId, OrderStatus, Results, knm_number:phone_number(Number), Number);
+            'ok' = complete_feature_order(OrderId, OrderStatus, Results, knm_number:phone_number(Number)),
+            {'ok', set_address_id(Number, 'null')};
         {'error', Reason} -> 
             Error = <<"Unable to remove e911 address: ", (kz_term:to_binary(Reason))/binary>>,
             knm_errors:by_carrier(?MODULE, Error, Num)
@@ -191,16 +192,16 @@ remove_address(Number) ->
 -spec e911_feature(boolean(), knm_number:knm_number()) ->  kz_json:object().
 e911_feature(State, Number) ->
     Features = knm_phone_number:features(knm_number:phone_number(Number)),
-    kz_json:from_list([{<<"cnam">>, kz_json:is_json_object(?FEATURE_CNAM_OUTBOUND, Features)},
-                       {<<"sms">>, kz_json:is_json_object(?FEATURE_SMS, Features)},
-                       {<<"e911">>, State}
+    kz_json:from_list([{<<"cnam">>, kz_json:is_json_object(?FEATURE_CNAM_OUTBOUND, Features)}
+                        ,{<<"sms">>, kz_json:is_json_object(?FEATURE_SMS, Features)}
+                        ,{<<"e911">>, State}
                       ]).
 
 -spec set_address_id(knm_number:knm_number(), kz_term:ne_binary() | 'null') -> knm_number:knm_number().
 set_address_id(Number, AddressId) ->
     PN = knm_number:phone_number(Number),
     Data = kz_json:from_list([{?ADDRESS_ID, AddressId}]),
-    NewPN = knm_phone_number:update_carrier_data(PN, Data),
+    NewPN = update_carrier_data(PN, Data),
     knm_number:set_phone_number(Number, NewPN).
 
 -spec remove_number(knm_number:knm_number()) -> {'ok', knm_number:knm_number()} |
@@ -253,23 +254,28 @@ is_ALnum_or_space(C) when $A =< C, C =< $Z -> 'true';
 is_ALnum_or_space(C) -> $\s =:= C.
 
 
--spec complete_feature_order(kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number(), knm_number:knm_number()) -> knm_number:knm_number().
-complete_feature_order(AddressId, OrderId, <<"created">>, _Response, PhoneNumber, Number) ->
+-spec complete_feature_order(kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number()) -> knm_number:knm_number().
+complete_feature_order(OrderId, <<"created">>, _Response, PhoneNumber) ->
     case knm_thinq_util:api_post(url_complete_order(OrderId), kz_json:new()) of
-        {'ok', _OrderData} -> 
-            {'ok', set_address_id(Number, AddressId)};
+        {'ok', _OrderData} -> 'ok';
         {'error', Reason} -> 
             Error = <<"Unable to complete order: ", (kz_term:to_binary(Reason))/binary>>,
             Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
             knm_errors:by_carrier(?MODULE, Error, Num)
     end;
-complete_feature_order(_AddressId, _OrderId, _, _Response, PhoneNumber, _Number) ->
+complete_feature_order(_OrderId, _, _Response, PhoneNumber) ->
     Reason = <<"FAILED">>,
     Error = <<"Unable to assign e911 number: ", (kz_term:to_binary(Reason))/binary>>,
     Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
     knm_errors:by_carrier(?MODULE, Error, Num).
 
-
+% Bug in knm_phone_number:update_carrier_data(), kz_json:merge args are wrong way round.
+-spec update_carrier_data(knm_number:phone_number(), kz_json:object()) -> knm_number:phone_number().
+update_carrier_data(PN, Data) ->
+    CD = knm_phone_number:carrier_data(PN),
+    'true' = kz_json:is_json_object(Data),
+    Updated = kz_json:merge(CD, Data),
+    knm_phone_number:set_carrier_data(PN, Updated).
 %{{host}}/account/{{account_id}}/location/
 -spec url_location() -> nonempty_string().
 url_location() ->
