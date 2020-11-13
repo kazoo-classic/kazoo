@@ -6,7 +6,8 @@
 %%%-----------------------------------------------------------------------------
 -module(knm_thinq_util).
 
--export([api_get/1, api_post/2]).
+-export([api_get/1 
+        ,api_post/2, api_post/3]).
 -export([to_thinq/1, from_thinq/1]).
 
 -include("knm.hrl").
@@ -35,14 +36,18 @@ api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders/" +
 -endif.
 
 -spec api_post(nonempty_string(), binary()) -> api_res().
--ifndef(TEST).
 api_post(Url, Body) ->
+    api_post(Url, Body, []).
+    
+-spec api_post(nonempty_string(), binary(), knm_search:options()) -> api_res().
+-ifndef(TEST).
+api_post(Url, Body, Options) ->
     EncodeBody = kz_json:encode(Body),
     Headers = [{"Accept", "application/json"}
               ,{"User-Agent", ?KNM_USER_AGENT}
               ,{"Content-Type", "application/json"}
               ],
-    HTTPOptions = [auth()
+    HTTPOptions = [auth(Options)
                   ,{'ssl', [{'verify', 'verify_none'}]}
                   ,{'timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
@@ -138,7 +143,15 @@ reason(Reason, 'false') ->
 
 -spec auth() -> {'basic_auth', {kz_term:ne_binary(), kz_term:ne_binary()}}.
 auth() ->
-    {'basic_auth', {?THQ_API_USERNAME, ?THQ_API_PASSWORD}}.
+    auth([]).
+
+-spec auth(knm_search:options()) -> {'basic_auth', {kz_term:ne_binary(), kz_term:ne_binary()}}.
+auth([]) ->
+    {'basic_auth', {?THQ_API_USERNAME, ?THQ_API_PASSWORD}};
+auth(Options) ->
+    Account_id = knm_carriers:account_id(Options),
+    Reseller_id = knm_carriers:reseller_id(Options),
+    {'basic_auth', {?THQ_API_USERNAME(Account_id, Reseller_id), ?THQ_API_PASSWORD}}.
 
 -spec to_thinq(kz_term:ne_binary()) -> kz_term:ne_binary().
 to_thinq(<<"+1", Number/binary>>) -> Number;

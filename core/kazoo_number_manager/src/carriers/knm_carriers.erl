@@ -30,6 +30,11 @@
         ,is_local/1
         ]).
 
+
+-define(CARRIER_MODULES(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES(ResellerId))
+       ).
+
 -ifdef(TEST).
 -define(CARRIER_MODULES(AccountId)
        ,(fun (?CHILD_ACCOUNT_ID) ->
@@ -132,9 +137,10 @@ get_available_carriers(Options) ->
     of
         'true' -> keep_only_reachable(?CARRIER_MODULES);
         'false' ->
+            AccountId = account_id(Options),
             ResellerId = reseller_id(Options),
             First = [?CARRIER_RESERVED, ?CARRIER_RESERVED_RESELLER, ?CARRIER_LOCAL],
-            keep_only_reachable(First ++ (?CARRIER_MODULES(ResellerId) -- First))
+            keep_only_reachable(First ++ (?CARRIER_MODULES(AccountId, ResellerId) -- First))
     end.
 
 -spec default_carriers() -> kz_term:atoms().
@@ -225,29 +231,32 @@ allowed_creation_states(AccountId) ->
 %%------------------------------------------------------------------------------
 -spec acquire(knm_number:knm_number()) -> knm_number:knm_number();
              (knm_numbers:collection()) -> knm_numbers:collection().
-acquire(T0=#{todo := Ns}) ->
+acquire(T0=#{todo := Ns, options := Options}) ->
     F = fun (N, T) ->
-                case knm_number:attempt(fun acquire/1, [N]) of
-                    {ok, NewN} -> knm_numbers:ok(NewN, T);
-                    {error, R} -> knm_numbers:ko(N, R, T)
+                case knm_number:attempt(fun acquire/2, [N, Options]) of
+                    {'ok', NewN} -> knm_numbers:ok(NewN, T);
+                    {'error', R} -> knm_numbers:ko(N, R, T)
                 end
         end,
-    lists:foldl(F, T0, Ns);
-acquire(Number) ->
+    lists:foldl(F, T0, Ns).
+
+-spec acquire(knm_number:knm_number(), knm_number_options:options()) ->
+          knm_number:knm_number().
+acquire(Number, Options) ->
     PhoneNumber = knm_number:phone_number(Number),
     Module = knm_phone_number:module_name(PhoneNumber),
     DryRun = knm_phone_number:dry_run(PhoneNumber),
-    acquire(Number, Module, DryRun).
+    acquire(Number, Module, props:get_value(crossbar, Options), DryRun).
 
--spec acquire(knm_number:knm_number(), kz_term:api_ne_binary(), boolean()) ->
-                     knm_number:knm_number().
-acquire(Number, 'undefined', _DryRun) ->
+-spec acquire(knm_number:knm_number(), kz_term:api_ne_binary(), knm_number_options:crossbar_options(), boolean()) ->
+          knm_number:knm_number().
+acquire(Number, 'undefined', _Options, _DryRun) ->
     knm_errors:carrier_not_specified(Number);
-acquire(Number, _Mod, 'true') ->
+acquire(Number, _Mod, _Options, 'true') ->
     Number;
-acquire(Number, ?NE_BINARY=Mod, 'false') ->
+acquire(Number, ?NE_BINARY=Mod, Options, 'false') ->
     case 'false' =:= kz_module:ensure_loaded(Mod) of
-        'false' -> apply(Mod, 'acquire_number', [Number]);
+        'false' -> maybe_apply_with_options(Mod, 'acquire_number', [Number], Options);
         'true' ->
             lager:info("carrier '~s' does not exist, skipping", [Mod]),
             Number
@@ -259,19 +268,19 @@ acquire(Number, ?NE_BINARY=Mod, 'false') ->
 %%------------------------------------------------------------------------------
 -spec disconnect(knm_number:knm_number()) -> knm_number:knm_number();
                 (knm_numbers:collection()) -> knm_numbers:collection().
-disconnect(T0=#{todo := Ns}) ->
+disconnect(T0=#{todo := Ns, options := Options}) ->
     F = fun (N, T) ->
-                case knm_number:attempt(fun disconnect/1, [N]) of
-                    {ok, NewN} -> knm_numbers:ok(NewN, T);
-                    {error, R} ->
+                case knm_number:attempt(fun disconnect/2, [N, Options]) of
+                    {'ok', NewN} -> knm_numbers:ok(NewN, T);
+                    {'error', R} ->
                         Num = knm_phone_number:number(knm_number:phone_number(N)),
                         knm_numbers:ko(Num, R, T)
                 end
         end,
-    lists:foldl(F, T0, Ns);
-disconnect(Number) ->
+    lists:foldl(F, T0, Ns).
+disconnect(Number, Options) ->
     Module = knm_phone_number:module_name(knm_number:phone_number(Number)),
-    try apply(Module, disconnect_number, [Number]) of
+    try maybe_apply_with_options(Module, 'disconnect_number', [Number], Options) of
         Result -> Result
     catch
         'error':_ ->
@@ -351,6 +360,14 @@ is_local(Carrier) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
+
+-spec maybe_apply_with_options(module() | kz_term:ne_binary() | knm_number:knm_number(), atom(), list(), list()) -> any().
+maybe_apply_with_options(Mod, Function, Args, Options) ->
+    case kz_module:is_exported(Mod, Function, length(Args) + 1) of
+        'true' -> apply(Mod, Function, Args ++ [Options]);
+        'false' -> apply(Mod, Function, Args)
+    end.
+
 -spec apply(module() | kz_term:ne_binary() | knm_number:knm_number(), atom(), list()) -> any().
 apply(Module, FName, Args) when is_atom(Module), Module =/= undefined ->
     lager:debug("contacting carrier ~s for ~s", [Module, FName]),

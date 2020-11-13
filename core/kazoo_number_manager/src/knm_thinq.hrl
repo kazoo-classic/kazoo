@@ -22,11 +22,19 @@
 -define(CNAM_ID, <<"cnam_id">>).
 -define(ADDRESS_ID, <<"address_id">>).
 
+
+-define(DEFAULT_THQ_ACCOUNT_ID, "").
+-define(THQ_ACCOUNT_ID(AccountId, ResellerId)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"account_id">>, ?THQ_ACCOUNT_ID(ResellerId)))
+       ).
+-define(THQ_ACCOUNT_ID(AccountId)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"account_id">>, ?THQ_ACCOUNT_ID))
+       ).
 -ifdef(TEST).
 -define(THQ_ACCOUNT_ID, "eunit_testing_account").
 -else.
 -define(THQ_ACCOUNT_ID
-       ,kapps_config:get_string(?KNM_THQ_CONFIG_CAT, <<"account_id">>, "")
+       ,kapps_config:get_string(?KNM_THQ_CONFIG_CAT, <<"account_id">>, ?DEFAULT_THQ_ACCOUNT_ID)
        ).
 -endif.
 
@@ -39,17 +47,42 @@
 -define(THQ_ORDER_NAME_PREFIX
        ,kapps_config:get_string(?KNM_THQ_CONFIG_CAT, <<"order_name_prefix">>, "Kazoo")
        ).
+
+-define(DEFAULT_THQ_API_USERNAME, <<>>).
+-define(THQ_API_USERNAME(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"api_username">>, ?THQ_API_USERNAME(ResellerId))
+       ).
+-define(THQ_API_USERNAME(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"api_username">>, ?THQ_API_USERNAME)
+       ).
 -define(THQ_API_USERNAME
-       ,kapps_config:get_binary(?KNM_THQ_CONFIG_CAT, <<"api_username">>, <<>>)
+       ,kapps_config:get_binary(?KNM_THQ_CONFIG_CAT, <<"api_username">>, ?DEFAULT_THQ_API_USERNAME)
+       ).
+
+-define(DEFAULT_THQ_API_PASSWORD, <<>>).
+-define(THQ_API_PASSWORD(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"api_password">>, ?THQ_API_PASSWORD(ResellerId))
+       ).
+-define(THQ_API_PASSWORD(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"api_password">>, ?THQ_API_PASSWORD)
        ).
 -define(THQ_API_PASSWORD
-       ,kapps_config:get_binary(?KNM_THQ_CONFIG_CAT, <<"api_password">>, <<>>)
+       ,kapps_config:get_binary(?KNM_THQ_CONFIG_CAT, <<"api_password">>, ?DEFAULT_THQ_API_PASSWORD)
        ).
+
 -define(THQ_SIP_PEER
        ,kapps_config:get_string(?KNM_THQ_CONFIG_CAT, <<"sip_peer">>, "")
        ).
+
+-define(DEFAULT_THQ_SITE_ID, <<>>).
+-define(THQ_SITE_ID(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"site_id">>, ?THQ_SITE_ID(ResellerId))
+       ).
+-define(THQ_SITE_ID(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"site_id">>, ?THQ_SITE_ID)
+       ).
 -define(THQ_SITE_ID
-       ,kapps_config:get_string(?KNM_THQ_CONFIG_CAT, <<"site_id">>, "")
+       ,kapps_config:get_binary(?KNM_THQ_CONFIG_CAT, <<"site_id">>, ?DEFAULT_THQ_SITE_ID)
        ).
 
 -define(MAX_SEARCH_QUANTITY

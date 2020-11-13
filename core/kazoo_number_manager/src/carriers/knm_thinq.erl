@@ -10,8 +10,8 @@
 -export([info/0]).
 -export([is_local/0]).
 -export([find_numbers/3]).
--export([acquire_number/1]).
--export([disconnect_number/1]).
+-export([acquire_number/1, acquire_number/2]).
+-export([disconnect_number/1, disconnect_number/2]).
 -export([is_number_billable/1]).
 -export([should_lookup_cnam/0]).
 -export([check_numbers/1]).
@@ -26,7 +26,13 @@
 -export([auth/0]).  %% Only to pass compilation
 -endif.
 
+-define(ACCOUNT_ID(Options)
+        ,?THQ_ACCOUNT_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
 
+-define(SITE_ID(Options)
+        ,?THQ_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
 -type search_ret() :: {'ok', knm_number:knm_numbers()} | {'error', any()}.
 
 %%% API
@@ -79,7 +85,7 @@ find_numbers(<<Prefix:3/binary, _/binary>>=Num, Quantity, Options) when ?IS_US_T
               "&page=", "1"
              ],
     JObj = kz_json:from_list([{<<"search">>, tf_prefix(Num)}]),
-    Result = search_tollfree(Num, Params, JObj),
+    Result = search_tollfree(Num, Params, JObj, []),
     process_search_response(Result, Options);
 
 find_numbers(<<Prefix:3/binary, _/binary>>=Num, Quantity, Options) when ?IS_US_TOLLFREE_WILDCARD(Prefix) ->
@@ -88,7 +94,7 @@ find_numbers(<<Prefix:3/binary, _/binary>>=Num, Quantity, Options) when ?IS_US_T
               "&page=", "1"
              ],
     JObj = kz_json:from_list([{<<"search">>, tf_prefix(Num)}]),
-    Result = search_tollfree(Num, Params, JObj),
+    Result = search_tollfree(Num, Params, JObj, []),
     process_search_response(Result, Options);
 
 find_numbers(<<NPA:3/binary>>, Quantity, Options) ->
@@ -96,7 +102,7 @@ find_numbers(<<NPA:3/binary>>, Quantity, Options) ->
               "&page=", "1"
              ],
     JObj = kz_json:from_list([{<<"search">>, npanxx(NPA)}]),
-    Result = search_regular(NPA, Params, JObj),
+    Result = search_regular(NPA, Params, JObj, Options),
     process_search_response(Result, Options);
 
 find_numbers(Search, Quantity, Options) ->
@@ -105,7 +111,7 @@ find_numbers(Search, Quantity, Options) ->
     Params = ["rows=", quantity_uri_param(Quantity),
               "&page=", "1"
              ],
-    Result = search_regular(NpaNxx, Params, JObj),
+    Result = search_regular(NpaNxx, Params, JObj, Options),
     process_search_response(Result, Options).
 
 npanxx(NPA) ->
@@ -133,6 +139,10 @@ process_search_response(JObj, Options) ->
 %%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
 acquire_number(Number) ->
+    acquire_number(Number, []).
+
+-spec acquire_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
+acquire_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
     IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     case ?IS_PROVISIONING_ENABLED of
@@ -149,7 +159,7 @@ acquire_number(Number) ->
             Tns = [kz_json:from_list([{<<"caller_id">>, 'null'},
                                       {<<"account_location_id">>, 'null'},
                                       {<<"sms_routing_profile_id">>, 'null'},
-                                      {<<"route_id">>, ?THQ_SITE_ID},
+                                      {<<"route_id">>, ?SITE_ID(Options)},
                                       {<<"features">>, features(Num)},
                                       {<<"did">>, Num}
                                      ])],
@@ -159,11 +169,11 @@ acquire_number(Number) ->
                       ],
             JObj = kz_json:set_values(Setters, kz_json:new()),
 
-            case knm_thinq_util:api_post(url_purchase(), JObj) of
+            case knm_thinq_util:api_post(url_purchase(Options), JObj, Options) of
                 {'ok', Results} -> 
                     OrderId = kz_json:get_value(<<"id">>, Results),
                     OrderStatus = kz_json:get_value(<<"status">>, Results),
-                    complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number),
+                    complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number, []),
                     maybe_activate_sms(Number);
                 {'error', Reason} -> 
                     Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
@@ -193,9 +203,15 @@ features(_Num)  ->
                        {<<"e911">>, 'false'}
                       ]).
 
--spec complete_order(kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number(), knm_number:knm_number()) -> knm_number:knm_number().
-complete_order(OrderId, <<"created">>, _Response, PhoneNumber, Number) ->
-    case knm_thinq_util:api_post(url_complete(OrderId), kz_json:new()) of
+-spec complete_order(kz_term:api_binary()
+                     ,kz_term:ne_binary()
+                     ,kz_types:xml_el()
+                     ,knm_phone_number:knm_phone_number()
+                     ,knm_number:knm_number()
+                     ,knm_search:options()
+                     ) -> knm_number:knm_number().
+complete_order(OrderId, <<"created">>, _Response, PhoneNumber, Number, Options) ->
+    case knm_thinq_util:api_post(url_complete(OrderId, Options), kz_json:new(), Options) of
         {'ok', OrderData} -> 
             PN = knm_phone_number:update_carrier_data(PhoneNumber, OrderData),
             knm_number:set_phone_number(Number, PN);
@@ -204,7 +220,7 @@ complete_order(OrderId, <<"created">>, _Response, PhoneNumber, Number) ->
             Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
             knm_errors:by_carrier(?MODULE, Error, Num)
     end;
-complete_order(_OrderId, _, _Response, PhoneNumber, _Number) ->
+complete_order(_OrderId, _, _Response, PhoneNumber, _Number, _Options) ->
     Reason = <<"FAILED">>,
     Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
     Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
@@ -216,6 +232,10 @@ complete_order(_OrderId, _, _Response, PhoneNumber, _Number) ->
 %%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) ->
+    disconnect_number(Number, []).
+    
+-spec disconnect_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
+disconnect_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
     case ?IS_PROVISIONING_ENABLED of
         'false' when Debug ->
@@ -231,7 +251,7 @@ disconnect_number(Number) ->
             JObj = kz_json:set_value(<<"dids">>, [Num], kz_json:new()),
 
             case not IsDryRun andalso 
-                    knm_thinq_util:api_post(url_disconnect(), JObj) of
+                    knm_thinq_util:api_post(url_disconnect(Options), JObj, Options) of
                 'false' -> Number;
                 {'ok', _Results} -> 
                     Number;
@@ -243,7 +263,7 @@ disconnect_number(Number) ->
 
 -spec sites() -> 'ok'.
 sites() ->
-    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sites"])),
+    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sites"], [])),
     io:format("listing all sites for account ~p~n", [?THQ_ACCOUNT_ID]),
     Sites = xmerl_xpath:string("Sites/Site", Xml),
     lists:foreach(fun process_site/1, Sites),
@@ -257,7 +277,7 @@ process_site(Site) ->
 
 -spec peers(binary()) -> 'ok'.
 peers(SiteId) ->
-    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sippeers"])),
+    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sippeers"], [])),
     io:format("listing all peers for account ~p, site ~p~n", [?THQ_ACCOUNT_ID, SiteId]),
     Peers = xmerl_xpath:string("SipPeers/SipPeer", Xml),
     lists:foreach(fun process_peer/1, Peers),
@@ -272,51 +292,51 @@ process_peer(Peer) ->
 %%% Internals
 %{{host}}/origination/did/search/individual/{{account_id}}
 %{{host}}/origination/did/search/tollfree/{{account_id}}
--spec url_search([nonempty_string()]) -> nonempty_string().
-url_search(RelativePath) ->
+-spec url_search([nonempty_string()], knm_search:options()) -> nonempty_string().
+url_search(RelativePath, Options) ->
     lists:flatten(
-        io_lib:format("~s~s~s", [?THQ_BASE_URL, RelativePath, ?THQ_ACCOUNT_ID])
+        io_lib:format("~s~s~s", [?THQ_BASE_URL, RelativePath, ?ACCOUNT_ID(Options)])
     ).
 
 %{{host}}/account/{{account_id}}/origination/order/create
--spec url_purchase() -> nonempty_string().
-url_purchase() ->
+-spec url_purchase(knm_search:options()) -> nonempty_string().
+url_purchase(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/order/create", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID])
+        io_lib:format("~s/account/~s/origination/order/create", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
     ).
 
 %{{host}}/account/{{account_id}}/origination/order/complete/{{order_id}}
--spec url_complete(nonempty_string()) -> nonempty_string().
-url_complete(OrderId) ->
+-spec url_complete(nonempty_string(), knm_search:options()) -> nonempty_string().
+url_complete(OrderId, Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/order/complete/~b", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID, OrderId])
+        io_lib:format("~s/account/~s/origination/order/complete/~b", [?THQ_BASE_URL, ?ACCOUNT_ID(Options), OrderId])
     ).
 
 %{{host}}/account/{{account_id}}/origination/disconnect
--spec url_disconnect() -> nonempty_string().
-url_disconnect() ->
+-spec url_disconnect(knm_search:options()) -> nonempty_string().
+url_disconnect(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/disconnect", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID])
+        io_lib:format("~s/account/~s/origination/disconnect", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
     ).
 
 
 
--spec search_regular(nonempty_string(), [nonempty_string()], kz_json:object()) -> kz_json:object().
-search_regular(Num, Params, JObj) ->
+-spec search_regular(nonempty_string(), [nonempty_string()], kz_json:object(), knm_search:options()) -> kz_json:object().
+search_regular(Num, Params, JObj, Options) ->
     case knm_thinq_util:api_post(lists:flatten(
-                    [url_search("/origination/did/search/individual/")
+                    [url_search("/origination/did/search/individual/", Options)
                      ,"?" 
-                     ,Params]), JObj) of
+                     ,Params]), JObj, Options) of
         {'ok', Results} -> Results;
         {'error', Reason} -> knm_errors:by_carrier(?MODULE, Reason, Num)
     end.
 
--spec search_tollfree(nonempty_string(), [nonempty_string()], kz_json:object()) -> kz_json:object().
-search_tollfree(Num, Params, JObj) ->
+-spec search_tollfree(nonempty_string(), [nonempty_string()], kz_json:object(), knm_search:options()) -> kz_json:object().
+search_tollfree(Num, Params, JObj, Options) ->
     case knm_thinq_util:api_post(lists:flatten(
-                    [url_search("/origination/did/search/tollfree/")
+                    [url_search("/origination/did/search/tollfree/", Options)
                      ,"?" 
-                     ,Params]), JObj) of
+                     ,Params]), JObj, Options) of
         {'ok', Results} -> Results;
         {'error', Reason} -> knm_errors:by_carrier(?MODULE, Reason, Num)
     end.
