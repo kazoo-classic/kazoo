@@ -13,6 +13,10 @@
 -include("knm.hrl").
 -include("knm_thinq.hrl").
 
+-define(ACCOUNT_ID(Options)
+        ,?THQ_ACCOUNT_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
+
 %%------------------------------------------------------------------------------
 %% @doc This function is called each time a number is saved, and will
 %% provision e911 or remove the number depending on the state
@@ -126,8 +130,8 @@ update_e911(Number, AddressJObj) ->
           {'error', kz_term:ne_binary() | any()}.
 create_address(Number, AddressJObj) ->
     Body = kz_json:from_list([{<<"location">>, e911_address(Number, AddressJObj)}
-                              ,{<<"account_id">>, ?THQ_ACCOUNT_ID}]),
-    case knm_thinq_util:api_post(url_location(), Body) of
+                              ,{<<"account_id">>, ?ACCOUNT_ID(options(Number))}]),
+    case knm_thinq_util:api_post(url_location(options(Number)), Body, options(Number)) of
         {ok, Rep} ->
             AddressId = kz_json:get_ne_binary_value(<<"id">>, Rep),
             lager:debug("created address ~s", [kz_json:encode(Rep)]),
@@ -153,11 +157,11 @@ assign_address(Number, AddressId) ->
                {fun(J, V) -> kz_json:set_value(<<"tns">>, V, J) end, Tns}
               ],
     JObj = kz_json:set_values(Setters, kz_json:new()),
-    case knm_thinq_util:api_post(url_feature_order(), JObj) of
+    case knm_thinq_util:api_post(url_feature_order(options(Number)), JObj, options(Number)) of
         {'ok', Results} -> 
             OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
             OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-            'ok' = complete_feature_order(OrderId, OrderStatus, Results, knm_number:phone_number(Number)),
+            'ok' = complete_feature_order(OrderId, OrderStatus, Results, Number),
             {'ok', set_address_id(Number, AddressId)};
         {'error', Reason} -> 
             Error = <<"Unable to assign e911 address: ", (kz_term:to_binary(Reason))/binary>>,
@@ -178,11 +182,11 @@ remove_address(Number) ->
                {fun(J, V) -> kz_json:set_value(<<"tns">>, V, J) end, Tns}
               ],
     JObj = kz_json:set_values(Setters, kz_json:new()),
-    case knm_thinq_util:api_post(url_feature_order(), JObj) of
+    case knm_thinq_util:api_post(url_feature_order(options(Number)), JObj, options(Number)) of
         {'ok', Results} -> 
             OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
             OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-            'ok' = complete_feature_order(OrderId, OrderStatus, Results, knm_number:phone_number(Number)),
+            'ok' = complete_feature_order(OrderId, OrderStatus, Results, Number),
             {'ok', set_address_id(Number, 'null')};
         {'error', Reason} -> 
             Error = <<"Unable to remove e911 address: ", (kz_term:to_binary(Reason))/binary>>,
@@ -232,8 +236,7 @@ e911_address(Number, JObj) ->
     CallerName = knm_providers:e911_caller_name(Number, E911Name),
     kz_json:from_list(
       props:filter_empty(
-%%        [{<<"alias">>, <<CallerName/binary, "-", (integer_to_binary(kz_time:current_tstamp()))/binary>>}
-        [{<<"alias">>, CallerName}
+        [{<<"alias">>, <<CallerName/binary, (integer_to_binary(kz_time:current_tstamp()))/binary>>}
         ,{<<"location_type">>, <<"business">>}
         ,{<<"address">>, cleanse(kz_json:get_ne_binary_value(?E911_STREET1, JObj))}
         ,{<<"address2">>, cleanse(kz_json:get_ne_binary_value(?E911_STREET2, JObj))}    
@@ -256,15 +259,17 @@ is_ALnum_or_space(C) -> $\s =:= C.
 
 
 -spec complete_feature_order(kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number()) -> knm_number:knm_number().
-complete_feature_order(OrderId, <<"created">>, _Response, PhoneNumber) ->
-    case knm_thinq_util:api_post(url_complete_order(OrderId), kz_json:new()) of
+complete_feature_order(OrderId, <<"created">>, _Response, Number) ->
+    PhoneNumber = knm_number:phone_number(Number),
+    case knm_thinq_util:api_post(url_complete_order(OrderId, options(Number)), kz_json:new(), options(Number)) of
         {'ok', _OrderData} -> 'ok';
         {'error', Reason} -> 
             Error = <<"Unable to complete order: ", (kz_term:to_binary(Reason))/binary>>,
             Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
             knm_errors:by_carrier(?MODULE, Error, Num)
     end;
-complete_feature_order(_OrderId, _, _Response, PhoneNumber) ->
+complete_feature_order(_OrderId, _, _Response, Number) ->
+    PhoneNumber = knm_number:phone_number(Number),
     Reason = <<"FAILED">>,
     Error = <<"Unable to assign e911 number: ", (kz_term:to_binary(Reason))/binary>>,
     Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
@@ -278,22 +283,28 @@ update_carrier_data(PN, Data) ->
     Updated = kz_json:merge(CD, Data),
     knm_phone_number:set_carrier_data(PN, Updated).
 %{{host}}/account/{{account_id}}/location/
--spec url_location() -> nonempty_string().
-url_location() ->
+-spec url_location(list()) -> nonempty_string().
+url_location(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/location", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID])
+        io_lib:format("~s/account/~s/location", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
     ).
 
 %{{host}}/account/{{account_id}}/origination/did/features/create
--spec url_feature_order() -> nonempty_string().
-url_feature_order() ->
+-spec url_feature_order(list()) -> nonempty_string().
+url_feature_order(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/did/features/create", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID])
+        io_lib:format("~s/account/~s/origination/did/features/create", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
     ).
 
 %{{host}}/account/{{account_id}}/origination/did/features/complete/495533
--spec url_complete_order(nonempty_string()) -> nonempty_string().
-url_complete_order(OrderId) ->
+-spec url_complete_order(nonempty_string(), list()) -> nonempty_string().
+url_complete_order(OrderId, Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/did/features/complete/~b", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID, OrderId])
+        io_lib:format("~s/account/~s/origination/did/features/complete/~b", [?THQ_BASE_URL, ?ACCOUNT_ID(Options), OrderId])
     ).
+
+options(Number) ->
+    {'ok', AccountId, ResellerId} = knm_thinq_util:get_account_and_reseller_id(Number),
+    [{account_id, AccountId}
+     ,{reseller_id, ResellerId}
+     ].

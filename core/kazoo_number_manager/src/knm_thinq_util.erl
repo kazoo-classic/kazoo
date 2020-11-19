@@ -10,6 +10,8 @@
         ,api_post/2, api_post/3]).
 -export([to_thinq/1, from_thinq/1]).
 
+-export([get_account_and_reseller_id/1]).
+
 -include("knm.hrl").
 -include("knm_thinq.hrl").
 
@@ -160,3 +162,16 @@ to_thinq(Number) -> binary_to_integer(Number).
 -spec from_thinq(kz_term:ne_binary()) -> kz_term:ne_binary().
 from_thinq(<<"+", _/binary>> = Number) -> Number;
 from_thinq(Number) -> <<"+1", Number/binary>>.
+
+-spec get_account_and_reseller_id(knm_number:knm_number()) -> {'ok', kz_term:ne_binary(), kz_term:api_ne_binary()} |
+          {'error', kz_term:ne_binary()}.
+get_account_and_reseller_id(Number) ->
+    case knm_phone_number:assigned_to(knm_number:phone_number(Number)) of
+        'undefined' ->
+            {'error', <<"number_unassigned">>};
+        AccountId ->
+            get_reseller_id(AccountId)
+    end.
+
+get_reseller_id(AccountId) ->
+    {'ok', AccountId, kz_services_reseller:get_id(AccountId)}.

@@ -13,6 +13,11 @@
 -include("knm.hrl").
 -include("knm_thinq.hrl").
 
+
+-define(ACCOUNT_ID(Options)
+        ,?THQ_ACCOUNT_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
+
 %%------------------------------------------------------------------------------
 %% @doc This function is called each time a number is saved, and will
 %% produce notifications if the cnam object changes
@@ -177,8 +182,9 @@ publish_cnam_update(Number, 'false') ->
 create_outbound_cnam(Number, CNAM) ->
     AccountCallerId = kz_json:from_list([{<<"caller_id_type">>, <<"business">>}
                                          ,{<<"name">>, CNAM}]),
-    case knm_thinq_util:api_post(url_outbound_cnam(), 
-                                 kz_json:set_value(<<"AccountCallerId">>,AccountCallerId, kz_json:new())) of
+    case knm_thinq_util:api_post(url_outbound_cnam(options(Number))
+                                 ,kz_json:set_value(<<"AccountCallerId">>,AccountCallerId, kz_json:new())
+                                 ,options(Number)) of
         {ok, Rep} ->
             CNamId = kz_json:get_ne_binary_value(<<"id">>, Rep),
             lager:debug("created CNAM ~s", [kz_json:encode(Rep)]),
@@ -204,11 +210,11 @@ assign_outbound_cnam(Number, CNamId) ->
                {fun(J, V) -> kz_json:set_value(<<"tns">>, V, J) end, Tns}
               ],
     JObj = kz_json:set_values(Setters, kz_json:new()),
-    case knm_thinq_util:api_post(url_feature_order(), JObj) of
+    case knm_thinq_util:api_post(url_feature_order(options(Number)), JObj, options(Number)) of
         {'ok', Results} -> 
             OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
             OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-            'ok' = complete_feature_order(OrderId, OrderStatus, Results, knm_number:phone_number(Number)),
+            'ok' = complete_feature_order(OrderId, OrderStatus, Results, Number),
             {'ok', set_cnam_id(Number, CNamId)};
         {'error', Reason} -> 
             Error = <<"Unable to assign CNAM: ", (kz_term:to_binary(Reason))/binary>>,
@@ -231,11 +237,11 @@ remove_outbound_cnam(Number) ->
                {fun(J, V) -> kz_json:set_value(<<"tns">>, V, J) end, Tns}
               ],
     JObj = kz_json:set_values(Setters, kz_json:new()),
-    case knm_thinq_util:api_post(url_feature_order(), JObj) of
+    case knm_thinq_util:api_post(url_feature_order(options(Number)), JObj, options(Number)) of
         {'ok', Results} -> 
             OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
             OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-            'ok' = complete_feature_order(OrderId, OrderStatus, Results, knm_number:phone_number(Number)),
+            'ok' = complete_feature_order(OrderId, OrderStatus, Results, Number),
             {'ok', set_cnam_id(Number, 'null')};
         {'error', Reason} -> 
             Error = <<"Unable to remove CNAM: ", (kz_term:to_binary(Reason))/binary>>,
@@ -258,11 +264,11 @@ set_cnam_lookup(Number, State) ->
                {fun(J, V) -> kz_json:set_value(<<"tns">>, V, J) end, Tns}
               ],
     JObj = kz_json:set_values(Setters, kz_json:new()),
-    case knm_thinq_util:api_post(url_feature_order(), JObj) of
+    case knm_thinq_util:api_post(url_feature_order(options(Number)), JObj, options(Number)) of
         {'ok', Results} -> 
             OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
             OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-            'ok' = complete_feature_order(OrderId, OrderStatus, Results, knm_number:phone_number(Number)),
+            'ok' = complete_feature_order(OrderId, OrderStatus, Results, Number),
             {'ok', Number};
         {'error', Reason} -> 
             Error = <<"Unable to assign CNAM: ", (kz_term:to_binary(Reason))/binary>>,
@@ -286,15 +292,17 @@ cnam_feature(State, Number) ->
                       ]).
 
 -spec complete_feature_order(kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number()) -> knm_number:knm_number().
-complete_feature_order(OrderId, <<"created">>, _Response, PhoneNumber) ->
-    case knm_thinq_util:api_post(url_complete_order(OrderId), kz_json:new()) of
+complete_feature_order(OrderId, <<"created">>, _Response, Number) ->
+    PhoneNumber = knm_number:phone_number(Number),
+    case knm_thinq_util:api_post(url_complete_order(OrderId, options(Number)), kz_json:new(), options(Number)) of
         {'ok', _OrderData} -> 'ok';
         {'error', Reason} -> 
             Error = <<"Unable to complete order: ", (kz_term:to_binary(Reason))/binary>>,
             Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
             knm_errors:invalid(Num, Error)
     end;
-complete_feature_order(_OrderId, _, _Response, PhoneNumber) ->
+complete_feature_order(_OrderId, _, _Response, Number) ->
+    PhoneNumber = knm_number:phone_number(Number),
     Reason = <<"FAILED">>,
     Error = <<"Unable to assign CNAM: ", (kz_term:to_binary(Reason))/binary>>,
     Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
@@ -328,22 +336,29 @@ location_id(Number) ->
     kz_json:get_value(?ADDRESS_ID, CD, 'null').
 
 %{{host}}/account/{{account_id}}/caller_id/
--spec url_outbound_cnam() -> nonempty_string().
-url_outbound_cnam() ->
+-spec url_outbound_cnam(list()) -> nonempty_string().
+url_outbound_cnam(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/caller_id", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID])
+        io_lib:format("~s/account/~s/caller_id", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
     ).
 
 %{{host}}/account/{{account_id}}/origination/did/features/create
--spec url_feature_order() -> nonempty_string().
-url_feature_order() ->
+-spec url_feature_order(list()) -> nonempty_string().
+url_feature_order(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/did/features/create", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID])
+        io_lib:format("~s/account/~s/origination/did/features/create", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
     ).
 
 %{{host}}/account/{{account_id}}/origination/did/features/complete/495533
--spec url_complete_order(nonempty_string()) -> nonempty_string().
-url_complete_order(OrderId) ->
+-spec url_complete_order(nonempty_string(), list()) -> nonempty_string().
+url_complete_order(OrderId, Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/did/features/complete/~b", [?THQ_BASE_URL, ?THQ_ACCOUNT_ID, OrderId])
+        io_lib:format("~s/account/~s/origination/did/features/complete/~b", [?THQ_BASE_URL, ?ACCOUNT_ID(Options), OrderId])
     ).
+
+
+options(Number) ->
+    {'ok', AccountId, ResellerId} = knm_thinq_util:get_account_and_reseller_id(Number),
+    [{account_id, AccountId}
+     ,{reseller_id, ResellerId}
+     ].
