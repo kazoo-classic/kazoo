@@ -6,7 +6,7 @@
 -define(DEBUG_APPEND(Format, Args), ?debugFmt(Format, Args)).
 -else.
 -define(THQ_DEBUG, kapps_config:get_is_true(?KNM_THQ_CONFIG_CAT, <<"debug">>, 'false')).
--define(THQ_DEBUG_FILE, "/tmp/thinq.xml").
+-define(THQ_DEBUG_FILE, "/tmp/thinq.log").
 -define(DEBUG_WRITE(Format, Args),
         _ = ?THQ_DEBUG
         andalso file:write_file(?THQ_DEBUG_FILE, io_lib:format(Format, Args))

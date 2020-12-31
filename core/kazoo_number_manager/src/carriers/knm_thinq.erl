@@ -33,6 +33,7 @@
 -define(SITE_ID(Options)
         ,?THQ_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
         ).
+    
 -type search_ret() :: {'ok', knm_number:knm_numbers()} | {'error', any()}.
 
 %%% API

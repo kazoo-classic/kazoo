@@ -10,8 +10,8 @@
 -export([info/0]).
 -export([is_local/0]).
 -export([find_numbers/3]).
--export([acquire_number/1]).
--export([disconnect_number/1]).
+-export([acquire_number/1, acquire_number/2]).
+-export([disconnect_number/1, disconnect_number/2]).
 -export([is_number_billable/1]).
 -export([should_lookup_cnam/0]).
 -export([check_numbers/1]).
@@ -52,13 +52,60 @@
 -define(IS_SANDBOX_PROVISIONING_TRUE
        ,kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')
        ).
+
 -define(IS_PROVISIONING_ENABLED
        ,kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"enable_provisioning">>, 'true')
        ).
 
--define(VI_LOGIN, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, <<>>)).
--define(VI_PASSWORD, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"password">>, <<>>)).
--define(VI_ENDPOINT_GROUP, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, <<>>)).
+% -define(VI_LOGIN, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, <<>>)).
+-define(LOGIN(Props)
+        , ?VI_LOGIN(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
+        ).
+-define(DEFAULT_VI_LOGIN, <<>>).
+
+-define(VI_LOGIN(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"login">>, ?VI_LOGIN(ResellerId))
+       ).
+-define(VI_LOGIN(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"login">>, ?VI_LOGIN)
+       ).
+-define(VI_LOGIN
+       ,kapps_config:get_binary(?KNM_VI_CONFIG_CAT, <<"login">>, ?DEFAULT_VI_LOGIN)
+       ).
+
+
+
+%% -define(VI_PASSWORD, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"password">>, <<>>)).
+-define(PASSWORD(Props)
+        , ?VI_PASSWORD(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
+        ).
+-define(DEFAULT_VI_PASSWORD, <<>>).
+
+-define(VI_PASSWORD(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"password">>, ?VI_PASSWORD(ResellerId))
+       ).
+-define(VI_PASSWORD(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"password">>, ?VI_PASSWORD)
+       ).
+-define(VI_PASSWORD
+       ,kapps_config:get_binary(?KNM_VI_CONFIG_CAT, <<"password">>, ?DEFAULT_VI_PASSWORD)
+       ).
+
+%%-define(VI_ENDPOINT_GROUP, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, <<>>)).
+-define(ENDPOINT_GROUP(Props)
+        , ?VI_ENDPOINT_GROUP(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
+        ).
+-define(DEFAULT_VI_ENDPOINT_GROUP, <<>>).
+
+-define(VI_ENDPOINT_GROUP(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, ?VI_ENDPOINT_GROUP(ResellerId))
+       ).
+-define(VI_ENDPOINT_GROUP(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, ?VI_ENDPOINT_GROUP)
+       ).
+-define(VI_ENDPOINT_GROUP
+       ,kapps_config:get_binary(?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, ?DEFAULT_VI_ENDPOINT_GROUP)
+       ).
 
 -define(URL_IN_USE
        ,case ?IS_SANDBOX_PROVISIONING_TRUE of
@@ -117,11 +164,11 @@ find_numbers(<<"+", Rest/binary>>, Quantity, Options) ->
 find_numbers(<<"1", Rest/binary>>, Quantity, Options) ->
     find_numbers(Rest, Quantity, Options);
 find_numbers(<<NPA:3/binary>>, Quantity, Options) ->
-    Resp = soap("getDIDs", [{"npa", NPA}]),
+    Resp = soap("getDIDs", [{"npa", NPA}], Options),
     MaybeJson = to_json('find_numbers', Quantity, Resp),
     to_numbers(MaybeJson, knm_search:query_id(Options));
 find_numbers(<<NXX:6/binary,_/binary>>, Quantity, Options) ->
-    Resp = soap("getDIDs", [{"nxx", NXX}]),
+    Resp = soap("getDIDs", [{"nxx", NXX}], Options),
     MaybeJson = to_json('find_numbers', Quantity, Resp),
     to_numbers(MaybeJson, knm_search:query_id(Options)).
 
@@ -131,6 +178,10 @@ find_numbers(<<NXX:6/binary,_/binary>>, Quantity, Options) ->
 %%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
 acquire_number(Number) ->
+    acquire_number(Number, []).
+
+-spec acquire_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
+acquire_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
     case ?IS_PROVISIONING_ENABLED of
         'false' when Debug ->
@@ -142,7 +193,7 @@ acquire_number(Number) ->
             N = 'remove +1'(
                   knm_phone_number:number(knm_number:phone_number(Number))
                  ),
-            Resp = soap("assignDID", [N]),
+            Resp = soap("assignDID", [N], Options),
             Ret = to_json('acquire_number', [N], Resp),
             maybe_return(Ret, Number)
     end.
@@ -151,9 +202,12 @@ acquire_number(Number) ->
 %% @doc Release a number from the routing table
 %% @end
 %%------------------------------------------------------------------------------
--spec disconnect_number(knm_number:knm_number()) ->
-                               knm_number:knm_number().
+-spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) ->
+    disconnect_number(Number, []).
+    
+-spec disconnect_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
+disconnect_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
     case ?IS_PROVISIONING_ENABLED of
         'false' when Debug ->
@@ -165,7 +219,7 @@ disconnect_number(Number) ->
             N = 'remove +1'(
                   knm_phone_number:number(knm_number:phone_number(Number))
                  ),
-            Resp = soap("releaseDID", [N]),
+            Resp = soap("releaseDID", [N], Options),
             Ret = to_json('disconnect_number', [N], Resp),
             maybe_return(Ret, Number)
     end.
@@ -263,14 +317,14 @@ to_json('disconnect_number', _Numbers, {'ok', Xml}) ->
 to_json(_Target, _, {'error',_R}=Error) ->
     Error.
 
--spec soap(nonempty_string(), any()) -> soap_response().
+-spec soap(nonempty_string(), any(), knm_search:options()) -> soap_response().
 -ifndef(TEST).
-soap(Action, Props) ->
-    Body = soap_envelope(Action, Props),
+soap(Action, Props, Options) ->
+    Body = soap_envelope(Action, Props, Options),
     soap_request(Action, Body).
 -else.
-soap(Action, Props) ->
-    _Body = soap_envelope(Action, Props),
+soap(Action, Props, Options) ->
+    _Body = soap_envelope(Action, Props, Options),
     Resp =
         case Action of
             "queryDID" ->
@@ -288,8 +342,8 @@ soap(Action, Props) ->
     handle_response({'ok', 200, [], Resp}).
 -endif.
 
--spec soap_envelope(nonempty_string(), any()) -> iolist().
-soap_envelope(Action, Props) ->
+-spec soap_envelope(nonempty_string(), any(), knm_search:options()) -> iolist().
+soap_envelope(Action, Props, Options) ->
     ["<?xml version='1.0' encoding='UTF-8'?>"
      "<env:Envelope xmlns:xsd='http://www.w3.org/2001/XMLSchema'"
      " xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'"
@@ -297,19 +351,19 @@ soap_envelope(Action, Props) ->
      " xmlns:env='http://schemas.xmlsoap.org/soap/envelope/'>"
      "<env:Body>"
      "<tns:", Action, ">",
-     body(Action, Props),
-     "<tns:login>", ?VI_LOGIN, "</tns:login>"
-     "<tns:secret>", ?VI_PASSWORD, "</tns:secret>"
+     body(Action, Props, Options),
+     "<tns:login>", ?LOGIN(Options), "</tns:login>"
+     "<tns:secret>", ?PASSWORD(Options), "</tns:secret>"
      "</tns:", Action, ">"
      "</env:Body>"
      "</env:Envelope>"].
 
--spec body(nonempty_string(), any()) -> iolist().
+-spec body(nonempty_string(), any(), list()) -> iolist().
 
-body("queryDID", DID) ->
+body("queryDID", DID, _Options) ->
     ["<tns:did>", DID, "</tns:did>"];
 
-body("getDIDs", Props) ->
+body("getDIDs", Props, _Options) ->
     PossibleKeys = ["cnam"
                    ,"lata"
                    ,"npa"
@@ -328,17 +382,17 @@ body("getDIDs", Props) ->
      || Key <- PossibleKeys
     ];
 
-body("assignDID", Numbers=[_|_]) ->
+body("assignDID", Numbers=[_|_], Options) ->
     ["<tns:didParams>",
      [ ["<tns:DIDParam>"
         "<tns:tn>", Number, "</tns:tn>"
-        "<tns:epg>", ?VI_ENDPOINT_GROUP, "</tns:epg>"
+        "<tns:epg>", ?ENDPOINT_GROUP(Options), "</tns:epg>"
         "</tns:DIDParam>"]
        || Number <- Numbers
      ],
      "</tns:didParams>"];
 
-body("releaseDID", Numbers=[_|_]) ->
+body("releaseDID", Numbers=[_|_], _Options) ->
     ["<tns:didParams>",
      [ ["<tns:DIDParam>"
         "<tns:tn>", Number, "</tns:tn>"

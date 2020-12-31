@@ -15,8 +15,43 @@
 -define(MOD_CONFIG_CAT, <<(?KNM_CONFIG_CAT)/binary, ".dash_e911">>).
 
 -define(XML_PROLOG, "<?xml version=\"1.0\"?>").
--define(AUTH_USERNAME, kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_username">>, <<>>)).
--define(AUTH_PASSWORD, kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_password">>, <<>>)).
+
+%% -define(AUTH_USERNAME(Number), kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_username">>, <<>>)).
+-define(AUTH_USERNAME(Number)
+        , ?DASH_AUTH_USERNAME(get_account_id(Number), get_reseller_id(Number))
+        ).
+
+-define(DEFAULT_DASH_AUTH_USERNAME, <<>>).
+
+-define(DASH_AUTH_USERNAME(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?MOD_CONFIG_CAT, <<"auth_username">>, ?DASH_AUTH_USERNAME(ResellerId))
+       ).
+-define(DASH_AUTH_USERNAME(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?MOD_CONFIG_CAT, <<"auth_username">>, ?DASH_AUTH_USERNAME)
+       ).
+-define(DASH_AUTH_USERNAME
+       ,kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_username">>, ?DEFAULT_DASH_AUTH_USERNAME)
+       ).
+
+%% -define(AUTH_PASSWORD, kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_password">>, <<>>)).
+-define(AUTH_PASSWORD(Number)
+        ,?DASH_AUTH_PASSWORD(get_account_id(Number), get_reseller_id(Number))
+        ).
+
+-define(DEFAULT_DASH_AUTH_PASSWORD, <<>>).
+-define(DASH_AUTH_PASSWORD(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?MOD_CONFIG_CAT, <<"auth_password">>, ?DASH_AUTH_PASSWORD(ResellerId))
+       ).
+-define(DASH_AUTH_PASSWORD(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?MOD_CONFIG_CAT, <<"auth_password">>, ?DASH_AUTH_PASSWORD)
+       ).
+-define(DASH_AUTH_PASSWORD
+       ,kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_password">>, ?DEFAULT_DASH_AUTH_PASSWORD)
+       ).
+
+
+
+%% Following from system_config
 -define(EMERG_URL
        ,kapps_config:get_string(?MOD_CONFIG_CAT
                                ,<<"emergency_provisioning_url">>
@@ -112,7 +147,7 @@ maybe_update_e911(N) ->
 -spec maybe_update_e911(knm_number:knm_number(), kz_json:object()) -> kz_json:object().
 maybe_update_e911(Number, Address) ->
     Location = json_address_to_xml_location(Address),
-    case is_valid_location(Location) of
+    case is_valid_location(Location, Number) of
         {'error', E} ->
             lager:error("error while checking location ~p", [E]),
             knm_errors:unspecified(E, Number);
@@ -153,25 +188,24 @@ update_e911(Number, Address) ->
 -spec update_e911(knm_number:knm_number(), kz_json:object(), boolean()) -> kz_json:object().
 update_e911(_Number, Address, 'true') -> Address;
 update_e911(Number, Address, 'false') ->
-    Num = knm_phone_number:number(knm_number:phone_number(Number)),
     Location = json_address_to_xml_location(Address),
     E911Name = kz_json:get_ne_binary_value(?E911_NAME, Address),
     CallerName = knm_providers:e911_caller_name(Number, E911Name),
-    case add_location(Num, Location, CallerName) of
+    case add_location(Number, Location, CallerName) of
         {'provisioned', E911} ->
             lager:debug("provisioned address"),
             E911;
         {'geocoded', E911} ->
-            provision_geocoded(E911);
+            provision_geocoded(E911, Number);
         {_E, Reason} ->
             lager:debug("~s provisioning address: ~p", [_E, Reason]),
             knm_errors:unspecified(Reason, Number)
     end.
 
--spec provision_geocoded(kz_json:object()) -> kz_json:object().
-provision_geocoded(E911) ->
+-spec provision_geocoded(kz_json:object(), knm_number:knm_number()) -> kz_json:object().
+provision_geocoded(E911, Number) ->
     lager:debug("added location, attempting to provision new location"),
-    case provision_location(kz_json:get_value(<<"location_id">>, E911)) of
+    case provision_location(kz_json:get_value(<<"location_id">>, E911), Number) of
         'undefined'=Status ->
             lager:debug("provisioning attempt moved location to status: ~s", [Status]),
             E911;
@@ -188,9 +222,9 @@ provision_geocoded(E911) ->
                              {'provisioned', kz_json:object() | kz_json:objects()} |
                              {'invalid', binary()} |
                              {'error', binary()}.
--spec is_valid_location([xml_location()]) -> location_response().
-is_valid_location(Location) ->
-    case emergency_provisioning_request('validateLocation', Location) of
+-spec is_valid_location([xml_location()], knm_number:knm_number()) -> location_response().
+is_valid_location(Location, Number) ->
+    case emergency_provisioning_request('validateLocation', Location, Number) of
         {'ok', Response} -> parse_response(Response);
         {'error', Reason} -> {'error', kz_term:to_binary(Reason)}
     end.
@@ -217,18 +251,19 @@ parse_response(Else, _) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec add_location(kz_term:ne_binary(), [xml_location()], kz_term:ne_binary()) ->
-                          {'geocoded', kz_json:object()} |
-                          {'provisioned', kz_json:object()} |
-                          {'error', binary()}.
+-spec add_location(knm_number:knm_number(), [xml_location()], kz_term:ne_binary()) ->
+          {'geocoded', kz_json:object()} |
+          {'provisioned', kz_json:object()} |
+          {'error', binary()}.
 add_location(Number, Location, CallerName) ->
-    Props = [{'uri', [{'uri', [kz_term:to_list(<<"tel:", (knm_converters:to_1npan(Number))/binary>>)]}
+    Num = knm_phone_number:number(knm_number:phone_number(Number)),
+    Props = [{'uri', [{'uri', [kz_term:to_list(<<"tel:", (knm_converters:to_1npan(Num))/binary>>)]}
                      ,{'callername', [kz_term:to_list(CallerName)]}
                      ]
              }
              | Location
             ],
-    case emergency_provisioning_request('addLocation', Props) of
+    case emergency_provisioning_request('addLocation', Props, Number) of
         {'ok', Response} -> parse_response(Response);
         {'error', Reason} -> {'error', kz_term:to_binary(Reason)}
     end.
@@ -237,10 +272,10 @@ add_location(Number, Location, CallerName) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec provision_location(kz_term:ne_binary()) -> kz_term:api_binary().
-provision_location(LocationId) ->
+-spec provision_location(kz_term:ne_binary(), knm_number:knm_number()) -> kz_term:api_binary().
+provision_location(LocationId, Number) ->
     Props = [{'locationid', [kz_term:to_list(LocationId)]}],
-    case emergency_provisioning_request('provisionLocation', Props) of
+    case emergency_provisioning_request('provisionLocation', Props, Number) of
         {'error', _} -> 'undefined';
         {'ok', Response} ->
             kz_xml:get_value("//LocationStatus/code/text()", Response)
@@ -255,7 +290,7 @@ remove_number(Number) ->
     Num = knm_phone_number:number(knm_number:phone_number(Number)),
     lager:debug("removing from upstream '~s'", [Num]),
     Props = [{'uri', [kz_term:to_list(<<"tel:", (knm_converters:to_1npan(Num))/binary>>)]}],
-    case emergency_provisioning_request('removeURI', Props) of
+    case emergency_provisioning_request('removeURI', Props, Number) of
         {'error', 'server_error'} ->
             lager:debug("removed number from upstream"),
             <<"REMOVED">>;
@@ -290,10 +325,10 @@ remove_number(Number) ->
                         {'locationid', list()}.
 -type request_props() :: [request_prop()].
 
--spec emergency_provisioning_request(atom(), request_props()) ->
-                                            {'ok', kz_types:xml_el()} |
-                                            {'error', emergency_provisioning_error()}.
-emergency_provisioning_request(Verb, Props) ->
+-spec emergency_provisioning_request(atom(), request_props(), knm_number:knm_number()) ->
+          {'ok', kz_types:xml_el()} |
+          {'error', emergency_provisioning_error()}.
+emergency_provisioning_request(Verb, Props, Number) ->
     URL = list_to_binary([?EMERG_URL, "/", kz_term:to_lower_binary(Verb)]),
     Body = unicode:characters_to_binary(
              xmerl:export_simple([{Verb, Props}]
@@ -308,7 +343,7 @@ emergency_provisioning_request(Verb, Props) ->
     HTTPOptions = [{'ssl', [{'verify', 'verify_none'}]}
                   ,{'timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
-                  ,{'basic_auth', {?AUTH_USERNAME, ?AUTH_PASSWORD}}
+                  ,{'basic_auth', {?AUTH_USERNAME(Number), ?AUTH_PASSWORD(Number)}}
                   ],
     lager:debug("making ~s request to upstream ~s", [Verb, URL]),
     ?DEBUG("Request:~n~s ~s~n~s~n", ['post', URL, Body]),
@@ -419,3 +454,22 @@ legacy_data_xml_to_json(Xml) ->
       ,{<<"streetname">>, kz_xml:get_value("streetname/text()", Xml)}
       ,{<<"suite">>, kz_xml:get_value("suite/text()", Xml)}
       ]).
+
+
+-spec get_account_id(knm_number:knm_number()) -> kz_term:ne_binary() | {'error', kz_term:ne_binary()}.
+get_account_id(Number) ->
+    case knm_phone_number:assigned_to(knm_number:phone_number(Number)) of
+        'undefined' ->
+            {'error', <<"number_unassigned">>};
+        AccountId ->
+            AccountId
+    end.
+
+-spec get_reseller_id(knm_number:knm_number()) -> kz_term:ne_binary() | {'error', kz_term:ne_binary()}.
+get_reseller_id(Number) ->
+    case knm_phone_number:assigned_to(knm_number:phone_number(Number)) of
+        'undefined' ->
+            {'error', <<"number_unassigned">>};
+        AccountId ->
+            kz_services_reseller:get_id(AccountId)
+    end.
