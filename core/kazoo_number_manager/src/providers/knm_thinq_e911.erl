@@ -232,6 +232,7 @@ e911_address(Number, JObj) ->
     CallerName = knm_providers:e911_caller_name(Number, E911Name),
     kz_json:from_list(
       props:filter_empty(
+%%        [{<<"alias">>, <<CallerName/binary, "-", (integer_to_binary(kz_time:current_tstamp()))/binary>>}
         [{<<"alias">>, CallerName}
         ,{<<"location_type">>, <<"business">>}
         ,{<<"address">>, cleanse(kz_json:get_ne_binary_value(?E911_STREET1, JObj))}
