@@ -98,6 +98,8 @@
 %%------------------------------------------------------------------------------
 -spec normalize(kz_term:ne_binary()) -> kz_term:ne_binary();
                (kz_term:ne_binaries()) -> kz_term:ne_binaries().
+normalize('undefined') ->
+    'undefined';
 normalize(Num=?NE_BINARY) ->
     (?CONVERTER_MOD):normalize(Num);
 normalize(Nums)
