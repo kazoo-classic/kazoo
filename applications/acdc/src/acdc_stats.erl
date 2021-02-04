@@ -464,7 +464,7 @@ handle_call_query(JObj, _Prop) ->
                 ,{<<"Msg-ID">>, MsgId}
                 ],
             kapi_acdc_stats:publish_current_calls_resp(RespQ, Resp);
-        {'error', Errors} -> acdc_stats_util:publish_call_query_errors(RespQ, MsgId, Errors)
+        {'error', Errors} -> acdc_stats_util:publish_summary_data(RespQ, MsgId, {'error', Errors})
     end.
 
 -spec handle_call_summary_req(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
@@ -945,7 +945,7 @@ query_call_summary(Match, _Limit) ->
                                              QueueJObj = kz_json:set_values([{<<"total_calls">>, TotalCalls}
                                                                             ,{<<"abandoned_calls">>, AbandonedCalls}
                                                                             ,{<<"average_wait_time">>, TotalWaitTime div TotalCalls}
-                                                                            ,{<<"average_talk_time">>, TotalTalkTime div (TotalCalls - AbandonedCalls)}
+                                                                            ,{<<"average_talk_time">>, TotalTalkTime div case TT = (TotalCalls - AbandonedCalls) of 0 -> 1; _ -> TT end}
                                                                             ,{<<"max_entered_position">>, MaxEnteredPosition}
                                                                             ]
                                                                            ,kz_json:new()),
