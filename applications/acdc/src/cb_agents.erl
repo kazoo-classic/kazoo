@@ -550,12 +550,18 @@ add_answered(Stat, Acc) ->
 
     AnsweredK = [AgentId, <<"answered_calls">>],
     QAnsweredK = [AgentId, <<"queues">>, QueueId, <<"answered_calls">>],
+    TalkTimeK = [AgentId, <<"talk_time">>],
+    QTalkTimeK = [AgentId, <<"queues">>, QueueId, <<"talk_time">>],
 
     Answered = kz_json:get_integer_value(AnsweredK, Acc, 0),
     QAnswered = kz_json:get_integer_value(QAnsweredK, Acc, 0),
+    TalkTime = kz_json:get_integer_value(TalkTimeK, Acc, 0),
+    QTalkTime = kz_json:get_integer_value(QTalkTimeK, Acc, 0),
 
     [{AnsweredK, Answered + 1}
     ,{QAnsweredK, QAnswered + 1}
+    ,{TalkTimeK, TalkTime + kz_json:get_value(<<"talk_time">>, Stat, 0)}
+    ,{QTalkTimeK, QTalkTime + kz_json:get_value(<<"talk_time">>, Stat, 0)}
     ].
 
 -spec maybe_add_misses(kz_json:object(), kz_json:object(), kz_term:ne_binary()) ->
