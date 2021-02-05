@@ -28,11 +28,11 @@
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
 request(Number, JObj) ->
     {'ok', AccountId, _ } = knm_number:lookup_account(Number),
-    Url = kz_term:to_list(get_http_url(JObj)),
-    case kz_http:req(get_http_method()
+    Url = kz_term:to_list(get_http_url(JObj, AccountId)),
+    case kz_http:req(get_http_method(AccountId)
                     ,Url
                     ,get_http_headers(AccountId)
-                    ,get_http_body(JObj)
+                    ,get_http_body(JObj, AccountId)
                     ,get_http_options(Url)
                     )
     of
@@ -53,9 +53,9 @@ request(Number, JObj) ->
             'undefined'
     end.
 
--spec get_http_url(kz_json:object()) -> kz_term:ne_binary().
-get_http_url(JObj) ->
-    Template = kapps_config:get_binary(?CNAM_CONFIG_CAT, <<"http_url">>, ?DEFAULT_URL),
+-spec get_http_url(kz_json:object(), kz_term:ne_binary()) -> kz_term:ne_binary().
+get_http_url(JObj, AccountId) ->
+    Template = get_config_param(AccountId, <<"http_url">>,  ?DEFAULT_URL),
     {'ok', SrcUrl} = stepswitch_cnam:render(JObj, Template),
     Url = iolist_to_binary(SrcUrl),
 
@@ -70,9 +70,9 @@ get_http_url(JObj) ->
             end
     end.
 
--spec get_http_body(kz_json:object()) -> list().
-get_http_body(JObj) ->
-    Template = kapps_config:get_binary(?CNAM_CONFIG_CAT, <<"http_body">>, ?DEFAULT_CONTENT),
+-spec get_http_body(kz_json:object(), kz_term:ne_binary()) -> list().
+get_http_body(JObj, AccountId) ->
+    Template = get_config_param(AccountId, <<"http_body">>,  ?DEFAULT_CONTENT),
     case kz_term:is_empty(Template) of
         'true' -> [];
         'false' ->
@@ -122,8 +122,8 @@ get_config_param(AccountId, Param, Default) ->
     
     Deny = kzd_accounts:deny_system_cnam_credentials(ResellerId),
     case Value of
-        <<>> when Deny =:= 'true' -> <<>>;
-        <<>> -> kapps_config:get_string(?CNAM_CONFIG_CAT, Param, Default);
+        [] when Deny =:= 'true' -> Default;
+        [] -> kapps_config:get_string(?CNAM_CONFIG_CAT, Param, Default);
         Value -> Value
     end.
 
@@ -133,10 +133,10 @@ basic_auth(Username, Password) ->
     Encoded = base64:encode_to_string(Username ++ [$: | Password]),
     {"Authorization", lists:flatten(["Basic ", Encoded])}.
 
--spec get_http_method() -> 'get' | 'put' | 'post'.
-get_http_method() ->
-    case kapps_config:get_binary(?CNAM_CONFIG_CAT, <<"http_method">>, ?DEFAULT_METHOD) of
-        <<"post">> -> 'post';
-        <<"put">> -> 'put';
+-spec get_http_method(kz_term:ne_binary()) -> 'get' | 'put' | 'post'.
+get_http_method(AccountId) ->
+    case get_config_param(AccountId, <<"http_method">>, ?DEFAULT_METHOD) of
+        "post" -> 'post';
+        "put" -> 'put';
         _Else -> 'get'
     end.
