@@ -51,7 +51,7 @@
 -export([voicemail_notify_callback/1, voicemail_notify_callback/2, set_voicemail_notify_callback/2]).
 -export([zones/1, zones/2, set_zones/2]).
 -export([zones_home/1, zones_home/2, set_zones_home/2]).
-
+-export([deny_system_cnam_credentials/1, set_deny_system_cnam_credentials/2]).
 
 -export([type/0
         ,fetch/1, fetch/2
@@ -712,6 +712,27 @@ zones_home(Doc, Default) ->
 set_zones_home(Doc, ZonesHome) ->
     kz_json:set_value([<<"zones">>, <<"home">>], ZonesHome, Doc).
 
+-spec deny_system_cnam_credentials(kz_term:api_ne_binary() | doc()) -> kz_term:api_binary().
+deny_system_cnam_credentials(AccountId) when is_binary(AccountId) ->
+    case fetch(AccountId) of
+        {'error', _R} -> 'true';
+        {'ok', JObj}  -> deny_system_cnam_credentials(JObj, 'true')
+    end;
+deny_system_cnam_credentials(Doc) ->
+    deny_system_cnam_credentials(Doc, 'true').
+
+-spec deny_system_cnam_credentials(doc(), Default) -> binary() | Default.
+deny_system_cnam_credentials(Doc, Default) ->
+    kz_json:is_true(<<"deny_system_cnam_credentials">>, Doc, Default).
+
+-spec set_deny_system_cnam_credentials(kz_term:api_ne_binary() | doc(),  boolean()) -> doc().
+set_deny_system_cnam_credentials(AccountId, Value) when is_binary(AccountId) ->
+    case fetch(AccountId) of
+        {'error', _R} -> 'true';
+        {'ok', JObj}  -> set_deny_system_cnam_credentials(JObj, Value)
+    end;
+set_deny_system_cnam_credentials(Doc, Value) ->
+    kz_json:set_value([<<"deny_system_cnam_credentials">>], Value, Doc).
 
 -spec type() -> kz_term:ne_binary().
 type() -> <<"account">>.

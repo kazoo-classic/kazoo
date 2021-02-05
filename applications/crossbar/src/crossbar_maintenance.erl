@@ -31,6 +31,8 @@
 -export([move_account/2]).
 -export([descendants_count/0, descendants_count/1]).
 -export([migrate_ring_group_callflow/1]).
+-export([disable_system_cnam_credentials/1, enable_system_cnam_credentials/1]).
+
 
 -export([init_apps/2, init_app/2]).
 -export([init_apps/1, init_app/1]).
@@ -725,6 +727,30 @@ descendants_count() ->
 -spec descendants_count(kz_term:ne_binary()) -> 'ok'.
 descendants_count(AccountId) ->
     crossbar_util:descendants_count(AccountId).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec disable_system_cnam_credentials(input_term()) -> 'ok' | 'failed'.
+disable_system_cnam_credentials(AccountId) ->
+    Update = [{[<<"deny_system_cnam_credentials">>], 'true'}],
+    case kzd_accounts:update(AccountId, Update) of
+        {'ok', _} -> 'ok';
+        {'error', _} -> 'failed'
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec enable_system_cnam_credentials(input_term()) -> 'ok' | 'failed'.
+enable_system_cnam_credentials(AccountId) ->
+    Update = [{[<<"deny_system_cnam_credentials">>], 'false'}],
+    case kzd_accounts:update(AccountId, Update) of
+        {'ok', _} -> 'ok';
+        {'error', _} -> 'failed'
+    end.
 
 -spec migrate_ring_group_callflow(kz_term:ne_binary()) -> 'ok'.
 migrate_ring_group_callflow(Account) ->

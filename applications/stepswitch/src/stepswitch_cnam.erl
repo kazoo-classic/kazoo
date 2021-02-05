@@ -37,8 +37,19 @@
 
 -define(CNAM_EXPIRES,
         kapps_config:get_integer(?CNAM_CONFIG_CAT, <<"cnam_expires">>, ?DEFAULT_EXPIRES)).
--define(CNAM_PROVIDER_MODULE,
-        kz_term:to_atom(<<"stepswitch_cnam_", (kapps_config:get_binary(?CNAM_CONFIG_CAT, <<"provider">>, ?DEFAULT_PROVIDER))/binary>>, 'true')).
+
+-define(CNAM_PROVIDER_MODULE(AccountId, ResellerId)
+       ,kz_term:to_atom(<<"stepswitch_cnam_", (kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"provider">>, ?CNAM_PROVIDER_MODULE(ResellerId)))/binary>>, 'true')
+       ).
+    
+-define(CNAM_PROVIDER_MODULE(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"provider">>, ?CNAM_PROVIDER_MODULE)
+       ).
+
+-define(CNAM_PROVIDER_MODULE
+       ,kapps_config:get_binary(?CNAM_CONFIG_CAT, <<"provider">>, ?DEFAULT_PROVIDER)
+       ).
+
 
 %%%=============================================================================
 %%% API
@@ -204,5 +215,6 @@ make_request(Number, JObj) ->
 
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
 request(Number, JObj) ->
-    Mod = ?CNAM_PROVIDER_MODULE,
+    {'ok', AccountId, _ } = knm_number:lookup_account(Number),
+    Mod = ?CNAM_PROVIDER_MODULE(AccountId, kzd_accounts:reseller_id(AccountId)),
     Mod:request(Number, JObj).

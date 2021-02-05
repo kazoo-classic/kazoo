@@ -21,13 +21,17 @@
 -define(HTTP_CONTENT_TYPE
        ,kapps_config:get_string(?CNAM_CONFIG_CAT, <<"http_content_type_header">>, ?DEFAULT_CONTENT_TYPE_HDR)
        ).
+-define(GET_CONFIG_STRING(AccountId, Param, Default)
+        ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, Param, Default))
+       ).
 
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
 request(Number, JObj) ->
+    {'ok', AccountId, _ } = knm_number:lookup_account(Number),
     Url = kz_term:to_list(get_http_url(JObj)),
     case kz_http:req(get_http_method()
                     ,Url
-                    ,get_http_headers()
+                    ,get_http_headers(AccountId)
                     ,get_http_body(JObj)
                     ,get_http_options(Url)
                     )
@@ -76,13 +80,13 @@ get_http_body(JObj) ->
             lists:flatten(Body)
     end.
 
--spec get_http_headers() -> [{nonempty_string(), nonempty_string()}].
-get_http_headers() ->
+-spec get_http_headers(kz_term:ne_binary()) -> [{nonempty_string(), nonempty_string()}].
+get_http_headers(AccountId) ->
     Headers = [{"Accept", ?HTTP_ACCEPT_HEADER}
               ,{"User-Agent", ?HTTP_USER_AGENT}
               ,{"Content-Type", ?HTTP_CONTENT_TYPE}
               ],
-    maybe_enable_auth(Headers).
+    maybe_enable_auth(Headers, AccountId).
 
 -spec get_http_options(nonempty_string()) -> kz_term:proplist().
 get_http_options(Url) ->
@@ -96,16 +100,31 @@ maybe_enable_ssl("https://" ++ _, Props) ->
     [{'ssl', [{'verify', 'verify_none'}]}|Props];
 maybe_enable_ssl(_Url, Props) -> Props.
 
--spec maybe_enable_auth([{nonempty_string(), nonempty_string()}]) ->
+-spec maybe_enable_auth([{nonempty_string(), nonempty_string()}], kz_term:ne_binary()) ->
                                [{nonempty_string(), nonempty_string()}].
-maybe_enable_auth(Props) ->
-    Username = kapps_config:get_string(?CNAM_CONFIG_CAT, <<"http_basic_auth_username">>, <<>>),
-    Password = kapps_config:get_string(?CNAM_CONFIG_CAT, <<"http_basic_auth_password">>, <<>>),
+maybe_enable_auth(Props, AccountId) ->
+    Username = get_config_param(AccountId, <<"http_basic_auth_username">>, <<>>),
+    Password = get_config_param(AccountId, <<"http_basic_auth_password">>, <<>>),
     case kz_term:is_empty(Username)
         orelse kz_term:is_empty(Password)
     of
         'true' -> Props;
         'false' -> [basic_auth(Username, Password) | Props]
+    end.
+
+-spec get_config_param(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                            kz_term:ne_binary().
+get_config_param(AccountId, Param, Default) -> 
+    ResellerId = kzd_accounts:reseller_id(AccountId),
+    Value = ?GET_CONFIG_STRING(AccountId, 
+                               Param, 
+                               ?GET_CONFIG_STRING(ResellerId, Param, Default)),
+    
+    Deny = kzd_accounts:deny_system_cnam_credentials(ResellerId),
+    case Value of
+        <<>> when Deny =:= 'true' -> <<>>;
+        <<>> -> kapps_config:get_string(?CNAM_CONFIG_CAT, Param, Default);
+        Value -> Value
     end.
 
 -spec basic_auth(nonempty_string(), nonempty_string()) ->
