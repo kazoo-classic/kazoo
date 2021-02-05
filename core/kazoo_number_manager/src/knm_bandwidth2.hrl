@@ -52,18 +52,50 @@
        ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"order_name_prefix">>, "Kazoo")
        ).
 
+-define(DEFAULT_BW2_API_USERNAME, <<>>).
+-define(BW2_API_USERNAME(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"api_username">>, ?BW2_API_USERNAME(ResellerId))
+       ).
+-define(BW2_API_USERNAME(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"api_username">>, ?BW2_API_USERNAME)
+       ).
 -define(BW2_API_USERNAME
-       ,kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_username">>, <<>>)
+       ,kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_username">>, ?DEFAULT_BW2_API_USERNAME)
+       ).
+
+-define(DEFAULT_BW2_API_PASSWORD, <<>>).
+-define(BW2_API_PASSWORD(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"api_password">>, ?BW2_API_PASSWORD(ResellerId))
+       ).
+-define(BW2_API_PASSWORD(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"api_password">>, ?BW2_API_PASSWORD)
        ).
 -define(BW2_API_PASSWORD
-       ,kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_password">>, <<>>)
+       ,kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_password">>, ?DEFAULT_BW2_API_PASSWORD)
+       ).
+
+-define(DEFAULT_BW2_SIP_PEER, "").
+-define(BW2_SIP_PEER(AccountId, ResellerId)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"sip_peer">>, ?BW2_SIP_PEER(ResellerId)))
+       ).
+-define(BW2_SIP_PEER(AccountId)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"sip_peer">>, ?BW2_SIP_PEER))
        ).
 -define(BW2_SIP_PEER
-       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"sip_peer">>, "")
+       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"sip_peer">>, ?DEFAULT_BW2_SIP_PEER)
+       ).
+
+-define(DEFAULT_BW2_SITE_ID, "").
+-define(BW2_SITE_ID(AccountId, ResellerId)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"site_id">>, ?BW2_SITE_ID(ResellerId)))
+       ).
+-define(BW2_SITE_ID(AccountId)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_BW2_CONFIG_CAT, <<"site_id">>, ?BW2_SITE_ID))
        ).
 -define(BW2_SITE_ID
-       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"site_id">>, "")
+       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"site_id">>, ?DEFAULT_BW2_SITE_ID)
        ).
+
 
 -define(MAX_SEARCH_QUANTITY
        ,kapps_config:get_pos_integer(?KNM_BW2_CONFIG_CAT, <<"max_search_quantity">>, 500)

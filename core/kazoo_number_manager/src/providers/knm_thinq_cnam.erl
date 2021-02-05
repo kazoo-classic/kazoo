@@ -122,7 +122,7 @@ handle_inbound_cnam(Number) ->
                                                       ,?CNAM_INBOUND_LOOKUP
                                                       ]);
         'false' when Feature /= 'undefined' ->
-            set_cnam_lookup(Number, 'false'),
+            maybe_set_cnam_lookup(Number, 'false'),
             knm_providers:deactivate_features(Number, [?FEATURE_CNAM_INBOUND
                                                       ,?CNAM_INBOUND_LOOKUP
                                                       ]);
@@ -137,7 +137,7 @@ handle_inbound_cnam(Number) ->
             case kz_json:is_true(?CNAM_INBOUND_LOOKUP, Feature) of
                 'true' -> Number;
                 'false' ->
-                    set_cnam_lookup(Number, 'true'),
+                    maybe_set_cnam_lookup(Number, 'true'),
                     FeatureData = kz_json:from_list([{?CNAM_INBOUND_LOOKUP, true}]),
                     knm_providers:activate_feature(Number, {?FEATURE_CNAM_INBOUND, FeatureData})
             end
@@ -246,6 +246,15 @@ remove_outbound_cnam(Number) ->
         {'error', Reason} -> 
             Error = <<"Unable to remove CNAM: ", (kz_term:to_binary(Reason))/binary>>,
             knm_errors:invalid(Num, Error)
+    end.
+
+-spec maybe_set_cnam_lookup(knm_number:knm_number(), boolean()) ->
+          {'ok', knm_number:knm_number()} |
+          {'error', kz_term:ne_binary()}.
+maybe_set_cnam_lookup(Number, State) ->
+    case ?THQ_IS_UPSTREAM_INBOUND_CNAM_ENABLED of
+        'true' -> set_cnam_lookup(Number, State);
+        'false' -> {'ok', Number}
     end.
 
 -spec set_cnam_lookup(knm_number:knm_number(), boolean()) ->

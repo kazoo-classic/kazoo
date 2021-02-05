@@ -30,6 +30,20 @@
         ,is_local/1
         ]).
 
+-define(IS_US_TOLLFREE_PREFIX(Options)
+        ,?IS_US_TOLLFREE(props:get_value('prefix', Options)) orelse ?IS_US_TOLLFREE_WILDCARD(props:get_value('prefix', Options))
+        ).
+
+-define(CARRIER_MODULES(IsTollfree, AccountId, ResellerId)
+        ,(case IsTollfree of 
+            'false' -> ?CARRIER_MODULES(AccountId, ResellerId); 
+            'true' -> 
+                case ?TF_CARRIER_MODULES(AccountId, ResellerId) of
+                    [] -> ?CARRIER_MODULES(AccountId, ResellerId);
+                    Else -> Else
+                end
+          end)
+       ).
 
 -define(CARRIER_MODULES(AccountId, ResellerId)
        ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES(ResellerId))
@@ -44,7 +58,7 @@
          end)(AccountId)).
 -else.
 -define(CARRIER_MODULES(AccountId)
-       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES)
+       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, [])
        ).
 -endif.
 
@@ -57,6 +71,17 @@
        ).
 
 -define(DEFAULT_CARRIER_MODULES, [?DEFAULT_CARRIER_MODULE]).
+
+
+-define(TF_CARRIER_MODULES(AccountId)
+       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, ?DEFAULT_TF_CARRIER_MODULES)
+       ).
+
+-define(TF_CARRIER_MODULES
+       ,kapps_config:get_ne_binaries(?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, ?DEFAULT_TF_CARRIER_MODULES)
+       ).
+
+-define(DEFAULT_TF_CARRIER_MODULES, []).
 
 -ifdef(TEST).
 -type option() :: {'quantity', pos_integer()} |
@@ -140,8 +165,41 @@ get_available_carriers(Options) ->
             AccountId = account_id(Options),
             ResellerId = reseller_id(Options),
             First = [?CARRIER_RESERVED, ?CARRIER_RESERVED_RESELLER, ?CARRIER_LOCAL],
-            keep_only_reachable(First ++ (?CARRIER_MODULES(AccountId, ResellerId) -- First))
+            CMs = carrier_modules(?IS_US_TOLLFREE_PREFIX(Options), AccountId, ResellerId),
+            keep_only_reachable(First ++ CMs -- First)
     end.
+
+-spec carrier_modules(kz_term:boolean(), kz_term:binary() | 'undefined', kz_term:binary() | 'undefined') -> kz_term:binary().
+carrier_modules(IsTollFree, AccountId, ResellerId) when IsTollFree =:= 'false' ->
+    ?CARRIER_MODULES(AccountId, ResellerId);
+%system_config/number_manager
+carrier_modules(_, 'undefined', 'undefined') ->
+    case {?CARRIER_MODULES, ?TF_CARRIER_MODULES} of
+        {[], []} -> ?DEFAULT_CARRIER_MODULES;
+        {C, []} -> 
+            kapps_config:set(?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, C),
+            C;
+        {_, C} -> C
+    end;
+%Reseller
+carrier_modules(_, ResellerId, 'undefined') ->
+    case {?CARRIER_MODULES(ResellerId), ?TF_CARRIER_MODULES(ResellerId)} of
+        {[], []} -> carrier_modules('true', 'undefined', 'undefined');
+        {C, []} -> 
+            kapps_account_config:set(ResellerId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, C),
+            C;
+        {_, C} -> C
+    end;
+%Account
+carrier_modules(_, AccountId, ResellerId) ->
+    case {?CARRIER_MODULES(AccountId), ?TF_CARRIER_MODULES(AccountId)} of
+        {[], []} -> carrier_modules('true', ResellerId, 'undefined');
+        {C, []} -> 
+            kapps_account_config:set(AccountId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, C),
+            C;
+        {_, C} -> C
+    end.
+
 
 -spec default_carriers() -> kz_term:atoms().
 default_carriers() ->
@@ -279,8 +337,9 @@ disconnect(T0=#{todo := Ns, options := Options}) ->
         end,
     lists:foldl(F, T0, Ns).
 disconnect(Number, Options) ->
+    Crossbar = props:get_value('crossbar', Options),
     Module = knm_phone_number:module_name(knm_number:phone_number(Number)),
-    try maybe_apply_with_options(Module, 'disconnect_number', [Number], Options) of
+    try maybe_apply_with_options(Module, 'disconnect_number', [Number], Crossbar) of
         Result -> Result
     catch
         'error':_ ->

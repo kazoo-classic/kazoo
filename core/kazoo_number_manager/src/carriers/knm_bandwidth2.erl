@@ -19,6 +19,14 @@
 -export([should_lookup_cnam/0]).
 -export([check_numbers/1]).
 
+-define(SITE_ID(Options)
+        ,?BW2_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
+
+-define(SIP_PEER(Options)
+        ,?BW2_SIP_PEER(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
+
 %% Maintenance commands
 -export([sites/0, peers/1]).
 
@@ -133,12 +141,14 @@ acquire_number(Number) ->
 -spec acquire_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
 acquire_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
+    IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     case ?IS_PROVISIONING_ENABLED of
         'false' when Debug ->
             lager:debug("allowing sandbox provisioning"),
             Number;
         'false' ->
             knm_errors:unspecified('provisioning_disabled', Number);
+        'true' when IsDryRun -> Number;
         'true' ->
             PhoneNumber = knm_number:phone_number(Number),
             Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
@@ -147,15 +157,15 @@ acquire_number(Number, Options) ->
 
             Props = [{'Name', [ON]}
                     ,{'CustomerOrderId', [kz_term:to_list(AuthBy)]}
-                    ,{'SiteId', [?BW2_SITE_ID]}
-                    ,{'PeerId', [?BW2_SIP_PEER]}
+                    ,{'SiteId', [?SITE_ID(Options)]}
+                    ,{'PeerId', [?SIP_PEER(Options)]}
                     ,{'ExistingTelephoneNumberOrderType',
                       [{'TelephoneNumberList', [{'TelephoneNumber', [binary_to_list(Num)]}]}
                       ]}
                     ],
             Body = xmerl:export_simple([{'Order', Props}], 'xmerl_xml'),
 
-            case api_post(url(["orders"], Options), Body) of
+            case api_post(url(["orders"], Options), Body, Options) of
                 {'error', Reason} ->
                     Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
                     knm_errors:by_carrier(?MODULE, Error, Num);
@@ -171,7 +181,7 @@ acquire_number(Number, Options) ->
 check_order(OrderId, <<"RECEIVED">>, _Response, PhoneNumber, Number, Options) ->
     timer:sleep(?BW2_ORDER_POLL_INTERVAL),
     Url = ["orders/", kz_term:to_list(OrderId)],
-    case api_get(url(Url, Options)) of
+    case api_get(url(Url, Options), Options) of
         {'error', Reason} ->
             Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
             Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
@@ -202,7 +212,7 @@ check_order(_OrderId, OrderStatus, _Response, PhoneNumber, _Number, _Options) ->
 check_disconnect_order(OrderId, <<"RECEIVED">>, _Response, PhoneNumber, Number, Options) ->
     timer:sleep(?BW2_ORDER_POLL_INTERVAL),
     Url = ["disconnects/", kz_term:to_list(OrderId)],
-    case api_get(url(Url, Options)) of
+    case api_get(url(Url, Options), Options) of
         {'error', Reason} ->
             Error = <<"Unable to disconnect number: ", (kz_term:to_binary(Reason))/binary>>,
             Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
@@ -258,15 +268,20 @@ disconnect_number(Number, Options) ->
             PhoneNumber = knm_number:phone_number(Number),
             Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
             ON = lists:flatten([?BW2_ORDER_NAME_PREFIX, "-", integer_to_list(kz_time:now_s())]),
+            IsDryRun = knm_phone_number:dry_run(PhoneNumber),
 
             Props = [{'Name', [ON]}
+                    ,{'SiteId', [?SITE_ID(Options)]}
+                    ,{'PeerId', [?SIP_PEER(Options)]}
                     ,{'DisconnectTelephoneNumberOrderType',
                       [{'TelephoneNumberList', [{'TelephoneNumber', [binary_to_list(Num)]}]}
+
                       ]}
                     ],
             Body = xmerl:export_simple([{'DisconnectTelephoneNumberOrder', Props}], 'xmerl_xml'),
 
-            case api_post(url(["disconnects"], Options), Body) of
+            case not IsDryRun andalso api_post(url(["disconnects"], Options), Body, Options) of
+                'false' -> Number;
                 {'error', Reason} ->
                     Error = <<"Unable to disconnect number: ", (kz_term:to_binary(Reason))/binary>>,
                     knm_errors:by_carrier(?MODULE, Error, Num);
@@ -280,7 +295,7 @@ disconnect_number(Number, Options) ->
 
 -spec sites() -> 'ok'.
 sites() ->
-    {'ok', Xml} = api_get(url(["sites"], [])),
+    {'ok', Xml} = api_get(url(["sites"], []), []),
     io:format("listing all sites for account ~p~n", [?BW2_ACCOUNT_ID]),
     Sites = xmerl_xpath:string("Sites/Site", Xml),
     lists:foreach(fun process_site/1, Sites),
@@ -294,7 +309,7 @@ process_site(Site) ->
 
 -spec peers(binary()) -> 'ok'.
 peers(SiteId) ->
-    {'ok', Xml} = api_get(url(["sippeers"], [])),
+    {'ok', Xml} = api_get(url(["sippeers"], []), []),
     io:format("listing all peers for account ~p, site ~p~n", [?BW2_ACCOUNT_ID, SiteId]),
     Peers = xmerl_xpath:string("SipPeers/SipPeer", Xml),
     lists:foreach(fun process_peer/1, Peers),
@@ -319,55 +334,59 @@ url(RelativePath, Options) ->
 
 -spec search(kz_term:ne_binary(), [nonempty_string()], knm_search:options()) -> kz_types:xml_el().
 search(Num, Params, Options) ->
-    case api_get(url(["availableNumbers?" | Params], Options)) of
+    case api_get(url(["availableNumbers?" | Params], Options), Options) of
         {'ok', Results} -> Results;
         {'error', Reason} -> knm_errors:by_carrier(?MODULE, Reason, Num)
     end.
 
--spec auth() -> {'basic_auth', {kz_term:ne_binary(), kz_term:ne_binary()}}.
-auth() ->
-    {'basic_auth', {?BW2_API_USERNAME, ?BW2_API_PASSWORD}}.
+-spec auth(knm_search:options()) -> {'basic_auth', {kz_term:ne_binary(), kz_term:ne_binary()}}.
+auth([]) ->
+    {'basic_auth', {?BW2_API_USERNAME, ?BW2_API_PASSWORD}};
+auth(Options) ->
+    Account_id = knm_carriers:account_id(Options),
+    Reseller_id = knm_carriers:reseller_id(Options),
+    {'basic_auth', {?BW2_API_USERNAME(Account_id, Reseller_id), ?BW2_API_PASSWORD(Account_id, Reseller_id)}}.
 
--spec api_get(nonempty_string()) -> api_res().
+-spec api_get(nonempty_string(), knm_search:options()) -> api_res().
 -ifndef(TEST).
-api_get(Url) ->
-    HTTPOptions = [auth()
+api_get(Url, Options) ->
+    HTTPOptions = [auth(Options)
                   ],
-    ?DEBUG_WRITE("Request:~n~s ~s~n~p~n", ['get', Url, HTTPOptions]),
+    ?DEBUG_APPEND("Request:~n~s ~s~n~p~n", ['get', Url, HTTPOptions]),
     Response = kz_http:get(Url, [], HTTPOptions),
     handle_response(Response).
 -else.
-api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/availableNumbers?areaCode="++_) ->
+api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/availableNumbers?areaCode="++_, _Options) ->
     Resp = knm_util:fixture("bandwidth2_find_by_npa_no_detail.xml"),
     handle_response({'ok', 200, [], Resp});
-api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/availableNumbers?tollFreeWildCardPattern="++_) ->
+api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/availableNumbers?tollFreeWildCardPattern="++_, _Options) ->
     Resp = knm_util:fixture("bandwidth2_find_tollfree.xml"),
     handle_response({'ok', 200, [], Resp});
-api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders/" ++ _) ->
+api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders/" ++ _, _Options) ->
     Resp = knm_util:fixture("bandwidth2_check_order.xml"),
     handle_response({'ok', 200, [], Resp}).
 -endif.
 
--spec api_post(nonempty_string(), binary()) -> api_res().
+-spec api_post(nonempty_string(), binary(), knm_search:options()) -> api_res().
 -ifndef(TEST).
-api_post(Url, Body) ->
+api_post(Url, Body, Options) ->
     UnicodeBody = unicode:characters_to_binary(Body),
     Headers = [{"Accept", "*/*"}
               ,{"User-Agent", ?KNM_USER_AGENT}
               ,{"X-BWC-IN-Control-Processing-Type", "process"}
               ,{"Content-Type", "application/xml"}
               ],
-    HTTPOptions = [auth()
+    HTTPOptions = [auth(Options)
                   ,{'ssl', [{'verify', 'verify_none'}]}
                   ,{'timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'body_format', 'string'}
                   ],
-    ?DEBUG_WRITE("Request:~n~s ~s~n~p~n~p~n~p~p~n", ['post', Url, Headers, HTTPOptions, Body, UnicodeBody]),
+    ?DEBUG_APPEND("Request:~n~s ~s~n~p~n~p~n~p~p~n", ['post', Url, Headers, HTTPOptions, Body, UnicodeBody]),
     Response = kz_http:post(Url, Headers, UnicodeBody, HTTPOptions),
     handle_response(Response).
 -else.
-api_post("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders", Body) ->
+api_post("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders", Body, _Options) ->
     _UnicodeBody = unicode:characters_to_binary(Body),
     Resp = knm_util:fixture("bandwidth2_buy_a_number.xml"),
     handle_response({'ok', 200, [], Resp}).

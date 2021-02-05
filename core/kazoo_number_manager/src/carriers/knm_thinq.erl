@@ -33,7 +33,15 @@
 -define(SITE_ID(Options)
         ,?THQ_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
         ).
-    
+
+-define(ENABLE_SMS(Options)
+        ,?THQ_ENABLE_SMS(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
+
+-define(TF_ENABLE_SMS(Options)
+        ,?THQ_TF_ENABLE_SMS(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+        ).
+
 -type search_ret() :: {'ok', knm_number:knm_numbers()} | {'error', any()}.
 
 %%% API
@@ -161,7 +169,7 @@ acquire_number(Number, Options) ->
                                       {<<"account_location_id">>, 'null'},
                                       {<<"sms_routing_profile_id">>, 'null'},
                                       {<<"route_id">>, ?SITE_ID(Options)},
-                                      {<<"features">>, features(Num)},
+                                      {<<"features">>, features(Num, Options)},
                                       {<<"did">>, Num}
                                      ])],
             Setters = [{fun(J, V) -> kz_json:set_value(<<"blocks">>, V, J) end, []},
@@ -175,16 +183,16 @@ acquire_number(Number, Options) ->
                     OrderId = kz_json:get_value(<<"id">>, Results),
                     OrderStatus = kz_json:get_value(<<"status">>, Results),
                     complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number, []),
-                    maybe_activate_sms(Number);
+                    maybe_activate_sms(Number, Options);
                 {'error', Reason} -> 
                     Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
                     knm_errors:by_carrier(?MODULE, Error, Num)
             end
     end.
-maybe_activate_sms(Number) ->
+maybe_activate_sms(Number, Options) ->
     PhoneNumber = knm_number:phone_number(Number),
     Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
-    JObj = features(Num),
+    JObj = features(Num, Options),
     case kz_json:get_boolean_value(<<"sms">>, JObj) of
         'true' ->
             knm_providers:activate_feature(Number, {?FEATURE_SMS,
@@ -193,14 +201,14 @@ maybe_activate_sms(Number) ->
         _ -> Number
     end.
 
-features(<<Prefix:3/binary, _/binary>>) when ?IS_US_TOLLFREE(Prefix) ->
+features(<<Prefix:3/binary, _/binary>>, Options) when ?IS_US_TOLLFREE(Prefix) ->
     kz_json:from_list([{<<"cnam">>, 'false'},
-                       {<<"sms">>, ?TF_ENABLE_SMS},
+                       {<<"sms">>, ?TF_ENABLE_SMS(Options)},
                        {<<"e911">>, 'false'}
                       ]);
-features(_Num)  ->
+features(_Num, Options)  ->
     kz_json:from_list([{<<"cnam">>, 'false'},
-                       {<<"sms">>, ?ENABLE_SMS},
+                       {<<"sms">>, ?ENABLE_SMS(Options)},
                        {<<"e911">>, 'false'}
                       ]).
 

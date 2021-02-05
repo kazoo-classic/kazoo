@@ -6,7 +6,7 @@
 %%%-----------------------------------------------------------------------------
 -module(knm_thinq_util).
 
--export([api_get/1 
+-export([api_get/1, api_get/2
         ,api_post/2, api_post/3]).
 -export([to_thinq/1, from_thinq/1]).
 
@@ -20,9 +20,13 @@
 -spec api_get(nonempty_string()) -> api_res().
 -ifndef(TEST).
 api_get(Url) ->
-    HTTPOptions = [auth()
+    api_get(Url, []).
+
+-spec api_get(nonempty_string(), knm_search:options()) -> api_res().
+api_get(Url, Options) ->
+    HTTPOptions = [auth(Options)
                   ],
-    ?DEBUG_WRITE("Request:~n~s ~s~n~p~n", ['get', Url, HTTPOptions]),
+    ?DEBUG_APPEND("Request:~n~s ~s~n~p~n", ['get', Url, HTTPOptions]),
     Response = kz_http:get(Url, [], HTTPOptions),
     handle_response(Response).
 -else.
@@ -35,6 +39,10 @@ api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/availableN
 api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders/" ++ _) ->
     Resp = knm_util:fixture("thinq_check_order.xml"),
     handle_response({'ok', 200, [], Resp}).
+
+-spec api_get(nonempty_string(), knm_search:options()) -> api_res().
+api_get(Url, _) ->
+    api_get(Url).
 -endif.
 
 -spec api_post(nonempty_string(), binary()) -> api_res().
@@ -55,7 +63,7 @@ api_post(Url, Body, Options) ->
                   ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'body_format', 'string'}
                   ],
-    ?DEBUG_WRITE("Request:~n~s ~s~n~p~n~p~n~p~p~n", ['post', Url, Headers, HTTPOptions, Body, EncodeBody]),
+    ?DEBUG_APPEND("Request:~n~s ~s~n~p~n~p~n~p~p~n", ['post', Url, Headers, HTTPOptions, Body, EncodeBody]),
     Response = kz_http:post(Url, Headers, EncodeBody, HTTPOptions),
     handle_response(Response).
 -else.
@@ -142,10 +150,6 @@ reason(_, 'true') ->
     'authentication';
 reason(Reason, 'false') ->
     kz_json:decode(Reason).
-
--spec auth() -> {'basic_auth', {kz_term:ne_binary(), kz_term:ne_binary()}}.
-auth() ->
-    auth([]).
 
 -spec auth(knm_search:options()) -> {'basic_auth', {kz_term:ne_binary(), kz_term:ne_binary()}}.
 auth([]) ->

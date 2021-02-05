@@ -37,7 +37,7 @@
 -define(DEBUG_APPEND(Format, Args), ?debugFmt(Format, Args)).
 -else.
 -define(VI_DEBUG, kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"debug">>, 'false')).
--define(VI_DEBUG_FILE, "/tmp/voipinnovations.xml").
+-define(VI_DEBUG_FILE, "/tmp/voipinnovations.log").
 -define(DEBUG_WRITE(Format, Args),
         _ = ?VI_DEBUG
         andalso file:write_file(?VI_DEBUG_FILE, io_lib:format(Format, Args))
@@ -59,18 +59,18 @@
 
 % -define(VI_LOGIN, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, <<>>)).
 -define(LOGIN(Props)
-        , ?VI_LOGIN(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
+        ,?VI_LOGIN(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
         ).
--define(DEFAULT_VI_LOGIN, <<>>).
+-define(DEFAULT_VI_LOGIN, "").
 
 -define(VI_LOGIN(AccountId, ResellerId)
-       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"login">>, ?VI_LOGIN(ResellerId))
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"login">>, ?VI_LOGIN(ResellerId)))
        ).
 -define(VI_LOGIN(AccountId)
-       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"login">>, ?VI_LOGIN)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"login">>, ?VI_LOGIN))
        ).
 -define(VI_LOGIN
-       ,kapps_config:get_binary(?KNM_VI_CONFIG_CAT, <<"login">>, ?DEFAULT_VI_LOGIN)
+       ,kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, ?DEFAULT_VI_LOGIN)
        ).
 
 
@@ -79,16 +79,16 @@
 -define(PASSWORD(Props)
         , ?VI_PASSWORD(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
         ).
--define(DEFAULT_VI_PASSWORD, <<>>).
+-define(DEFAULT_VI_PASSWORD, "").
 
 -define(VI_PASSWORD(AccountId, ResellerId)
-       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"password">>, ?VI_PASSWORD(ResellerId))
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"password">>, ?VI_PASSWORD(ResellerId)))
        ).
 -define(VI_PASSWORD(AccountId)
-       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"password">>, ?VI_PASSWORD)
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?KNM_VI_CONFIG_CAT, <<"password">>, ?VI_PASSWORD))
        ).
 -define(VI_PASSWORD
-       ,kapps_config:get_binary(?KNM_VI_CONFIG_CAT, <<"password">>, ?DEFAULT_VI_PASSWORD)
+       ,kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"password">>, ?DEFAULT_VI_PASSWORD)
        ).
 
 %%-define(VI_ENDPOINT_GROUP, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, <<>>)).
@@ -183,12 +183,14 @@ acquire_number(Number) ->
 -spec acquire_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
 acquire_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
+    IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     case ?IS_PROVISIONING_ENABLED of
         'false' when Debug ->
             lager:debug("allowing sandbox provisioning"),
             Number;
         'false' ->
             knm_errors:unspecified('provisioning_disabled', Number);
+        'true' when IsDryRun -> Number;
         'true' ->
             N = 'remove +1'(
                   knm_phone_number:number(knm_number:phone_number(Number))
@@ -209,12 +211,14 @@ disconnect_number(Number) ->
 -spec disconnect_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
 disconnect_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
+    IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     case ?IS_PROVISIONING_ENABLED of
         'false' when Debug ->
             lager:debug("allowing sandbox provisioning"),
             Number;
         'false' ->
             knm_errors:unspecified('provisioning_disabled', Number);
+        'true' when IsDryRun -> Number;
         'true' ->
             N = 'remove +1'(
                   knm_phone_number:number(knm_number:phone_number(Number))
@@ -414,7 +418,7 @@ soap_request(Action, Body) ->
                   ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'body_format', 'string'}
                   ],
-    ?DEBUG_WRITE("Request:~n~s ~s~n~p~n~s~n", ['post', Url, Headers, Body]),
+    ?DEBUG_APPEND("Request:~n~s ~s~n~p~n~s~n", ['post', Url, Headers, Body]),
     UnicodeBody = unicode:characters_to_binary(Body),
     Resp = kz_http:post(Url, Headers, UnicodeBody, HTTPOptions),
     handle_response(Resp).

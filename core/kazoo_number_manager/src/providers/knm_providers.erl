@@ -25,12 +25,26 @@
         ,deactivate_feature/2
         ]).
 
--define(CNAM_PROVIDER(AccountId)
-       ,kapps_account_config:get_from_reseller(AccountId, ?KNM_CONFIG_CAT, <<"cnam_provider">>, <<"knm_cnam_notifier">>)
+-define(DEFAULT_E911_PROVIDER, <<"knm_dash_e911">>).
+-define(E911_PROVIDER(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_CONFIG_CAT, <<"e911_provider">>, ?E911_PROVIDER(ResellerId))
+       ).
+-define(E911_PROVIDER(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_CONFIG_CAT, <<"e911_provider">>, ?E911_PROVIDER)
+       ).
+-define(E911_PROVIDER
+       ,kapps_config:get_binary(?KNM_CONFIG_CAT, <<"e911_provider">>, ?DEFAULT_E911_PROVIDER)
        ).
 
--define(E911_PROVIDER(AccountId)
-       ,kapps_account_config:get_from_reseller(AccountId, ?KNM_CONFIG_CAT, <<"e911_provider">>, <<"knm_dash_e911">>)
+-define(DEFAULT_CNAM_PROVIDER, <<"knm_cnam_notifier">>).
+-define(CNAM_PROVIDER(AccountId, ResellerId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_CONFIG_CAT, <<"cnam_provider">>, ?CNAM_PROVIDER(ResellerId))
+       ).
+-define(CNAM_PROVIDER(AccountId)
+       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_CONFIG_CAT, <<"cnam_provider">>, ?CNAM_PROVIDER)
+       ).
+-define(CNAM_PROVIDER
+       ,kapps_config:get_binary(?KNM_CONFIG_CAT, <<"cnam_provider">>, ?DEFAULT_CNAM_PROVIDER)
        ).
 
 -define(SYSTEM_PROVIDERS, kapps_config:get_ne_binaries(?KNM_CONFIG_CAT, <<"providers">>)).
@@ -410,14 +424,14 @@ provider_module(Other, _) ->
 e911_provider(?RESELLER_ACCOUNT_ID) -> <<"knm_telnyx_e911">>;
 e911_provider(AccountId) -> ?E911_PROVIDER(AccountId).
 -else.
-e911_provider(AccountId) -> ?E911_PROVIDER(AccountId).
+e911_provider(AccountId) -> ?E911_PROVIDER(AccountId, kzd_accounts:get_parent_account_id(AccountId)).
 -endif.
 
 -ifdef(TEST).
 cnam_provider(?RESELLER_ACCOUNT_ID) -> <<"knm_telnyx_cnam">>;
 cnam_provider(AccountId) -> ?CNAM_PROVIDER(AccountId).
 -else.
-cnam_provider(AccountId) -> ?CNAM_PROVIDER(AccountId).
+cnam_provider(AccountId) -> ?CNAM_PROVIDER(AccountId, kzd_accounts:get_parent_account_id(AccountId)).
 -endif.
 
 %%------------------------------------------------------------------------------

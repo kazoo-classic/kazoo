@@ -106,8 +106,8 @@ number_is_porting(Num) ->
     throw({'error', 'number_is_porting', Num}).
 
 -spec by_carrier(module(), kz_term:ne_binary() | atom(), kz_term:ne_binary() | kn()) -> no_return().
-by_carrier(Carrier, E, Num) when is_binary(Num) ->
-    throw({'error', 'by_carrier', Num, {Carrier,E}});
+by_carrier(_Carrier, E, Num) when is_binary(Num) ->
+    throw({'error', 'by_carrier', Num, E});
 by_carrier(Carrier, E, Number) ->
     Num = knm_phone_number:number(knm_number:phone_number(Number)),
     by_carrier(Carrier, E, Num).

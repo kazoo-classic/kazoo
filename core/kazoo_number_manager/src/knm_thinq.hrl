@@ -47,6 +47,9 @@
 -define(THQ_ORDER_NAME_PREFIX
        ,kapps_config:get_string(?KNM_THQ_CONFIG_CAT, <<"order_name_prefix">>, "Kazoo")
        ).
+-define(THQ_IS_UPSTREAM_INBOUND_CNAM_ENABLED
+       ,kapps_config:get_is_true(?KNM_THQ_CONFIG_CAT, <<"enable_upstream_inbound_cnam">>, 'false')
+       ).
 
 -define(DEFAULT_THQ_API_USERNAME, <<>>).
 -define(THQ_API_USERNAME(AccountId, ResellerId)
@@ -89,9 +92,24 @@
        ,kapps_config:get_pos_integer(?KNM_THQ_CONFIG_CAT, <<"max_search_quantity">>, 500)
        ).
 
--define(ENABLE_SMS
-       ,kapps_config:get_is_true(?KNM_THQ_CONFIG_CAT, <<"enable_sms">>, 'false')
+-define(DEFAULT_THQ_ENABLE_SMS, 'false').
+-define(THQ_ENABLE_SMS(AccountId, ResellerId)
+       ,kz_term:to_atom(kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"enable_sms">>, ?THQ_ENABLE_SMS(ResellerId)))
        ).
--define(TF_ENABLE_SMS
-       ,kapps_config:get_is_true(?KNM_THQ_CONFIG_CAT, <<"tf_enable_sms">>, 'false')
+-define(THQ_ENABLE_SMS(AccountId)
+       ,kz_term:to_atom(kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"enable_sms">>, ?THQ_ENABLE_SMS))
+       ).
+-define(THQ_ENABLE_SMS
+       ,kapps_config:get_atom(?KNM_THQ_CONFIG_CAT, <<"enable_sms">>, ?DEFAULT_THQ_ENABLE_SMS)
+       ).
+
+-define(DEFAULT_THQ_TF_ENABLE_SMS, 'false').
+-define(THQ_TF_ENABLE_SMS(AccountId, ResellerId)
+       ,kz_term:to_atom(kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"tf_enable_sms">>, ?THQ_TF_ENABLE_SMS(ResellerId)))
+       ).
+-define(THQ_TF_ENABLE_SMS(AccountId)
+       ,kz_term:to_atom(kapps_account_config:get_ne_binary(AccountId, ?KNM_THQ_CONFIG_CAT, <<"tf_enable_sms">>, ?THQ_TF_ENABLE_SMS))
+       ).
+-define(THQ_TF_ENABLE_SMS
+       ,kapps_config:get_atom(?KNM_THQ_CONFIG_CAT, <<"tf_enable_sms">>, ?DEFAULT_THQ_TF_ENABLE_SMS)
        ).
