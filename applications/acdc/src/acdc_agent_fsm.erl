@@ -650,7 +650,6 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
     case get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) of
         {'error', 'no_endpoints'} ->
             lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
-            acdc_agent_stats:agent_logged_out(AccountId, AgentId),
             agent_logout(self()),
             acdc_agent_listener:member_connect_retry(AgentListener, JObj),
             {'next_state', 'paused', State};
@@ -738,11 +737,8 @@ ready({'member_connect_satisfied', _, _Node}, State) ->
 
 ready({'member_connect_req', _}, #state{max_connect_failures=Max
                                        ,connect_failures=Fails
-                                       ,account_id=AccountId
-                                       ,agent_id=AgentId
                                        }=State) when is_integer(Max), Fails >= Max ->
     lager:info("agent has failed to connect ~b times, logging out", [Fails]),
-    acdc_agent_stats:agent_logged_out(AccountId, AgentId),
     agent_logout(self()),
     {'next_state', 'paused', State};
 ready({'member_connect_req', JObj}, #state{agent_listener=AgentListener}=State) ->
@@ -2226,10 +2222,7 @@ time_left(Ms) when is_integer(Ms) -> Ms div 1000.
 -spec clear_call(state(), atom()) -> state().
 clear_call(#state{connect_failures=Fails
                  ,max_connect_failures=Max
-                 ,account_id=AccountId
-                 ,agent_id=AgentId
                  }=State, 'failed') when is_integer(Max), (Max - Fails) =< 1 ->
-    acdc_agent_stats:agent_logged_out(AccountId, AgentId),
     agent_logout(self()),
     lager:debug("agent has failed to connect ~b times, logging out", [Fails+1]),
     clear_call(State#state{connect_failures=Fails+1}, 'paused');
@@ -2707,6 +2700,12 @@ handle_agent_logout(#state{account_id = AccountId
                           ,agent_id = AgentId
                           }=State) ->
     acdc_agent_stats:agent_logged_out(AccountId, AgentId),
+    Update = props:filter_undefined(
+               [{<<"Account-ID">>, AccountId}
+               ,{<<"Agent-ID">>, AgentId}
+                | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+               ]),
+    kz_amqp_worker:cast(Update, fun kapi_acdc_agent:publish_logout/1),
     {'stop', 'normal', State}.
 
 -spec handle_presence_update(kz_term:ne_binary(), kz_term:ne_binary(), state()) -> 'ok'.
