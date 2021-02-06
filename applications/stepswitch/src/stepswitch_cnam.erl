@@ -215,6 +215,6 @@ make_request(Number, JObj) ->
 
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
 request(Number, JObj) ->
-    {'ok', AccountId, _ } = knm_number:lookup_account(Number),
+    AccountId = kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     Mod = ?CNAM_PROVIDER_MODULE(AccountId, kzd_accounts:reseller_id(AccountId)),
     Mod:request(Number, JObj).

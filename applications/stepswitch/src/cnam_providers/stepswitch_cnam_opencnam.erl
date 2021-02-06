@@ -27,7 +27,7 @@
 
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
 request(Number, JObj) ->
-    {'ok', AccountId, _ } = knm_number:lookup_account(Number),
+    AccountId = kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     Url = kz_term:to_list(get_http_url(JObj, AccountId)),
     case kz_http:req(get_http_method(AccountId)
                     ,Url
@@ -55,7 +55,7 @@ request(Number, JObj) ->
 
 -spec get_http_url(kz_json:object(), kz_term:ne_binary()) -> kz_term:ne_binary().
 get_http_url(JObj, AccountId) ->
-    Template = get_config_param(AccountId, <<"http_url">>,  ?DEFAULT_URL),
+    Template = list_to_binary(get_config_param(AccountId, <<"http_url">>,  ?DEFAULT_URL)),
     {'ok', SrcUrl} = stepswitch_cnam:render(JObj, Template),
     Url = iolist_to_binary(SrcUrl),
 
