@@ -40,7 +40,7 @@ save(Number, _State) ->
 %%------------------------------------------------------------------------------
 -spec delete(knm_number:knm_number()) -> knm_number:knm_number().
 delete(Number) ->
-    _ = remove_cnam(Number),
+    _ = assign_cnam(Number, <<>>),
     knm_providers:deactivate_features(Number
                                      ,[?FEATURE_CNAM_INBOUND
                                       ,?FEATURE_CNAM_OUTBOUND
@@ -78,8 +78,10 @@ handle_outbound_cnam(Number) ->
     CurrentCNAM = kz_json:get_ne_value(?CNAM_DISPLAY_NAME, Feature),
     IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     case kz_json:get_ne_value([?FEATURE_CNAM, ?CNAM_DISPLAY_NAME], Doc) of
+        'undefined' when IsDryRun ->
+            knm_providers:deactivate_feature(Number, ?FEATURE_CNAM_OUTBOUND);
         'undefined' when Feature /= 'undefined' ->
-            {'ok', Number1} = remove_cnam(Number),
+            {'ok', Number1} = assign_cnam(Number, <<>>),
             knm_providers:deactivate_feature(Number1, ?FEATURE_CNAM_OUTBOUND);
         'undefined' ->
             knm_providers:deactivate_feature(Number, ?FEATURE_CNAM_OUTBOUND);
@@ -199,34 +201,6 @@ assign_cnam(Number, CNam) ->
             OrderStatus = kz_xml:get_value("LidbOrder/ProcessingStatus/text()", Xml),
             check_order(OrderId, OrderStatus, Response, PhoneNumber, Number, options(Number))
     end.
-
--spec remove_cnam(knm_number:knm_number()) ->
-          {'ok', knm_number:knm_number()} |
-          {'error', kz_term:ne_binary()}.
-remove_cnam(Number) ->
-    {'ok', Number}.
-%    PhoneNumber = knm_number:phone_number(Number),
-%    Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
-%    Tns = [kz_json:from_list([
-%                              {<<"features">>, features(Number)}
-%                              ,{<<"caller_id">>, 'null'}
-%                              ,{<<"did">>, Num}
-%                              ,{<<"account_location_id">>, location_id(Number)}
-%                             ])],
-%    Setters = [{fun(J, V) -> kz_json:set_value(<<"order">>, J, V) end, kz_json:new()},
-%               {fun(J, V) -> kz_json:set_value(<<"tns">>, V, J) end, Tns}
-%              ],
-%    JObj = kz_json:set_values(Setters, kz_json:new()),
-%    case knm_thinq_util:api_post(url_feature_order(options(Number)), JObj, options(Number)) of
-%        {'ok', Results} -> 
-%            OrderId = kz_json:get_value([<<"order">>,<<"id">>], Results),
-%            OrderStatus = kz_json:get_value([<<"order">>,<<"status">>], Results),
-%            'ok' = complete_feature_order(OrderId, OrderStatus, Results, Number),
-%            {'ok', set_cnam_id(Number, 'null')};
-%        {'error', Reason} -> 
-%            Error = <<"Unable to remove CNAM: ", (kz_term:to_binary(Reason))/binary>>,
-%            knm_errors:invalid(Num, Error)
-%    end.
 
 -spec url([nonempty_string()], knm_search:options()) -> nonempty_string().
 url(RelativePath, Options) ->
