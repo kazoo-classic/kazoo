@@ -968,7 +968,11 @@ query_call_summary_fold(#call_summary_stat{queue_id=QueueId
                                             <<"processed">> -> {AbandonedCalls, TotalWaitTime + WaitTime, TotalTalkTime + TalkTime};
                                             <<"abandoned">> -> {AbandonedCalls + 1, TotalWaitTime, TotalTalkTime}
                                         end,
-    props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1, TotalTalkTime1, max(MaxEnteredPosition,EnteredPos)}, Props).
+    props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1, TotalTalkTime1, to_max(MaxEnteredPosition,EnteredPos)}, Props).
+
+to_max('undefined', X) -> X;
+to_max(X, 'undefined') -> X;
+to_max(X, Y) -> max(X,Y).
 
 -spec query_agent_calls(kz_term:ne_binary(), kz_term:ne_binary(), ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
 query_agent_calls(RespQ, MsgId, Match, _Limit) ->
