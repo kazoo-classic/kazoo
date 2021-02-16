@@ -133,7 +133,7 @@ call_summary_req(JObj) ->
     EndRange = kz_json:get_value(<<"End-Range">>, JObj),
     Queues =
         case kz_json:get_value(<<"Queue-ID">>, JObj) of
-            undefined -> [ {A,Q,StartRange,EndRange} || {_, {A, Q}} <- acdc_queues_sup:queues_running(), A == AccountId];
+            undefined -> [ {A,Q,StartRange,EndRange} || {_, {A, Q, _}} <- acdc_queues_sup:queues_running(), A == AccountId];
             Else -> [ {AccountId,Else,StartRange,EndRange}]
         end,
     Summary = query_call_summary(Queues),
