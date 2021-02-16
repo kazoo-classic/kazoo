@@ -31,10 +31,10 @@
 %%% /queues/QID/eavesdrop
 %%%   PUT: ring a phone/user and eavesdrop on the queue's calls
 %%%
+%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors:
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_queues).
 
 -export([init/0
@@ -83,16 +83,14 @@
 -define(FORMAT_COMPRESSED, <<"compressed">>).
 -define(FORMAT_VERBOSE, <<"verbose">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = kz_datamgr:db_create(?KZ_ACDC_DB),
@@ -113,19 +111,17 @@ init() ->
 
     _ = crossbar_bindings:bind(<<"*.execute.delete.queues">>, ?MODULE, 'delete').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
--spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
+%%------------------------------------------------------------------------------
 
+-spec allowed_methods() -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?STATS_PATH_TOKEN) ->
     [?HTTP_GET];
 allowed_methods(?STATS_SUMMARY_PATH_TOKEN) ->
@@ -135,6 +131,7 @@ allowed_methods(?EAVESDROP_PATH_TOKEN) ->
 allowed_methods(_QueueId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_QueueId, ?ROSTER_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
 allowed_methods(_QueueId, ?STATS_SUMMARY_PATH_TOKEN) ->
@@ -142,38 +139,41 @@ allowed_methods(_QueueId, ?STATS_SUMMARY_PATH_TOKEN) ->
 allowed_methods(_QueueId, ?EAVESDROP_PATH_TOKEN) ->
     [?HTTP_PUT].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /queues => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource
+%%
+%% For example:
+%%
+%% ```
+%%    /queues => [].
 %%    /queues/foo => [<<"foo">>]
 %%    /queues/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
 
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_) -> 'true'.
 
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, ?ROSTER_PATH_TOKEN) -> 'true';
 resource_exists(_, ?STATS_SUMMARY_PATH_TOKEN) -> 'true';
 resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true'.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Add content types accepted and provided by this module
+%% @doc Add content types accepted and provided by this module
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec content_types_provided(cb_context:context()) ->
                                     cb_context:context().
+content_types_provided(Context) -> Context.
+
 -spec content_types_provided(cb_context:context(), path_token()) ->
                                     cb_context:context().
-content_types_provided(Context) -> Context.
 content_types_provided(Context, ?STATS_PATH_TOKEN) ->
     cb_context:add_content_types_provided(Context
                                          ,[{'to_json', ?JSON_CONTENT_TYPES}
@@ -181,21 +181,15 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
                                           ]);
 content_types_provided(Context, ?STATS_SUMMARY_PATH_TOKEN) -> Context.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /queues mights load a list of queue objects
 %% /queues/123 might load the queue object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) ->
-                      cb_context:context().
--spec validate(cb_context:context(), path_token()) ->
-                      cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) ->
                       cb_context:context().
 validate(Context) ->
     validate_queues(Context, cb_context:req_verb(Context)).
@@ -203,6 +197,8 @@ validate(Context) ->
 validate_queues(Context, ?HTTP_GET) -> summary(Context);
 validate_queues(Context, ?HTTP_PUT) -> validate_request('undefined', Context).
 
+-spec validate(cb_context:context(), path_token()) ->
+                      cb_context:context().
 validate(Context, PathToken) ->
     validate_queue(Context, PathToken, cb_context:req_verb(Context)).
 
@@ -221,6 +217,8 @@ validate_queue(Context, Id, ?HTTP_PATCH) ->
 validate_queue(Context, Id, ?HTTP_DELETE) ->
     read(Id, Context).
 
+-spec validate(cb_context:context(), path_token(), path_token()) ->
+                      cb_context:context().
 validate(Context, Id, Token) ->
     validate_queue_operation(Context, Id, Token, cb_context:req_verb(Context)).
 
@@ -394,34 +392,33 @@ is_valid_endpoint_type(Context, CallMeJObj) ->
             }
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is PUT, execute the actual action, usually a db save.
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verib is PUT, execute the actual action, usually a db save.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec put(cb_context:context()) ->
-                 cb_context:context().
--spec put(cb_context:context(), path_token()) ->
-                 cb_context:context().
--spec put(cb_context:context(), path_token(), path_token()) ->
                  cb_context:context().
 put(Context) ->
     activate_account_for_acdc(Context),
     crossbar_doc:save(Context).
 
+-spec put(cb_context:context(), path_token()) ->
+                 cb_context:context().
 put(Context, ?EAVESDROP_PATH_TOKEN) ->
     Prop = [{<<"Eavesdrop-Call-ID">>, cb_context:req_value(Context, <<"call_id">>)}
             | default_eavesdrop_req(Context)
            ],
     eavesdrop_req(Context, Prop).
+
+-spec put(cb_context:context(), path_token(), path_token()) ->
+                 cb_context:context().
 put(Context, QID, ?EAVESDROP_PATH_TOKEN) ->
     Prop = [{<<"Eavesdrop-Group-ID">>, QID}
             | default_eavesdrop_req(Context)
            ],
     eavesdrop_req(Context, Prop).
 
--spec default_eavesdrop_req(cb_context:context()) -> kz_term:kz_proplist().
+-spec default_eavesdrop_req(cb_context:context()) -> kz_term:proplist().
 default_eavesdrop_req(Context) ->
     [{<<"Eavesdrop-Mode">>, cb_context:req_value(Context, <<"mode">>, <<"listen">>)}
     ,{<<"Account-ID">>, cb_context:account_id(Context)}
@@ -432,7 +429,7 @@ default_eavesdrop_req(Context) ->
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
--spec eavesdrop_req(cb_context:context(), kz_term:kz_proplist()) -> cb_context:context().
+-spec eavesdrop_req(cb_context:context(), kz_term:proplist()) -> cb_context:context().
 eavesdrop_req(Context, Prop) ->
     case kz_amqp_worker:call(props:filter_undefined(Prop)
                                      ,fun kapi_resource:publish_eavesdrop_req/1
@@ -463,42 +460,38 @@ filter_response_fields(JObj) ->
                      ,kz_json:normalize(kz_api:remove_defaults(JObj))
                      ).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is POST, execute the actual action, usually a db save
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verib is POST, execute the actual action, usually a db save
 %% (after a merge perhaps).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
--spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, Id) ->
     activate_account_for_acdc(Context),
     read(Id, crossbar_doc:save(unset_agents_key(Context))).
+
+-spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, Id, ?ROSTER_PATH_TOKEN) ->
     activate_account_for_acdc(Context),
     read(Id, crossbar_doc:save(Context)).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec patch(cb_context:context(), path_token()) -> cb_context:context().
 patch(Context, Id) ->
     post(Context, Id).
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is DELETE, execute the actual action, usually a db delete
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verib is DELETE, execute the actual action, usually a db delete
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
--spec delete(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 delete(Context, _) ->
     activate_account_for_acdc(Context),
     crossbar_doc:delete(Context).
+
+-spec delete(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 delete(Context, Id, ?ROSTER_PATH_TOKEN) ->
     activate_account_for_acdc(Context),
     read(Id, crossbar_doc:save(Context)).
@@ -509,16 +502,15 @@ delete_account(Context, AccountId) ->
     deactivate_account_for_acdc(AccountId),
     Context.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Load an instance from the database
+%% @doc Load an instance from the database
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec read(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 read(Id, Context) ->
     Context1 = crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(<<"queue">>)),
@@ -527,22 +519,20 @@ read(Id, Context) ->
         _Status -> Context1
     end.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate_request(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_request(QueueId, Context) ->
     check_queue_schema(QueueId, Context).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate_patch(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_patch(QueueId, Context) ->
     crossbar_doc:patch_and_validate(QueueId, Context, fun validate_request/2).
@@ -557,12 +547,11 @@ on_successful_validation('undefined', Context) ->
 on_successful_validation(QueueId, Context) ->
     crossbar_doc:load_merge(QueueId, Context, ?TYPE_CHECK_OPTION(<<"queue">>)).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 load_queue_agents(Id, Context) ->
     Context1 = load_agent_roster(Id, Context),
     case cb_context:resp_status(Context1) of
@@ -577,7 +566,8 @@ load_queue_agents(Id, Context) ->
     end.
 
 load_agent_roster(Id, Context) ->
-    crossbar_doc:load_view(?CB_AGENTS_LIST, [{'key', Id}]
+    crossbar_doc:load_view(?CB_AGENTS_LIST, [{'key', Id}
+                                            ,{'reduce', 'false'}]
                           ,Context
                           ,fun normalize_agents_results/2
                           ).
@@ -642,12 +632,12 @@ maybe_rm_agents(Id, Context, AgentIds) ->
 
 -spec rm_queue_from_agents(kz_term:ne_binary(), cb_context:context()) ->
                                   cb_context:context().
--spec rm_queue_from_agents(kz_term:ne_binary(), cb_context:context(), kz_json:path()) ->
-                                  cb_context:context().
 rm_queue_from_agents(Id, Context) ->
     Context1 = load_agent_roster(Id, Context),
     rm_queue_from_agents(Id, Context, cb_context:doc(Context1)).
 
+-spec rm_queue_from_agents(kz_term:ne_binary(), cb_context:context(), kz_json:path()) ->
+                                  cb_context:context().
 rm_queue_from_agents(_Id, Context, []) ->
     cb_context:set_resp_status(Context, 'success');
 rm_queue_from_agents(Id, Context, [_|_]=AgentIds) ->
@@ -672,12 +662,11 @@ maybe_rm_queue_from_agent(Id, A) ->
     Qs = kz_json:get_value(<<"queues">>, A, []),
     kz_json:set_value(<<"queues">>, lists:delete(Id, Qs), A).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec fetch_all_queue_stats(cb_context:context()) -> cb_context:context().
 fetch_all_queue_stats(Context) ->
     case cb_context:req_value(Context, <<"start_range">>) of
@@ -742,7 +731,7 @@ fetch_ranged_stats_summary(Context, StartRange, QueueId) ->
             %% range is too large
             Msg = kz_term:to_binary(io_lib:format("end_range ~b is more than ~b seconds from start_range ~b", [To, MaxRange, F])),
             JObj = kz_json:from_list([{<<"message">>, Msg}, {<<"cause">>, StartRange}]),
-            cb_context:add_validation_error(<<"end_range">>, <<"date_range">>, JObj, Context);               
+            cb_context:add_validation_error(<<"end_range">>, <<"date_range">>, JObj, Context);
         F ->
             fetch_ranged_stats_summary(Context, F, To, QueueId)
     end.
@@ -842,7 +831,7 @@ format_stats(Context, Resp) ->
      ).
 
 
--spec fetch_from_amqp(cb_context:context(), kz_term:kz_proplist()) -> cb_context:context().
+-spec fetch_from_amqp(cb_context:context(), kz_term:proplist()) -> cb_context:context().
 fetch_from_amqp(Context, Req) ->
     case kz_amqp_worker:call(Req
                                      ,fun kapi_acdc_stats:publish_current_calls_req/1
@@ -855,13 +844,12 @@ fetch_from_amqp(Context, Req) ->
         {'ok', Resp} -> format_stats(Context, Resp)
     end.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     crossbar_doc:load_view(?CB_LIST
@@ -870,12 +858,11 @@ summary(Context) ->
                           ,fun normalize_view_results/2
                           ).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Normalizes the resuts of a view
+%% @doc Normalizes the resuts of a view
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
 normalize_view_results(JObj, Acc) ->
     [kz_json:get_value(<<"value">>, JObj)|Acc].
@@ -883,12 +870,11 @@ normalize_view_results(JObj, Acc) ->
 normalize_agents_results(JObj, Acc) ->
     [kz_doc:id(JObj) | Acc].
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Creates an entry in the acdc db of the account's participation in acdc
+%% @doc Creates an entry in the acdc db of the account's participation in acdc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec activate_account_for_acdc(cb_context:context()) -> 'ok'.
 activate_account_for_acdc(Context) ->
     case kz_datamgr:open_cache_doc(?KZ_ACDC_DB, cb_context:account_id(Context)) of
@@ -919,12 +905,11 @@ deactivate_account_for_acdc(AccountId) ->
             end
     end.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Remove deprecated agents key from the queues jobj
+%% @doc Remove deprecated agents key from the queues jobj
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec unset_agents_key(cb_context:context()) -> cb_context:context().
 unset_agents_key(Context) ->
     cb_context:update_doc(Context

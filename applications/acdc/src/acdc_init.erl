@@ -1,13 +1,16 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% Iterate over each account, find configured queues and configured
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2020, 2600Hz
+%%% @doc Iterate over each account, find configured queues and configured
 %%% agents, and start the attendant processes
+%%%
+%%% @author James Aimonetti
+%%% @author Daniel Finke
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%%
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_init).
 
 -export([start_link/0
@@ -19,6 +22,8 @@
         ]).
 
 -include("acdc.hrl").
+
+-define(CB_AGENTS_LIST, <<"queues/agents_listing">>).
 
 -spec start_link() -> 'ignore'.
 start_link() ->
@@ -56,7 +61,7 @@ init_acct(Account) ->
 
     acdc_stats:init_db(AccountId),
 
-    init_acct_queues(AccountDb, AccountId),
+    _ = init_acct_queues(AccountDb, AccountId),
     init_acct_agents(AccountDb, AccountId).
 
 -spec init_acct_queues(kz_term:ne_binary()) -> any().
@@ -84,7 +89,8 @@ init_acct_queues(AccountDb, AccountId) ->
 -spec init_acct_agents(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 init_acct_agents(AccountDb, AccountId) ->
     init_agents(AccountId
-               ,kz_datamgr:get_results(AccountDb, <<"queues/agents_listing">>, [])
+               ,kz_datamgr:get_results(AccountDb, ?CB_AGENTS_LIST
+                    ,[{'reduce', 'false'}])
                ).
 
 -spec init_queues(kz_term:ne_binary(), kazoo_data:get_results_return()) -> any().

@@ -1,11 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2020, 2600Hz
 %%% @doc
+%%% @author James Aimonetti
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%%
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_agent_maintenance).
 
 -export([acct_restart/1
@@ -23,51 +25,35 @@
 status() -> acdc_agents_sup:status().
 
 -spec acct_status(kz_term:text()) -> 'ok'.
-acct_status(AcctId) when not is_binary(AcctId) ->
-    acct_status(kz_term:to_binary(AcctId));
-acct_status(AcctId) ->
-    case acdc_agents_sup:find_acct_supervisors(AcctId) of
-        [] -> lager:info("no agents with account id ~s available", [AcctId]);
+acct_status(AccountId) when not is_binary(AccountId) ->
+    acct_status(kz_term:to_binary(AccountId));
+acct_status(AccountId) ->
+    case acdc_agents_sup:find_acct_supervisors(AccountId) of
+        [] -> lager:info("no agents with account id ~s available", [AccountId]);
         As ->
-            lager:info("Agent Statuses in ~s", [AcctId]),
+            lager:info("agent Statuses in ~s", [AccountId]),
             lists:foreach(fun acdc_agent_sup:status/1, As)
     end.
 
 -spec agent_status(kz_term:text(), kz_term:text()) -> 'ok'.
-agent_status(AcctId, AgentId) when not is_binary(AcctId);
-                                   not is_binary(AgentId) ->
-    agent_status(kz_term:to_binary(AcctId), kz_term:to_binary(AgentId));
-agent_status(AcctId, AgentId) ->
-    case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
-        'undefined' -> lager:info("no agent ~s in account ~s available", [AgentId, AcctId]);
+agent_status(AccountId, AgentId) when not is_binary(AccountId);
+                                      not is_binary(AgentId) ->
+    agent_status(kz_term:to_binary(AccountId), kz_term:to_binary(AgentId));
+agent_status(AccountId, AgentId) ->
+    case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
+        'undefined' -> lager:info("no agent ~s in account ~s available", [AgentId, AccountId]);
         S -> acdc_agent_sup:status(S)
     end.
 
--spec acct_restart(kz_term:text()) -> 'ok'.
-acct_restart(AcctId) when not is_binary(AcctId) ->
-    acct_restart(kz_term:to_binary(AcctId));
-acct_restart(AcctId) ->
-    case acdc_agents_sup:find_acct_supervisors(AcctId) of
-        [] -> lager:info("no agents with account id ~s available", [AcctId]);
-        As ->
-            lager:debug("Terminating existing agent processes in ~s", [AcctId]),
-            _ = [exit(Sup, 'kill') || Sup <- As],
-            lager:info("Restarting agents in ~s", [AcctId]),
-            acdc_init:init_acct_agents(AcctId),
-            'ok'
-    end.
+-spec acct_restart(kz_term:text()) -> [kz_types:sup_startchild_ret()].
+acct_restart(AccountId) when not is_binary(AccountId) ->
+    acct_restart(kz_term:to_binary(AccountId));
+acct_restart(AccountId) ->
+    acdc_agents_sup:restart_acct(AccountId).
 
--spec agent_restart(kz_term:text(), kz_term:text()) -> 'ok'.
-agent_restart(AcctId, AgentId) when not is_binary(AcctId);
-                                    not is_binary(AgentId) ->
-    agent_restart(kz_term:to_binary(AcctId), kz_term:to_binary(AgentId));
-agent_restart(AcctId, AgentId) ->
-    case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
-        'undefined' -> lager:info("no agent ~s in account ~s available", [AgentId, AcctId]);
-        S ->
-            lager:info("Terminating existing agent process ~p", [S]),
-            exit(S, 'kill'),
-            lager:info("Restarting agent ~s in ~s", [AgentId, AcctId]),
-            acdc_agents_sup:new(AcctId, AgentId),
-            'ok'
-    end.
+-spec agent_restart(kz_term:text(), kz_term:text()) -> kz_types:sup_startchild_ret().
+agent_restart(AccountId, AgentId) when not is_binary(AccountId);
+                                       not is_binary(AgentId) ->
+    agent_restart(kz_term:to_binary(AccountId), kz_term:to_binary(AgentId));
+agent_restart(AccountId, AgentId) ->
+    acdc_agents_sup:restart_agent(AccountId, AgentId).

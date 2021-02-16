@@ -1,8 +1,6 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% The queue process manages two queues
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2020, 2600Hz INC
+%%% @doc The queue process manages two queues
 %%%   1. a private one that Agents will send member_connect_* messages
 %%%      and such
 %%%   2. a shared queue that member_call messages will be published to,
@@ -10,17 +8,22 @@
 %%%      to auto-ack the payloads, defering that until the connection is
 %%%      accepted by the agent.
 %%%
+%%%
+%%% @author James Aimonetti
+%%% @author KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
+%%% @author Daniel Finke
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%%
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_queue_listener).
 -behaviour(gen_listener).
 
 %% API
 -export([start_link/4
+        ,member_call/3
         ,member_connect_req/4
         ,member_connect_re_req/1
         ,member_connect_win/3
@@ -57,7 +60,7 @@
                ,account_id :: kz_term:ne_binary()
 
                               %% PIDs of the gang
-               ,worker_sup :: pid()
+               ,worker_sup :: pid() | undefined
                ,mgr_pid :: pid()
                ,fsm_pid :: kz_term:api_pid()
                ,shared_pid :: kz_term:api_pid()
@@ -104,13 +107,14 @@
                      }
                     ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Starts the server
-%%--------------------------------------------------------------------
+%% @end
+%%------------------------------------------------------------------------------
 -spec start_link(pid(), pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:startlink_ret().
 start_link(WorkerSup, MgrPid, AccountId, QueueId) ->
     gen_listener:start_link(?SERVER
@@ -125,15 +129,20 @@ start_link(WorkerSup, MgrPid, AccountId, QueueId) ->
                            ,[WorkerSup, MgrPid, AccountId, QueueId]
                            ).
 
+-spec member_call(pid(), kz_json:object(), any()) -> 'ok'.
+member_call(Srv, MemberCallJObj, Delivery) ->
+    gen_listener:cast(Srv, {'member_call', MemberCallJObj, Delivery}).
+
 -spec member_connect_req(pid(), kz_json:object(), any(), kz_term:api_binary()) -> 'ok'.
 member_connect_req(Srv, MemberCallJObj, Delivery, Url) ->
     gen_listener:cast(Srv, {'member_connect_req', MemberCallJObj, Delivery, Url}).
+
 
 -spec member_connect_re_req(pid()) -> 'ok'.
 member_connect_re_req(Srv) ->
     gen_listener:cast(Srv, {'member_connect_re_req'}).
 
--spec member_connect_win(pid(), kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
+-spec member_connect_win(pid(), kz_json:object(), kz_term:proplist()) -> 'ok'.
 member_connect_win(Srv, RespJObj, QueueOpts) ->
     gen_listener:cast(Srv, {'member_connect_win', RespJObj, QueueOpts}).
 
@@ -162,19 +171,22 @@ exit_member_call_empty(Srv) ->
     gen_listener:cast(Srv, {'exit_member_call_empty'}).
 
 -spec finish_member_call(pid()) -> 'ok'.
--spec finish_member_call(pid(), kz_json:object()) -> 'ok'.
 finish_member_call(Srv) ->
     gen_listener:cast(Srv, {'finish_member_call'}).
+
+-spec finish_member_call(pid(), kz_json:object()) -> 'ok'.
 finish_member_call(Srv, AcceptJObj) ->
     gen_listener:cast(Srv, {'finish_member_call', AcceptJObj}).
 
 -spec cancel_member_call(pid()) -> 'ok'.
--spec cancel_member_call(pid(), kz_json:object()) -> 'ok'.
--spec cancel_member_call(pid(), kz_json:object(), gen_listener:basic_deliver()) -> 'ok'.
 cancel_member_call(Srv) ->
     gen_listener:cast(Srv, {'cancel_member_call'}).
+
+-spec cancel_member_call(pid(), kz_json:object()) -> 'ok'.
 cancel_member_call(Srv, RejectJObj) ->
     gen_listener:cast(Srv, {'cancel_member_call', RejectJObj}).
+
+-spec cancel_member_call(pid(), kz_json:object(), gen_listener:basic_deliver()) -> 'ok'.
 cancel_member_call(Srv, MemberCallJObj, Delivery) ->
     gen_listener:cast(Srv, {'cancel_member_call', MemberCallJObj, Delivery}).
 
@@ -187,7 +199,7 @@ send_sync_req(Srv, Type) ->
     gen_listener:cast(Srv, {'send_sync_req', Type}).
 
 -spec config(pid()) ->
-                    {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 config(Srv) ->
     gen_listener:call(Srv, 'config').
 
@@ -199,42 +211,33 @@ send_sync_resp(Srv, Strategy, StrategyState, ReqJObj) ->
 delivery(Srv) ->
     gen_listener:call(Srv, 'delivery').
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_listener callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
 %% @doc Initializes the listener
-%%--------------------------------------------------------------------
+%% @end
+%%------------------------------------------------------------------------------
 -spec init(list()) -> {'ok', state()}.
 init([WorkerSup, MgrPid, AccountId, QueueId]) ->
     kz_util:put_callid(QueueId),
     lager:debug("starting queue ~s", [QueueId]),
-    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    {'ok', QueueJObj} = kz_datamgr:open_cache_doc(AccountDb, QueueId),
-    gen_listener:cast(self(), {'start_friends', QueueJObj}),
+    gen_listener:cast(self(), {'get_friends', WorkerSup}),
     {'ok', #state{queue_id = QueueId
                  ,account_id = AccountId
                  ,my_id = acdc_util:proc_id()
-                 ,worker_sup = WorkerSup
                  ,mgr_pid = MgrPid
                  }}.
 
-%%--------------------------------------------------------------------
+
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling call messages
+%% @doc Handling call messages
 %%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_term:handle_call_ret_state(state()).
 handle_call('delivery', _From, #state{delivery=D}=State) ->
     {'reply', D, State};
@@ -246,63 +249,47 @@ handle_call(_Request, _From, State) ->
     lager:debug("unhandled call from ~p: ~p", [_From, _Request]),
     {'reply', {'error', 'unhandled_call'}, State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling cast messages
+%% @doc Handling cast messages
 %%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
-find_pid_from_supervisor({'ok', P}) when is_pid(P) ->
-    {'ok', P};
-find_pid_from_supervisor({'error', {'already_started', P}}) when is_pid(P) ->
-    {'ok', P};
-find_pid_from_supervisor(E) -> E.
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
+handle_cast({'get_friends', WorkerSup}, State) ->
+    FSMPid = acdc_queue_worker_sup:fsm(WorkerSup),
+    lager:debug("got queue FSM: ~p", [FSMPid]),
+    SharedPid = acdc_queue_worker_sup:shared_queue(WorkerSup),
+    lager:debug("got shared queue listener: ~p", [SharedPid]),
+    {'noreply', State#state{fsm_pid=FSMPid
+                           ,shared_pid=SharedPid
+                           }};
 
--spec start_shared_queue(state(), pid(), kz_term:api_integer()) -> {'noreply', state()}.
-start_shared_queue(#state{account_id=AccountId
-                         ,queue_id=QueueId
-                         ,worker_sup=WorkerSup
-                         }=State, FSMPid, Priority) ->
-    {'ok', SharedPid} =
-        find_pid_from_supervisor(
-          acdc_queue_worker_sup:start_shared_queue(WorkerSup, FSMPid, AccountId, QueueId, Priority)
-         ),
-    lager:debug("started shared queue listener: ~p", [SharedPid]),
-
-    {'noreply', State#state{
-                  fsm_pid = FSMPid
-                 ,shared_pid = SharedPid
-                 ,my_id = acdc_util:proc_id(FSMPid)
-                 }}.
-
--spec handle_cast(any(), state()) -> kz_term:handle_cast_ret_state(state()).
-handle_cast({'start_friends', QueueJObj}, #state{queue_id=QueueId
-                                                ,account_id=AccountId
-                                                ,worker_sup=WorkerSup
-                                                ,mgr_pid=MgrPid
-                                                }=State) ->
-    Priority = acdc_util:max_priority(kz_util:format_account_id(AccountId, 'encoded'), QueueId),
-    case find_pid_from_supervisor(acdc_queue_worker_sup:start_fsm(WorkerSup, MgrPid, QueueJObj)) of
-        {'ok', FSMPid} ->
-            lager:debug("started queue FSM: ~p", [FSMPid]),
-            start_shared_queue(State, FSMPid, Priority);
-        {'error', 'already_present'} ->
-            lager:debug("queue FSM is already present"),
-            case acdc_queue_worker_sup:fsm(WorkerSup) of
-                FSMPid when is_pid(FSMPid) ->
-                    lager:debug("found queue FSM pid: ~p", [FSMPid]),
-                    start_shared_queue(State, FSMPid, Priority);
-                'undefined' ->
-                    lager:debug("no queue FSM pid found"),
-                    {'stop', 'failed_fsm', State}
-            end
-    end;
 handle_cast({'gen_listener', {'created_queue', Q}}, #state{my_q='undefined'}=State) ->
     {'noreply', State#state{my_q=Q}, 'hibernate'};
+
+handle_cast({'member_call', MemberCallJObj, Delivery}, #state{queue_id=QueueId
+                                                             ,account_id=AccountId
+                                                             }=State) ->
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, MemberCallJObj)),
+    CallId = kapps_call:call_id(Call),
+
+    kz_util:put_callid(CallId),
+
+    acdc_util:bind_to_call_events(Call),
+    lager:debug("bound to call events for ~s", [CallId]),
+
+    %% Be ready in case a cancel comes in while queue_listener is handling call
+    gen_listener:add_binding(self(), 'acdc_queue', [{'restrict_to', ['member_call_result']}
+                                                   ,{'account_id', AccountId}
+                                                   ,{'queue_id', QueueId}
+                                                   ,{'callid', CallId}
+                                                   ]),
+
+    {'noreply', State#state{call=Call
+                           ,delivery=Delivery
+                           ,member_call_queue=kz_json:get_value(<<"Server-ID">>, MemberCallJObj)
+                           }};
 
 handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
            ,#state{my_q=MyQ
@@ -339,6 +326,8 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
                            ,member_call_queue=kz_json:get_value(<<"Server-ID">>, MemberCallJObj)
                            }
     ,'hibernate'};
+
+
 handle_cast({'member_connect_re_req'}, #state{my_q=MyQ
                                              ,my_id=MyId
                                              ,account_id=AccountId
@@ -353,9 +342,7 @@ handle_cast({'member_connect_win', RespJObj, QueueOpts}, #state{my_q=MyQ
                                                                ,queue_id=QueueId
                                                                }=State) ->
     lager:debug("agent process won the call, sending the win"),
-
     Call1 = apply_callback_details(Call, QueueOpts),
-
     send_member_connect_win(RespJObj, Call1, QueueId, MyQ, MyId, QueueOpts),
 
     {'noreply', State#state{call=Call1
@@ -520,64 +507,58 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling all non call/cast messages
+%% @doc Handling all non call/cast messages
 %%
-%% @spec handle_info(Info, State) -> {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_info(any(), state()) -> kz_term:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling all messages from the message bus
+%% @doc Handling all messages from the message bus
 %%
-%% @spec handle_event(JObj, State) -> {reply, Proplist} |
-%%                                   ignore
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, #state{fsm_pid=FSM}) ->
     {'reply', [{'fsm_pid', FSM}]}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% This function is called by a gen_listener when it is about to
+%% @doc This function is called by a gen_listener when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_listener terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("ACDc queue terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Convert process state when code is changed
+%% @doc Convert process state when code is changed
 %%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec maybe_timeout_agent(kz_term:api_object(), kz_term:ne_binary(), kapps_call:call(), kz_term:api_object()) -> 'ok'.
 maybe_timeout_agent('undefined', _QueueId, _Call, _JObj) -> 'ok';
 maybe_timeout_agent(_AgentId, _QueueId, _Call, 'undefined') -> 'ok';
@@ -597,7 +578,7 @@ send_member_connect_req(CallId, AccountId, QueueId, MyQ, MyId) ->
             ]),
     publish(Req, fun kapi_acdc_queue:publish_member_connect_req/1).
 
--spec send_member_connect_win(kz_json:object(), kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:kz_proplist()) -> 'ok'.
+-spec send_member_connect_win(kz_json:object(), kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
     CallJSON = kapps_call:to_json(Call),
     Win = props:filter_undefined(
@@ -613,15 +594,16 @@ send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
 -spec send_member_connect_satisfied(kz_json:object(), kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 send_member_connect_satisfied(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
     CallJSON = kapps_call:to_json(Call),
-    Q = kz_json:get_value(<<"Server-ID">>, RespJObj),
     Satisfied = props:filter_undefined(
                   [{<<"Call">>, CallJSON}
                   ,{<<"Process-ID">>, MyId}
                   ,{<<"Agent-Process-IDs">>, kz_json:get_list_value(<<"Agent-Process-IDs">>, RespJObj)}
                   ,{<<"Queue-ID">>, QueueId}
+                  ,{<<"Agent-ID">>, kz_json:get_value(<<"Agent-ID">>, RespJObj)}
+                  ,{<<"Accept-Agent-ID">>, kz_json:get_value(<<"Accept-Agent-ID">>, RespJObj)}
                    | QueueOpts ++ kz_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
                   ]),
-    publish(Q, Satisfied, fun kapi_acdc_queue:publish_member_connect_satisfied/2).
+    publish(Satisfied, fun kapi_acdc_queue:publish_member_connect_satisfied/1).
 
 -spec send_agent_timeout(kz_json:object(), kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 send_agent_timeout(RespJObj, Call, QueueId) ->
@@ -691,8 +673,8 @@ publish_sync_resp(Strategy, StrategyState, ReqJObj, Id) ->
              ]),
     publish(kz_json:get_value(<<"Server-ID">>, ReqJObj), Resp, fun kapi_acdc_queue:publish_sync_resp/2).
 
--spec apply_callback_details(kapps_call:call(), kz_term:kz_proplist()) ->
-                                    kapps_call:call().
+-spec apply_callback_details(kapps_call:call(), kz_term:proplist()) ->
+          kapps_call:call().
 apply_callback_details(Call, Props) ->
     case props:get_value(<<"Callback-Details">>, Props) of
         'undefined' -> Call;
@@ -755,22 +737,19 @@ clear_call_state(#state{call=Call
                }.
 
 -spec publish(kz_term:api_terms(), kz_amqp_worker:publish_fun()) -> 'ok'.
--spec publish(kz_term:ne_binary(), kz_term:api_terms(), fun((kz_term:ne_binary(), kz_term:api_terms()) -> 'ok')) -> 'ok'.
 publish(Req, F) ->
-    case catch F(Req) of
-        'ok' -> 'ok';
-        {'EXIT', _R} ->
-            ST = erlang:get_stacktrace(),
-            lager:debug("failed to publish message: ~p", [_R]),
-            kz_util:log_stacktrace(ST),
-            'ok'
-    end.
+    try F(Req)
+    catch
+        ?STACKTRACE(_E, _R, ST)
+        lager:debug("failed to publish message: ~p:~p", [_E, _R]),
+        kz_util:log_stacktrace(ST)
+        end.
+
+-spec publish(kz_term:ne_binary(), kz_term:api_terms(), fun((kz_term:ne_binary(), kz_term:api_terms()) -> 'ok')) -> 'ok'.
 publish(Q, Req, F) ->
-    case catch F(Q, Req) of
-        'ok' -> 'ok';
-        {'EXIT', _R} ->
-            ST = erlang:get_stacktrace(),
-            lager:debug("failed to publish message to ~s: ~p", [Q, _R]),
-            kz_util:log_stacktrace(ST),
-            'ok'
-    end.
+    try F(Q, Req)
+    catch
+        ?STACKTRACE(_E, _R, ST)
+        lager:debug("failed to publish message to ~s: ~p:~p", [Q, _E, _R]),
+        kz_util:log_stacktrace(ST)
+        end.

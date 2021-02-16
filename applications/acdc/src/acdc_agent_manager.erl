@@ -1,16 +1,19 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
-%%% @doc
-%%% Manages agent processes:
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2020, 2600Hz
+%%% @doc Manages agent processes:
 %%%   starting when an agent logs in
 %%%   stopping when an agent logs out
 %%%   collecting stats from agents
 %%%   and more!!!
+%%%
+%%% @author James Aimonetti
+%%% @author Daniel Finke
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%%
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_agent_manager).
 -behaviour(gen_listener).
 
@@ -70,13 +73,14 @@
                      }
                     ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Starts the server
-%%--------------------------------------------------------------------
+%% @end
+%%------------------------------------------------------------------------------
 -spec start_link() -> kz_term:startlink_ret().
 start_link() ->
     gen_listener:start_link({'local', ?SERVER}, ?MODULE
@@ -85,43 +89,35 @@ start_link() ->
                             ]
                            ,[]
                            ).
-%%--------------------------------------------------------------------
-%% @doc
-%% Start a new agent supervisor
+%%------------------------------------------------------------------------------
+%% @doc Start a new agent supervisor
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec start_agent(kz_term:ne_binary(), kz_term:ne_binary(), list()) -> kz_term:sup_startchild_ret().
 start_agent(AccountId, AgentId, Args) ->
     gen_listener:call(?SERVER, {'start_agent', AccountId, AgentId, Args}).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
 %% @doc Initializes the server
-%%--------------------------------------------------------------------
+%% @end
+%%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
     kz_hooks:register(),
     {'ok', #state{}}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling call messages
+%% @doc Handling call messages
 %%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_term:handle_call_ret_state(state()).
 handle_call({'start_agent', AccountId, AgentId, Args}, _, State) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
@@ -135,16 +131,12 @@ handle_call(_Request, _From, State) ->
     Reply = 'ok',
     {'reply', Reply, State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling cast messages
+%% @doc Handling cast messages
 %%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_term:handle_cast_ret_state(state()).
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
@@ -154,16 +146,12 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling all non call/cast messages
+%% @doc Handling all non call/cast messages
 %%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_info(any(), state()) -> kz_term:handle_info_ret_state(state()).
 handle_info(?HOOK_EVT(AccountId, <<"CHANNEL_CREATE">>, JObj), State) ->
     lager:debug("channel_create event"),
@@ -183,33 +171,29 @@ handle_info(_Info, State) ->
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
+%% @doc This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_server terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("agent manager terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Convert process state when code is changed
+%% @doc Convert process state when code is changed
 %%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

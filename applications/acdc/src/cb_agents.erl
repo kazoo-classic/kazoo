@@ -699,3 +699,4 @@ validate_status_change_params(Context, <<"pause">>) ->
 validate_status_change_params(Context, _S) ->
     lager:debug("great success for ~s", [_S]),
     cb_context:set_resp_status(Context, 'success').
+

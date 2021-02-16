@@ -31,7 +31,7 @@
                ,enter_when_empty = 'true' :: boolean() % allow caller into queue if no agents are logged in
                ,moh :: api_kz_term:ne_binary()
                ,current_member_calls = [] :: list() % ordered list of current members waiting
-               ,announcements_config = [] :: kz_term:kz_proplist()
+               ,announcements_config = [] :: kz_term:proplist()
                ,announcements_pids = #{} :: announcements_kz_term:pids()
                ,registered_callbacks = [] :: list()
                }).
