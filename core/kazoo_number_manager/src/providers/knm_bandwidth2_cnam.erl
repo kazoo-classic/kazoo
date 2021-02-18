@@ -13,6 +13,8 @@
 -include("knm.hrl").
 -include("knm_bandwidth2.hrl").
 
+-define(CNAM_PRIVATE, <<"PRIVATE">>).
+
 %%------------------------------------------------------------------------------
 %% @doc This function is called each time a number is saved, and will
 %% produce notifications if the cnam object changes
@@ -40,7 +42,7 @@ save(Number, _State) ->
 %%------------------------------------------------------------------------------
 -spec delete(knm_number:knm_number()) -> knm_number:knm_number().
 delete(Number) ->
-    _ = assign_cnam(Number, <<>>),
+    _ = remove_cnam(Number),
     knm_providers:deactivate_features(Number
                                      ,[?FEATURE_CNAM_INBOUND
                                       ,?FEATURE_CNAM_OUTBOUND
@@ -81,7 +83,7 @@ handle_outbound_cnam(Number) ->
         'undefined' when IsDryRun ->
             knm_providers:deactivate_feature(Number, ?FEATURE_CNAM_OUTBOUND);
         'undefined' when Feature /= 'undefined' ->
-            {'ok', Number1} = assign_cnam(Number, <<>>),
+            {'ok', Number1} = remove_cnam(Number),
             knm_providers:deactivate_feature(Number1, ?FEATURE_CNAM_OUTBOUND);
         'undefined' ->
             knm_providers:deactivate_feature(Number, ?FEATURE_CNAM_OUTBOUND);
@@ -162,7 +164,7 @@ publish_cnam_update(Number, 'false') ->
 %%  <LidbTnGroups>
 %%      <LidbTnGroup>
 %%          <TelephoneNumbers>
-%%              <TelephoneNumber>6502572250</TelephoneNumber>
+%%              <TelephoneNumber>[DID]</TelephoneNumber>
 %%          </TelephoneNumbers>
 %%          <SubscriberInformation>[CNAM]</SubscriberInformation>
 %%          <UseType>BUSINESS</UseType>
@@ -202,6 +204,12 @@ assign_cnam(Number, CNam) ->
             check_order(OrderId, OrderStatus, Response, PhoneNumber, Number, options(Number))
     end.
 
+-spec remove_cnam(knm_number:knm_number()) ->
+          {'ok', knm_number:knm_number()} |
+          {'error', kz_term:ne_binary()}.
+remove_cnam(Number) ->
+    assign_cnam(Number, ?CNAM_PRIVATE).
+    
 -spec url([nonempty_string()], knm_search:options()) -> nonempty_string().
 url(RelativePath, Options) ->
     lists:flatten(
