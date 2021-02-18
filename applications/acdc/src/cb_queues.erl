@@ -692,25 +692,7 @@ fetch_current_stats_summary(Context, QueueId) ->
                               end}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case kz_amqp_worker:call(Req
-                                     ,fun kapi_acdc_stats:publish_call_summary_req/1
-                                     ,fun kapi_acdc_stats:call_summary_resp_v/1
-                                     )
-    of
-        {'error', E} ->
-            crossbar_util:response('error', <<"stat request had errors">>, 400
-                                  ,kz_json:get_value(<<"Error-Reason">>, E)
-                                  ,Context
-                                  );
-        {'ok', Resp} ->
-            RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_time:current_tstamp()}
-                                          ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
-%%                                          ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
-%%                                          ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
-                                          ], kz_json:new()),
-            crossbar_util:response(RespJObj, Context)
-    end.
-
+    fetch_call_summary_stats_from_amqp(Context, Req).
 
 fetch_ranged_stats_summary(Context, StartRange, QueueId) ->
     MaxRange = 2682000 * 12,
@@ -748,24 +730,7 @@ fetch_ranged_stats_summary(Context, From, To, QueueId) ->
             ,{<<"End-Range">>, To}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case kz_amqp_worker:call(Req
-                                     ,fun kapi_acdc_stats:publish_call_summary_req/1
-                                     ,fun kapi_acdc_stats:call_summary_resp_v/1
-                                     )
-    of
-        {'error', E} ->
-            crossbar_util:response('error', <<"stat request had errors">>, 400
-                                  ,kz_json:get_value(<<"Error-Reason">>, E)
-                                  ,Context
-                                  );
-        {'ok', Resp} ->
-            RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_time:current_tstamp()}
-                                          ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
-%%                                          ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
-%%                                          ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
-                                          ], kz_json:new()),
-            crossbar_util:response(RespJObj, Context)
-    end.
+    fetch_call_summary_stats_from_amqp(Context, Req).
 
 fetch_ranged_queue_stats(Context, StartRange) ->
     MaxRange = ?ACDC_CLEANUP_WINDOW,
@@ -869,6 +834,44 @@ normalize_view_results(JObj, Acc) ->
 
 normalize_agents_results(JObj, Acc) ->
     [kz_doc:id(JObj) | Acc].
+
+-spec fetch_call_summary_stats_from_amqp(cb_context:context(), kz_term:proplist()) -> cb_context:context().
+fetch_call_summary_stats_from_amqp(Context, Req) ->
+    case kz_amqp_worker:call(Req
+                            ,fun kapi_acdc_stats:publish_call_summary_req/1
+                            ,fun kapi_acdc_stats:call_summary_resp_v/1
+                            )
+    of
+        {'error', Resp} -> format_stats_summary_error(Context, Resp);
+        {'ok', Resp} -> format_stats_summary_response(Context, Resp)
+    end.
+
+-spec format_stats_summary_response(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats_summary_response(Context, Resp) ->
+    case kz_json:get_value(<<"Event-Name">>, Resp) of
+        <<"call_summary_err">> -> format_stats_summary_error(Context, Resp);
+        <<"call_summary_resp">> -> format_stats_summary_stats(Context, Resp)
+    end.
+
+-spec format_stats_summary_stats(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats_summary_stats(Context, Resp) ->
+    RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_time:current_tstamp()}
+                                   ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
+                                   ], kz_json:new()),
+    crossbar_util:response(RespJObj, Context).
+
+-spec format_stats_summary_error(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats_summary_error(Context, Resp) ->
+    crossbar_util:response('error', <<"stat request had errors">>, 400
+                            ,kz_json:get_value(<<"Error-Reason">>, Resp)
+                            ,Context
+    ).
+
+
+
 
 %%------------------------------------------------------------------------------
 %% @private

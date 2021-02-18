@@ -353,13 +353,30 @@ fetch_stats_summary(Context) ->
                                      ,fun kapi_acdc_stats:agent_calls_resp_v/1
                                      )
     of
-        {'error', E} ->
-            crossbar_util:response('error', <<"stat request had errors">>, 400
-                                  ,kz_json:get_value(<<"Error-Reason">>, E)
-                                  ,Context
-                                  );
-        {'ok', Resp} -> crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, []), Context)
+        {'error', Resp} -> format_stats_summary_error(Context, Resp);
+        {'ok', Resp} -> format_stats_summary_response(Context, Resp)
     end.
+
+-spec format_stats_summary_response(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats_summary_response(Context, Resp) ->
+    case kz_json:get_value(<<"Event-Name">>, Resp) of
+        <<"agent_calls_err">> -> format_stats_summary_error(Context, Resp);
+        <<"agent_calls_resp">> ->  format_stats_summary_stats(Context, Resp)
+    end.
+
+-spec format_stats_summary_stats(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats_summary_stats(Context, Resp) ->
+    crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, kz_json:new()), Context).
+
+-spec format_stats_summary_error(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats_summary_error(Context, Resp) ->
+    crossbar_util:response('error', <<"stat request had errors">>, 400
+                            ,kz_json:get_value(<<"Error-Reason">>, Resp)
+                            ,Context
+    ).
 
 -spec fetch_all_current_agent_stats(cb_context:context()) -> cb_context:context().
 fetch_all_current_agent_stats(Context) ->
@@ -389,25 +406,34 @@ fetch_current_status(Context, AgentId) ->
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case kz_amqp_worker:call(Req
-                                     ,fun kapi_acdc_stats:publish_agent_cur_status_req/1
-                                     )
+                            ,fun kapi_acdc_stats:publish_agent_cur_status_req/1
+                            ,fun kapi_acdc_stats:agent_cur_status_resp_v/1
+                            )
     of
-        {'error', E} ->
-            crossbar_util:response('error'
-                                  ,<<"status request contains errors">>
-                                  ,400
-                                  ,kz_json:get_value(<<"Error-Reason">>, E)
-                                  ,Context
-                                  );
-        {'ok', Resp} ->
-            Data = fetch_current_status_response(kz_json:get_value(<<"Event-Category">>, Resp), kz_json:get_value(<<"Event-Name">>, Resp), Resp),
-            crossbar_util:response(Data, Context)
+        {'error', Resp} -> format_current_status_error(Context, Resp);
+        {'ok', Resp} -> format_current_status_response(Context, Resp)
     end.
-fetch_current_status_response(<<"acdc_stat">>, <<"agent_cur_status_resp">>, Resp) ->
-    kz_json:get_value(<<"Agents">>, Resp, kz_json:new());
-fetch_current_status_response(<<"acdc_stat">>, <<"agent_cur_status_err">>, _Resp) ->
-    kz_json:new().
 
+-spec format_current_status_response(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_current_status_response(Context, Resp) ->
+    case kz_json:get_value(<<"Event-Name">>, Resp) of
+        <<"agent_cur_status_err">> -> format_current_status_error(Context, Resp);
+        <<"agent_cur_status_resp">> ->  format_current_status_stats(Context, Resp)
+    end.
+
+-spec format_current_status_error(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_current_status_error(Context, Resp) ->
+    crossbar_util:response('error', <<"stat request had errors">>, 400
+                            ,kz_json:get_value(<<"Error-Reason">>, Resp)
+                            ,Context
+    ).
+
+-spec format_current_status_stats(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_current_status_stats(Context, Resp) ->
+    crossbar_util:response(kz_json:get_value(<<"Agents">>, Resp, kz_json:new()), Context).
 
 -spec fetch_all_current_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
                                         cb_context:context().
@@ -428,7 +454,7 @@ fetch_all_current_statuses(Context, AgentId, Status) ->
 
 -spec fetch_ranged_agent_stats(cb_context:context(), pos_integer()) -> cb_context:context().
 fetch_ranged_agent_stats(Context, StartRange) ->
-    MaxRange = ?ACDC_ARCHIVE_WINDOW,
+    MaxRange = ?ACDC_CLEANUP_WINDOW,
 
     Now = kz_time:current_tstamp(),
     Past = Now - MaxRange,
@@ -477,13 +503,25 @@ fetch_stats_from_amqp(Context, Req) ->
                             ,fun kapi_acdc_stats:current_calls_resp_v/1
                             )
     of
-        {'error', E} ->
-            crossbar_util:response('error', <<"stat request had errors">>, 400
-                                  ,kz_json:get_value(<<"Error-Reason">>, E)
-                                  ,Context
-                                  );
-        {'ok', Resp} -> format_stats(Context, Resp)
+        {'error', Resp} -> format_error(Context, Resp);
+        {'ok', Resp} -> format_response(Context, Resp)
     end.
+
+-spec format_response(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_response(Context, Resp) ->
+    case kz_json:get_value(<<"Event-Name">>, Resp) of
+        <<"current_calls_err">> -> format_error(Context, Resp);
+        <<"current_calls_resp">> ->  format_stats(Context, Resp)
+    end.
+
+-spec format_error(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_error(Context, Resp) ->
+    crossbar_util:response('error', <<"stat request had errors">>, 400
+                            ,kz_json:get_value(<<"Error-Reason">>, Resp)
+                            ,Context
+    ).
 
 -spec format_stats(cb_context:context(), kz_json:object()) ->
                           cb_context:context().

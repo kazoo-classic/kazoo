@@ -525,10 +525,6 @@ call_summary_req(JObj) ->
                   {'ok', Match} -> query_call_summary(Match, Limit);
                   {'error', _Errors}=E -> E
               end,
-                                                % Active = case call_build_match_spec(kz_json:set_value(<<"Status">>, [<<"waiting">>, <<"handled">>], JObj)) of
-                                                %              {'ok', Match1} -> query_calls(Match1, Limit);
-                                                %              {'error', _Errors1}=E1 -> E1
-                                                %          end,
     acdc_stats_util:publish_summary_data(RespQ, MsgId, Summary, []).
 
 -spec handle_agent_calls_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
@@ -952,8 +948,6 @@ query_calls(Match, _Limit) ->
                                   ,{<<"handled">>, []}
                                   ,{<<"abandoned">>, []}
                                   ,{<<"processed">>, []}
-                                  ,{<<"entered_position">>, []}
-                                  ,{<<"exited_position">>, []}
                                   ]),
 
             QueryResult = lists:foldl(fun query_call_fold/2, Dict, Stats),
@@ -961,8 +955,6 @@ query_calls(Match, _Limit) ->
             ,{<<"Handled">>, dict:fetch(<<"handled">>, QueryResult)}
             ,{<<"Abandoned">>, dict:fetch(<<"abandoned">>, QueryResult)}
             ,{<<"Processed">>, dict:fetch(<<"processed">>, QueryResult)}
-            ,{<<"Entered-Position">>, dict:fetch(<<"entered_position">>, QueryResult)}
-            ,{<<"Exited-Position">>, dict:fetch(<<"exited_position">>, QueryResult)}
             ]
     end.
 
