@@ -428,7 +428,7 @@ fetch_all_current_statuses(Context, AgentId, Status) ->
 
 -spec fetch_ranged_agent_stats(cb_context:context(), pos_integer()) -> cb_context:context().
 fetch_ranged_agent_stats(Context, StartRange) ->
-    MaxRange = ?ACDC_ARCHIVE_WINDOW,
+    MaxRange = ?ACDC_CLEANUP_WINDOW,
 
     Now = kz_time:current_tstamp(),
     Past = Now - MaxRange,
