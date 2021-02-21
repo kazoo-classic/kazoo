@@ -400,6 +400,7 @@ agent_call_table_opts() ->
                       ,{<<"acdc_status_stat">>, <<"wrapup">>}
                       ,{<<"acdc_status_stat">>, <<"paused">>}
                       ,{<<"acdc_status_stat">>, <<"outbound">>}
+                      ,{<<"acdc_status_stat">>, <<"inbound">>}
                       ]
                      }
                     ,{{?MODULE, 'handle_call_query'}
@@ -589,7 +590,7 @@ handle_cast({'create_status', #status_stat{id=_Id
                                           ,agent_id=AgentId
                                           ,status=_Status
                                           }=Stat}, State) ->
-    lager:debug("creating new status stat ~s: ~s", [_Id, _Status]),
+    lager:info("creating/updating new agent status stat ~s: ~s", [_Id, _Status]),
     case ets:insert_new(acdc_agent_stats:status_table_id(), Stat) of
         'true' -> 'ok';
         'false' ->
