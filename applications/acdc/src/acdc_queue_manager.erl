@@ -1461,7 +1461,7 @@ create_strategy_state(S, #strategy_state{agents=AgentQ}=SS, AccountDb, QueueId) 
                                          }
                                  end, JObjs),
             Q1 = lists:foldl(fun({AgentId, Priority}, Q) ->
-                                     lager:info("adding agent ~s (prio ~b) to strategy rr", [AgentId, -1 * Priority]),
+                                     lager:info("adding agent ~s (prio ~b) to strategy ~s", [AgentId, -1 * Priority, S]),
                                      pqueue4:in(AgentId, Priority, Q)
                              end
                             ,AgentQ
