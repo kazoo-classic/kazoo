@@ -240,10 +240,12 @@ process_message(#member_call{call=Call
                                    ,[<<"Request">>, <<"Application-Name">>]
                                    ], JObj) =:= <<"noop">>
         andalso kz_json:get_value(<<"Application-Response">>, JObj) =:= NoopId of
-        'true' -> cf_exe:amqp_send(Call, MemberCall, fun kapi_acdc_queue:publish_member_call/1);
-        'false' -> 'ok'
-    end,
-    wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start);
+        'true' -> 
+            cf_exe:amqp_send(Call, MemberCall, fun kapi_acdc_queue:publish_member_call/1),
+            wait_for_bridge(MC#member_call{silence_noop='undefined'}, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start);
+        'false' ->
+            wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start)
+    end;
 process_message(#member_call{call=Call
                             ,queue_id=QueueId
                             }=MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"member">>, <<"call_fail">>}) ->
