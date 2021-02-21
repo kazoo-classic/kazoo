@@ -1042,7 +1042,7 @@ maybe_pick_winner(#state{connect_resps=CRs
 
             ConnectWins = lists:foldl(fun(Winner, Wins) ->
                                               NewAgent = update_agent(Winner, Winners),
-                                              lager:debug("sending win to ~s(~s)", [kz_json:get_value(<<"Agent-ID">>, Winner)
+                                              lager:info("sending win to ~s(~s)", [kz_json:get_value(<<"Agent-ID">>, Winner)
                                                                                    ,kz_json:get_value(<<"Process-ID">>, Winner)
                                                                                    ]),
                                               acdc_queue_listener:member_connect_win(ListenerSrv, NewAgent, QueueOpts),

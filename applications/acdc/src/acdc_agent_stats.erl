@@ -251,7 +251,7 @@ handle_status_stat(JObj, Props) ->
                  <<"outbound">> -> kapi_acdc_stats:status_outbound_v(JObj);
                  <<"inbound">> -> kapi_acdc_stats:status_inbound_v(JObj);
                  _Name ->
-                     lager:debug("recv unknown status stat type ~s: ~p", [_Name, JObj]),
+                     lager:warning("recv unknown status stat type ~s: ~p", [_Name, JObj]),
                      'false'
              end,
 

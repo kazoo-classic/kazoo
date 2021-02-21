@@ -615,7 +615,7 @@ handle_cast({'create_status', #status_stat{id=_Id
                                           ,agent_id=AgentId
                                           ,status=_Status
                                           }=Stat}, State) ->
-    lager:debug("creating new status stat ~s: ~s", [_Id, _Status]),
+    lager:info("creating/updating new agent status stat ~s: ~s", [_Id, _Status]),
     case ets:insert_new(acdc_agent_stats:status_table_id(), Stat) of
         'true' -> 'ok';
         'false' ->
