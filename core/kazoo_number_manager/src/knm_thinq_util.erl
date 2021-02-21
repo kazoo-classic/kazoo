@@ -157,7 +157,7 @@ auth([]) ->
 auth(Options) ->
     Account_id = knm_carriers:account_id(Options),
     Reseller_id = knm_carriers:reseller_id(Options),
-    {'basic_auth', {?THQ_API_USERNAME(Account_id, Reseller_id), ?THQ_API_PASSWORD}}.
+    {'basic_auth', {?THQ_API_USERNAME(Account_id, Reseller_id), ?THQ_API_PASSWORD(Account_id, Reseller_id)}}.
 
 -spec to_thinq(kz_term:ne_binary()) -> kz_term:ne_binary().
 to_thinq(<<"+1", Number/binary>>) -> Number;
