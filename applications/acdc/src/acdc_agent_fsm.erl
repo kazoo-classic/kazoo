@@ -654,7 +654,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             acdc_agent_listener:member_connect_retry(AgentListener, JObj),
             {'next_state', 'paused', State};
         {'error', _E} ->
-            lager:debug("can't take the call, skip me: ~p", [_E]),
+            lager:info("agent ~s can't take the call, skip me: ~p", [AgentId, _E]),
             acdc_agent_listener:member_connect_retry(AgentListener, JObj),
             {'next_state', 'ready', State#state{connect_failures=CF+1}};
         {'ok', UpdatedEPs} ->
@@ -673,7 +673,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             {CIDNumber, CIDName} = acdc_util:caller_id(Call),
 
             acdc_agent_stats:agent_connecting(AccountId, AgentId, CallId, CIDName, CIDNumber),
-            lager:info("trying to ring agent endpoints(~p)", [length(UpdatedEPs)]),
+            lager:info("trying to ring agent ~s  endpoints(~p)", [AgentId, length(UpdatedEPs)]),
             lager:debug("notifications for the queue: ~p", [kz_json:get_value(<<"Notifications">>, JObj)]),
             {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                  ,member_call=Call
@@ -2342,7 +2342,7 @@ start_inbound_call_handling(CallId, Number, Name, #state{agent_listener=AgentLis
                                            ,inbound_call_ids=InboundCallIds
                                            }=State) when is_binary(CallId) ->
     kz_util:put_callid(CallId),
-    lager:debug("agent receiving inbound call, not receiving ACDc calls"),
+    lager:info("agent ~s direct inbound call ~s not receiving ACDc calls", [AgentId, CallId]),
     acdc_agent_listener:inbound_call(AgentListener, CallId, Number, Name),
     acdc_agent_stats:agent_inbound(AccountId, AgentId, CallId),
     State#state{inbound_call_ids=[CallId | lists:delete(CallId, InboundCallIds)]}.
