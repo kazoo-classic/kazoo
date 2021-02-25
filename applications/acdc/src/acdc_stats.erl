@@ -63,7 +63,6 @@
 -export([handle_call_stat/2
         ,handle_call_summary_req/2
         ,handle_call_query/2
-        ,handle_agent_calls_req/2
         ,handle_average_wait_time_req/2
         ]).
 
@@ -440,7 +439,7 @@ agent_call_table_opts() ->
                     ,{{?MODULE, 'handle_call_summary_req'}
                      ,[{<<"acdc_stat">>, <<"call_summary_req">>}]
                      }
-                    ,{{?MODULE, 'handle_agent_calls_req'}
+                    ,{{'acdc_agent_stats', 'handle_agent_calls_query'}
                      ,[{<<"acdc_stat">>, <<"agent_calls_req">>}]
                      }
                     ,{{?MODULE, 'handle_average_wait_time_req'}
@@ -527,17 +526,6 @@ call_summary_req(JObj) ->
               end,
     acdc_stats_util:publish_summary_data(RespQ, MsgId, Summary, []).
 
--spec handle_agent_calls_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
-handle_agent_calls_req(JObj, _Prop) ->
-    'true' = kapi_acdc_stats:agent_calls_req_v(JObj),
-    RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
-    MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
-    Limit = acdc_stats_util:get_query_limit(JObj),
-
-    case agent_call_build_match_spec(JObj) of
-        {'ok', Match} -> query_agent_calls(RespQ, MsgId, Match, Limit);
-        {'error', Errors} -> publish_agent_call_query_errors(RespQ, MsgId, Errors)
-    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Handle requests for the average wait time of a queue based on stats
@@ -720,12 +708,6 @@ terminate(_Reason, _) ->
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-
-publish_agent_call_query_errors(RespQ, MsgId, Errors) ->
-    acdc_stats_util:publish_query_errors(RespQ, MsgId, Errors, fun kapi_acdc_stats:publish_agent_calls_err/2).
-
-
-
 call_build_match_spec(JObj) ->
     case kz_json:get_value(<<"Account-ID">>, JObj) of
         'undefined' ->
@@ -873,29 +855,6 @@ call_summary_match_builder_fold(<<"End-Range">>, End, {CallStat, Contstraints}) 
     };
 call_summary_match_builder_fold(_, _, Acc) -> Acc.
 
-agent_call_build_match_spec(JObj) ->
-    case kz_json:get_value(<<"Account-ID">>, JObj) of
-        'undefined' ->
-            {'error', kz_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
-        AccountId ->
-            AccountMatch = {#agent_call_stat{account_id='$1', _='_'}
-                           ,[{'=:=', '$1', {'const', AccountId}}]
-                           },
-            agent_call_build_match_spec(JObj, AccountMatch)
-    end.
-
--spec agent_call_build_match_spec(kz_json:object(), {agent_call_stat(), list()}) ->
-          {'ok', ets:match_spec()} |
-          {'error', kz_json:object()}.
-agent_call_build_match_spec(JObj, AccountMatch) ->
-    case kz_json:foldl(fun agent_call_match_builder_fold/3, AccountMatch, JObj) of
-        {'error', _Errs}=Errors -> Errors;
-        {Stat, Constraints} -> {'ok', [{Stat, Constraints, ['$_']}]}
-    end.
-
-agent_call_match_builder_fold(_, _, {'error', _Err}=E) -> E;
-agent_call_match_builder_fold(_, _, Acc) -> Acc.
-
 -spec average_wait_time_build_match_spec(kz_json:object()) -> ets:match_spec().
 average_wait_time_build_match_spec(JObj) ->
     AccountId = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj),
@@ -949,7 +908,6 @@ query_calls(Match, _Limit) ->
                                   ,{<<"abandoned">>, []}
                                   ,{<<"processed">>, []}
                                   ]),
-
             QueryResult = lists:foldl(fun query_call_fold/2, Dict, Stats),
             [{<<"Waiting">>, dict:fetch(<<"waiting">>, QueryResult)}
             ,{<<"Handled">>, dict:fetch(<<"handled">>, QueryResult)}
@@ -999,45 +957,6 @@ to_max('undefined', X) -> X;
 to_max(X, 'undefined') -> X;
 to_max(X, Y) -> max(X,Y).
 
--spec query_agent_calls(kz_term:ne_binary(), kz_term:ne_binary(), ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
-query_agent_calls(RespQ, MsgId, Match, _Limit) ->
-    case ets:select(agent_call_table_id(), Match) of
-        [] ->
-            lager:debug("no stats found, sorry ~s", [RespQ]),
-            Resp = [{<<"Query-Time">>, kz_time:current_tstamp()}
-                   ,{<<"Msg-ID">>, MsgId}
-                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-                   ],
-            kapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp);
-        Stats ->
-            QueryResult = lists:foldl(fun query_agent_calls_fold/2, kz_json:new(), Stats),
-            Resp = kz_json:to_proplist(kz_json:set_value(<<"Data">>, QueryResult, kz_json:new())) ++
-                kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++
-                [{<<"Query-Time">>, kz_time:current_tstamp()}
-                ,{<<"Msg-ID">>, MsgId}
-                ],
-            kapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp)
-    end.
-
--spec query_agent_calls_fold(agent_call_stat(), kz_json:object()) -> kz_json:object().
-query_agent_calls_fold(#agent_call_stat{agent_id=AgentId}=Stat, JObj) ->
-    AgentJObj = kz_json:get_value(AgentId, JObj, []),
-    kz_json:set_value(AgentId, increment_agent_calls(Stat, AgentJObj), JObj).
-
--spec increment_agent_calls(agent_call_stat(), kz_json:object()) -> kz_json:object().
-increment_agent_calls(#agent_call_stat{queue_id=QueueId
-                                      ,status=Status
-                                      }, AgentJObj) ->
-    case Status of
-        <<"handled">> -> increment_agent_calls(QueueId, AgentJObj, <<"answered_calls">>);
-        <<"missed">> -> increment_agent_calls(QueueId, AgentJObj, <<"missed_calls">>);
-        _ -> AgentJObj
-    end.
-
--spec increment_agent_calls(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
-increment_agent_calls(QueueId, AgentJObj, Key) ->
-    Count = kz_json:get_integer_value([QueueId, Key], AgentJObj, 0) + 1,
-    kz_json:set_value([QueueId, Key], Count, AgentJObj).
 
 %%------------------------------------------------------------------------------
 %% @private

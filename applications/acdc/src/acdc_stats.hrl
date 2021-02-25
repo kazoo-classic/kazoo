@@ -4,6 +4,8 @@
 -define(CLEANUP_MSG, 'time_to_cleanup').
 
 -define(VALID_STATUSES, [<<"waiting">>, <<"handled">>, <<"abandoned">>, <<"processed">>]).
+-define(VALID_AGENT_STATUSES, [<<"handled">>, <<"missed">>]).
+
 
 -define(STATS_QUERY_LIMITS_ENABLED, kapps_config:get_is_true(?CONFIG_CAT, <<"stats_query_limits_enabled">>, 'true')).
 -define(MAX_RESULT_SET, kapps_config:get_integer(?CONFIG_CAT, <<"max_result_set">>, 25)).
