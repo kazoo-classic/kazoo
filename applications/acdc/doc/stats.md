@@ -4,7 +4,7 @@
 
 | Function | Table Name  | Archived | Search Archive |Description |
 | -------- | --------- | ----------- | -------- | ------ |
-| `call_table_id()` | `'acdc_stats_call'` | `true` | **false** | record is updated during an ongoing call |  
+| `call_table_id()` | `'acdc_stats_call'` | `true` | **false** | record is updated during an ongoing call, search MODB via `/acountd_id/acdc_call_stats` endpoint |  
 | `call_summary_table_id()` | `'acdc_stats_call_summary'` | `true` | `true` | record is created after a call completes, previously only this stat was archived to the couch MODB. |  
 | `agent_call_table_id()` | `'acdc_stats_agent_call'` | **false** | **false** | record is created after a call completes |  
   
@@ -17,7 +17,7 @@ records older than archive will be archived to MODB
 cleanup proccess runs every /system_config/acdc/cleanup_period_ms, default = 360000 (6mins)  
   
 cleanup_window = system_config/acdc/cleanup_window_s default 86400 (24hours)  
-records older than cleanup will be removed
+records older than cleanup window will be removed
 #
     
 ## acdc_stats_call
@@ -75,6 +75,16 @@ new record is created on every agent status change
 
 ## API Endpoint:
 ### /agents/stats -> current_calls_req -> call_table_id() 
+
+/agents/stats : Last 24 hours  
+/agents/stats?recent=true : Last 24 hours  
+/agents/stats?start_range={{START_TIMESTAMP}} : Stats from START_TIMESTAMP to now()  
+/agents/starts/?start_range={{START_TIMESTAMP}}&end_range={{END_TIMESTAMP}} :stats from START_TIMESTAMP to END_TIMESTAMP  
+
+
+**NOTE**
+**Max range is limited to now() - {{ACDC_CLEANUP_WINDOW}} which defaults to 24 hrs**  
+**To get call stats outside this range then use the acdc_call_stats endpoint instead.**   
 
 ```
 	agent_id
