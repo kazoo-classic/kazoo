@@ -2413,6 +2413,11 @@ find_username(EP) ->
 find_sip_username(EP, 'undefined') -> kz_json:get_value(<<"To-User">>, EP);
 find_sip_username(_EP, Username) -> Username.
 
+-spec find_extension(kz_json:object()) -> kz_term:api_binary().
+find_extension(EP) ->
+    [Ext, _] = binary:split(kz_json:get_value(<<"Presence-ID">>, EP), <<$@>>),
+    Ext.
+
 -spec find_endpoint_id(kz_json:object()) -> kz_term:api_binary().
 find_endpoint_id(EP) ->
     find_endpoint_id(EP, kz_doc:id(EP)).
@@ -2425,18 +2430,36 @@ find_endpoint_id(_EP, EPId) -> EPId.
 monitor_endpoint('undefined', _) -> 'ok';
 monitor_endpoint(EP, AccountId) ->
     Username = find_username(EP),
+    Extension = find_extension(EP),
+
+    %% Bind for outbound call requests
+    acdc_agent_listener:add_endpoint_bindings(AgentListener
+                                             ,kz_endpoint:get_sip_realm(EP, AccountId)
+                                             ,Username
+                                             ),
     %% Inform us of device changes
     catch gproc:reg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:reg(?NEW_CHANNEL_REG(AccountId, Username)),
-    catch gproc:reg(?DESTROYED_CHANNEL_REG(AccountId, Username)).
+    catch gproc:reg(?DESTROYED_CHANNEL_REG(AccountId, Username)),
+    catch gproc:reg(?NEW_CHANNEL_REG(AccountId, Extension)),
+    catch gproc:reg(?DESTROYED_CHANNEL_REG(AccountId, Extension)).
 
 -spec unmonitor_endpoint(kz_json:object(), kz_term:ne_binary()) -> any().
 unmonitor_endpoint(EP, AccountId) ->
     Username = find_username(EP),
+    Extension = find_extension(EP),
+
+    %% Bind for outbound call requests
+    acdc_agent_listener:remove_endpoint_bindings(AgentListener
+                                                ,kz_endpoint:get_sip_realm(EP, AccountId)
+                                                ,Username
+                                                ),
     %% Inform us of device changes
     catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, Username)),
-    catch gproc:unreg(?DESTROYED_CHANNEL_REG(AccountId, Username)).
+    catch gproc:unreg(?DESTROYED_CHANNEL_REG(AccountId, Username)),
+    catch gproc:ureg(?NEW_CHANNEL_REG(AccountId, Extension)),
+    catch gproc:ureg(?DESTROYED_CHANNEL_REG(AccountId, Extension)).
 
 -spec maybe_add_endpoint(kz_term:ne_binary(), kz_json:object(), kz_json:objects(), kz_term:ne_binary()) -> any().
 maybe_add_endpoint(EPId, EP, EPs, AccountId) ->
