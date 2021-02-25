@@ -343,7 +343,7 @@ queues_summary() ->
 queues_summary(AccountId) ->
     kz_util:put_callid(?MODULE),
     show_queues_summary(
-      [Q || {_, {QAccountId, _}} = Q <- acdc_queues_sup:queues_running(),
+      [Q || {_, {QAccountId, _, _}} = Q <- acdc_queues_sup:queues_running(),
             QAccountId =:= AccountId
       ]).
 
@@ -351,15 +351,15 @@ queues_summary(AccountId) ->
 queue_summary(AccountId, QueueId) ->
     kz_util:put_callid(?MODULE),
     show_queues_summary(
-      [Q || {_, {QAccountId, QQueueId}} = Q <- acdc_queues_sup:queues_running(),
+      [Q || {_, {QAccountId, QQueueId, _}} = Q <- acdc_queues_sup:queues_running(),
             QAccountId =:= AccountId,
             QQueueId =:= QueueId
       ]).
 
 -spec show_queues_summary([{pid(), {kz_term:ne_binary(), kz_term:ne_binary()}}]) -> 'ok'.
 show_queues_summary([]) -> 'ok';
-show_queues_summary([{P, {AccountId, QueueId}}|Qs]) ->
-    ?PRINT("  Supervisor: ~p Acct: ~s Queue: ~s~n", [P, AccountId, QueueId]),
+show_queues_summary([{P, {AccountId, QueueId, Strategy}}|Qs]) ->
+    ?PRINT("  Supervisor: ~p Acct: ~s Queue: ~s Strategy: ~s~n", [P, AccountId, QueueId, Strategy]),
     show_queues_summary(Qs).
 
 -spec queues_detail() -> 'ok'.
