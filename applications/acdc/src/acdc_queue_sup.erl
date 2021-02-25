@@ -80,7 +80,7 @@ status(Supervisor) ->
     ?PRINT("    Queued Calls: (Total : ~p) ", [length(Queued_calls)]),
     _ = case Queued_calls of
             [] -> ?PRINT("      NONE");
-            Cs -> [?PRINT("      ~s", [C]) || C <- Cs]
+            Cs -> [?PRINT("      ~p", [C]) || C <- Cs]
         end,
 
     _ = acdc_queue_workers_sup:status(WorkersSup),

@@ -202,7 +202,7 @@ start_queue_call(JObj, Props, Call, 'false') ->
 
     Call1 = kapps_call:set_custom_channel_var(<<"Queue-ID">>, QueueId, Call),
 
-    lager:info("member call for queue ~s recv", [QueueId]),
+    lager:info("member call ~s for queue ~s recv", [kapps_call:call_id(Call), QueueId]),
     lager:debug("answering call"),
     kapps_call_command:answer_now(Call1),
 
@@ -434,7 +434,7 @@ handle_call('status', _, #state{strategy_state=#strategy_state{details=Details}}
     {'reply', {Available, Busy}, State};
 
 handle_call('calls', _, #state{current_member_calls=Calls}=State) ->
-    Call_ids = [kapps_call:call_id(Call) || {_, Call} <- Calls],
+    Call_ids = [{kapps_call:call_id(Call), acdc_util:caller_id(Call)} || {_, Call} <- Calls],
     {'reply', Call_ids, State};
 
 handle_call('strategy', _, #state{strategy=Strategy}=State) ->
@@ -559,6 +559,14 @@ handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict}=S
 handle_cast({'start_workers'}, #state{account_id=AccountId
                                      ,queue_id=QueueId
                                      ,supervisor=QueueSup
+                                     ,strategy='all'
+                                     }=State) ->
+    WorkersSup = acdc_queue_sup:workers_sup(QueueSup),
+    acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId),
+    {'noreply', State};
+handle_cast({'start_workers'}, #state{account_id=AccountId
+                                     ,queue_id=QueueId
+                                     ,supervisor=QueueSup
                                      }=State) ->
     WorkersSup = acdc_queue_sup:workers_sup(QueueSup),
     case kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded')
@@ -596,7 +604,7 @@ handle_cast({'agent_available', AgentId, Priority, Skills}, #state{supervisor=Qu
                                                                   ,strategy=Strategy
                                                                   }=State) when is_binary(AgentId) ->
     StrategyState1 = update_strategy_with_agent(State, AgentId, Priority, Skills, 'add', 'undefined'),
-    maybe_start_queue_workers(QueueSup, ss_size(Strategy, StrategyState1, 'logged_in')),
+    maybe_start_queue_workers(QueueSup, ss_size(Strategy, StrategyState1, 'logged_in'), Strategy),
     {'noreply', State#state{strategy_state=StrategyState1}
     ,'hibernate'};
 handle_cast({'agent_available', JObj}, State) ->
@@ -736,7 +744,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
     %% SBRR needs extra workers, priority feature needs extra workers
-    maybe_start_queue_workers(QueueSup, length(Calls) + 1),
+    maybe_start_queue_workers(QueueSup, length(Calls) + 1, Strategy),
 
     State1 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
                         ,State
@@ -748,6 +756,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
 
 handle_cast({'handle_queue_member_add', JObj}, #state{supervisor=QueueSup
                                                      ,current_member_calls=Calls
+                                                     ,strategy=Strategy
                                                      }=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
     CallId = kapps_call:call_id(Call),
@@ -756,7 +765,7 @@ handle_cast({'handle_queue_member_add', JObj}, #state{supervisor=QueueSup
     lager:debug("received notification of new queue member ~s with priority ~p", [CallId, Priority]),
 
     %% SBRR needs extra workers, priority feature needs extra workers
-    maybe_start_queue_workers(QueueSup, length(Calls) + 1),
+    maybe_start_queue_workers(QueueSup, length(Calls) + 1, Strategy),
 
     State1 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
                         ,State
@@ -941,6 +950,7 @@ add_queue_member(Call, 'undefined', Position, State) ->
 add_queue_member(Call, Priority, Position, State) ->
     #state{current_member_calls=Calls}=State1 = remove_queue_member(Call, State),
     %% Handles the case where calls were removed since the Position was assigned
+    lager:info("add member call ~s (~p) at position ~p", [kapps_call:call_id(Call), acdc_util:caller_id(Call), Position]),
     SplitIndex = min(Position - 1, length(Calls)),
     {Before, After} = lists:split(SplitIndex, Calls),
     Calls1 = Before ++ [{Priority, Call}|After],
@@ -1551,7 +1561,9 @@ ss_size('mi', #strategy_state{agents=Agents
 ss_size('sbrr', #strategy_state{agents=#{rr_queue := RRQueue}}=SS, 'free') ->
     ss_size('mi', SS#strategy_state{agents=pqueue4:to_list(RRQueue)}, 'free').
 
-maybe_start_queue_workers(QueueSup, Count) ->
+maybe_start_queue_workers(_QueueSup, _Count, 'all') ->
+    ok;
+maybe_start_queue_workers(QueueSup, Count, _Strategy) ->
     WSup = acdc_queue_sup:workers_sup(QueueSup),
     case acdc_queue_workers_sup:worker_count(WSup) of
         N when N >= Count -> 'ok';
