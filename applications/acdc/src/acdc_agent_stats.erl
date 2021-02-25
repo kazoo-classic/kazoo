@@ -24,10 +24,6 @@
         ,agent_outbound/3
         ,agent_inbound/3
 
-        ,handle_status_stat/2
-        ,handle_status_query/2
-        ,handle_agent_cur_status_req/2
-
         ,status_stat_id/3
 
         ,status_table_id/0
@@ -39,6 +35,13 @@
         ,agent_cur_status_table_opts/0
 
         ,archive_status_data/2
+        ]).
+
+%% AMQP Callbacks
+-export([handle_agent_calls_query/2
+        ,handle_status_stat/2
+        ,handle_status_query/2
+        ,handle_agent_cur_status_req/2
         ]).
 
 -include("acdc.hrl").
@@ -236,6 +239,30 @@ agent_inbound(AccountId, AgentId, CallId) ->
                        ,fun kapi_acdc_stats:publish_status_inbound/1
                        ).
 
+-spec handle_agent_calls_query(kz_json:object(), kz_term:proplist()) -> 'ok'.
+handle_agent_calls_query(JObj, _Prop) ->
+    'true' = kapi_acdc_stats:agent_calls_req_v(JObj),
+    RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
+    MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
+
+    case agent_call_build_match_spec(JObj) of
+        {'ok', Match} -> 
+            Limit = acdc_stats_util:get_query_limit(JObj),
+            Result = query_agent_calls(Match, Limit),
+            Resp = Result ++
+                    kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++
+                    [{<<"Query-Time">>, kz_time:current_tstamp()}
+                    ,{<<"Msg-ID">>, MsgId}
+            ],
+            kapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp);
+        {'error', Errors} -> publish_agent_call_query_errors(RespQ, MsgId, Errors)
+    end.
+
+publish_agent_call_query_errors(RespQ, MsgId, Errors) ->
+    acdc_stats_util:publish_query_errors(RespQ, MsgId, Errors, fun kapi_acdc_stats:publish_agent_calls_err/2).
+
+
+
 -spec handle_status_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_status_stat(JObj, Props) ->
     'true' = case (EventName = kz_json:get_value(<<"Event-Name">>, JObj)) of
@@ -317,6 +344,180 @@ publish_query_errors(RespQ, MsgId, Errors, PubFun) ->
           ],
     lager:debug("responding with errors to req ~s: ~p", [MsgId, Errors]),
     PubFun(RespQ, API).
+
+
+
+agent_call_build_match_spec(JObj) ->
+    case kz_json:get_value(<<"Account-ID">>, JObj) of
+        'undefined' ->
+            {'error', kz_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
+        AccountId ->
+            AccountMatch = {#agent_call_stat{account_id='$1', _='_'}
+                           ,[{'=:=', '$1', {'const', AccountId}}]
+                           },
+            agent_call_build_match_spec(JObj, AccountMatch)
+    end.
+
+-spec agent_call_build_match_spec(kz_json:object(), {agent_call_stat(), list()}) ->
+          {'ok', ets:match_spec()} |
+          {'error', kz_json:object()}.
+agent_call_build_match_spec(JObj, AccountMatch) ->
+    case kz_json:foldl(fun agent_call_match_builder_fold/3, AccountMatch, JObj) of
+        {'error', _Errs}=Errors -> Errors;
+        {Stat, Constraints} -> {'ok', [{Stat, Constraints, ['$_']}]}
+    end.
+
+agent_call_match_builder_fold(<<"Agent-ID">>, AgentId, {AgentCallStat, Contstraints}) ->
+    {AgentCallStat#agent_call_stat{agent_id='$3'}
+    ,[{'=:=', '$3', {'const', AgentId}} | Contstraints]
+    };
+
+agent_call_match_builder_fold(<<"Start-Range">>, Start, {AgentCallStat, Contstraints}) ->
+    Now = kz_time:current_tstamp(),
+    Past = Now - ?CLEANUP_WINDOW,
+    Start1 = acdc_stats_util:apply_query_window_wiggle_room(Start, Past),
+
+    try kz_term:to_integer(Start1) of
+        N when N < Past ->
+            {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is too far in the past">>}
+                                        ,{<<"Window-Size">>, ?CLEANUP_WINDOW}
+                                        ,{<<"Current-Timestamp">>, Now}
+                                        ,{<<"Past-Timestamp">>, Past}
+                                        ])};
+        N when N > Now ->
+            {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is in the future">>}
+                                        ,{<<"Current-Timestamp">>, Now}
+                                        ])};
+        N ->
+            {AgentCallStat#agent_call_stat{timestamp='$5'}
+            ,[{'>=', '$5', N} | Contstraints]
+            }
+    catch
+        _:_ ->
+            {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is not an integer">>}])}
+    end;
+agent_call_match_builder_fold(<<"End-Range">>, End, {AgentCallStat, Contstraints}) ->
+    Now = kz_time:current_tstamp(),
+    Past = Now - ?CLEANUP_WINDOW,
+    End1 = acdc_stats_util:apply_query_window_wiggle_room(End, Past),
+
+    try kz_term:to_integer(End1) of
+        N when N < Past ->
+            {'error', kz_json:from_list([{<<"End-Range">>, <<"supplied value is too far in the past">>}
+                                        ,{<<"Window-Size">>, ?CLEANUP_WINDOW}
+                                        ,{<<"Current-Timestamp">>, Now}
+                                        ])};
+        N when N > Now ->
+            {'error', kz_json:from_list([{<<"End-Range">>, <<"supplied value is in the future">>}
+                                        ,{<<"Current-Timestamp">>, Now}
+                                        ])};
+        N ->
+            {AgentCallStat#agent_call_stat{timestamp='$5'}
+            ,[{'=<', '$5', N} | Contstraints]
+            }
+    catch
+        _:_ ->
+            {'error', kz_json:from_list([{<<"End-Range">>, <<"supplied value is not an integer">>}])}
+    end;
+
+agent_call_match_builder_fold(<<"Status">>, Statuses, {AgentCallStat, Constraints}) when is_list(Statuses) ->
+    AgentCallStat1 = AgentCallStat#agent_call_stat{status='$4'},
+    Constraints1 = lists:foldl(fun(_Status, {'error', _Err}=E) ->
+                                       E;
+                                  (Status, OrdConstraints) ->
+                                       case is_valid_agent_call_status(Status) of
+                                           {'true', Normalized} ->
+                                               erlang:append_element(OrdConstraints, {'=:=', '$4', {'const', Normalized}});
+                                           'false' ->
+                                               {'error', kz_json:from_list([{<<"Status">>, <<"unknown status supplied">>}])}
+                                       end
+                               end, {'orelse'}, Statuses),
+    case Constraints1 of
+        {'error', _Err}=E -> E;
+        _ -> {AgentCallStat1, [Constraints1 | Constraints]}
+    end;
+agent_call_match_builder_fold(<<"Status">>, Status, {AgentCallStat, Contstraints}) ->
+    case is_valid_agent_call_status(Status) of
+        {'true', Normalized} ->
+            {AgentCallStat#agent_call_stat{status='$4'}
+            ,[{'=:=', '$4', {'const', Normalized}} | Contstraints]
+            };
+        'false' ->
+            {'error', kz_json:from_list([{<<"Status">>, <<"unknown status supplied">>}])}
+    end;
+
+
+agent_call_match_builder_fold(_, _, {'error', _Err}=E) -> E;
+agent_call_match_builder_fold(_, _, Acc) -> Acc.
+
+is_valid_agent_call_status(S) ->
+    Status = kz_term:to_lower_binary(S),
+    case lists:member(Status, ?VALID_AGENT_STATUSES) of
+        'true' -> {'true', Status};
+        'false' -> 'false'
+    end.
+
+-spec query_agent_calls(ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
+query_agent_calls(Match, _Limit) ->
+    case ets:select(acdc_stats:agent_call_table_id(), Match) of
+        [] ->
+            lager:debug("no stats found, sorry"),
+            [];
+        Stats ->
+            Dict = dict:from_list([{<<"handled">>, []}
+                                    ,{<<"missed">>, []}
+                                    ]),
+            QueryResult = lists:foldl(fun query_agent_calls_fold/2, Dict, Stats),
+            [{<<"Missed">>, dict:fetch(<<"missed">>, QueryResult)}
+            ,{<<"Handled">>, dict:fetch(<<"handled">>, QueryResult)}
+            ]  
+    end.
+
+-spec query_agent_calls_fold(agent_call_stat(), dict:dict()) -> kz_json:object().
+query_agent_calls_fold(#agent_call_stat{status=Status}=Stat, Acc) ->
+    Doc = agent_call_stat_to_doc(Stat),
+    dict:update(Status, fun(L) -> [Doc | L] end, [Doc], Acc).
+%    AgentJObj = kz_json:get_value(AgentId, JObj, []),
+%    kz_json:set_value(AgentId, increment_agent_calls(Stat, AgentJObj), JObj).
+
+-spec agent_call_stat_to_doc(agent_call_stat()) -> kz_json:object().
+agent_call_stat_to_doc(#agent_call_stat{id=Id
+                                        ,account_id=AccountId
+                                        ,queue_id=QueueId
+                                        ,agent_id=AgentId
+                                        ,call_id=CallId
+                                        ,status=Status
+                                        ,timestamp=Timestamp
+                                        }) ->
+    Prop = [{<<"_id">>, Id}
+           ,{<<"call_id">>, CallId}
+           ,{<<"agent_id">>, AgentId}
+           ,{<<"timestamp">>, Timestamp}
+           ,{<<"status">>, Status}
+           ,{<<"queue_id">>, QueueId}
+           ],
+    kz_doc:update_pvt_parameters(kz_json:from_list(Prop)
+                                ,acdc_stats_util:db_name(AccountId)
+                                ,[{'account_id', AccountId}
+                                 ,{'type', <<"agent_call_stat">>}
+                                 ]).
+
+%-spec increment_agent_calls(agent_call_stat(), kz_json:object()) -> kz_json:object().
+%increment_agent_calls(#agent_call_stat{queue_id=QueueId
+%                                      ,status=Status
+%                                      }, AgentJObj) ->
+%    case Status of
+%        <<"handled">> -> increment_agent_calls(QueueId, AgentJObj, <<"answered_calls">>);
+%        <<"missed">> -> increment_agent_calls(QueueId, AgentJObj, <<"missed_calls">>);
+%        _ -> AgentJObj
+%    end.
+%
+%-spec increment_agent_calls(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
+%increment_agent_calls(QueueId, AgentJObj, Key) ->
+%    Count = kz_json:get_integer_value([QueueId, Key], AgentJObj, 0) + 1,
+%    kz_json:set_value([QueueId, Key], Count, AgentJObj).
+
+
 
 status_build_match_spec(JObj) ->
     case kz_json:get_value(<<"Account-ID">>, JObj) of
