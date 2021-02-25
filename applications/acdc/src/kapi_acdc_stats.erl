@@ -503,7 +503,7 @@ agent_calls_err_v(JObj) ->
     agent_calls_err_v(kz_json:to_proplist(JObj)).
 
 -define(AGENT_CALLS_RESP_HEADERS, [<<"Query-Time">>]).
--define(OPTIONAL_AGENT_CALLS_RESP_HEADERS, [<<"Data">>]).
+-define(OPTIONAL_AGENT_CALLS_RESP_HEADERS, [<<"Missed">>,<<"Handled">>]).
 -define(AGENT_CALLS_RESP_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
                                  ,{<<"Event-Name">>, <<"agent_calls_resp">>}
                                  ]).
