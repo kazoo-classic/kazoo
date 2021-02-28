@@ -83,7 +83,7 @@ handle(Data, Call) ->
 
     CurrQueueSize = current_queue_size(kapps_call:account_id(Call1), QueueId),
 
-    lager:info("max size: ~p curr size: ~p", [MaxQueueSize, CurrQueueSize]),
+    lager:info("member call: ~s enter queue: ~s  max_wait: ~p (secs) max size: ~p curr size: ~p", [kapps_call:call_id(Call), QueueId, MaxWait div ?MILLISECONDS_IN_SECOND, MaxQueueSize, CurrQueueSize]),
 
     maybe_enter_queue(#member_call{call=Call1
                                   ,config_data=MemberCall
@@ -151,7 +151,7 @@ maybe_enter_queue(#member_call{call=Call
                  ,'false') ->
     case kapps_call_command:b_channel_status(kapps_call:call_id(Call)) of
         {'ok', _} ->
-            lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
+            lager:info("asking for an agent, waiting up to ~p secs", [MaxWait div ?MILLISECONDS_IN_SECOND ]),
             cf_exe:amqp_send(Call, MemberCall, fun kapi_acdc_queue:publish_member_call/1),
             _ = kapps_call_command:flush_dtmf(Call),
             wait_for_bridge(MC#member_call{call=kapps_call:kvs_store('queue_id', QueueId, Call)
@@ -211,7 +211,7 @@ wait_for_bridge(MC, BreakoutState, Timeout) ->
 
 -spec wait_for_bridge(member_call(), breakout_state(), max_wait(), kz_term:kz_now()) -> 'ok'.
 wait_for_bridge(#member_call{call=Call}, _, Timeout, _Start) when Timeout < 0 ->
-    lager:debug("timeout is less than 0: ~p", [Timeout]),
+    lager:warning("Max wait exceeded end call: ~p", [kapps_call:call_id(Call)]),
     end_member_call(Call);
 wait_for_bridge(#member_call{call=Call}=MC, BreakoutState, Timeout, Start) ->
     Wait = os:timestamp(),

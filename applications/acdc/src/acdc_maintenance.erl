@@ -194,18 +194,40 @@ show_call_stat_cat([K|Ks], Resp) ->
     case kz_json:get_value(K, Resp) of
         'undefined' -> show_call_stat_cat(Ks, Resp);
         V ->
-            io:format("call stats in ~s~n", [K]),
+            ?PRINT("~nCalls ~s~n", [K]),
+            ?PRINT("~s", [lists:foldr(fun(F, Acc) -> print_field(F) ++ Acc end, [], ?CALL_INFO_FIELDS)]),
             show_stats(V),
-            show_call_stat_cat(Ks, Resp),
-            io:format("~n~n", [])
+            show_call_stat_cat(Ks, Resp)
     end.
+
 
 show_stats([]) -> 'ok';
 show_stats([S|Ss]) ->
-    _ = [io:format("~s: ~p~n", [K, V])
-         || {K, V} <- kz_json:to_proplist(kz_doc:public_fields(S))
-        ],
+    Vs = [{K, V} || {K, V} <- kz_json:to_proplist(S), lists:member(K, ?CALL_INFO_FIELDS)],
+    ?PRINT("~s", [lists:foldr(fun(F, Acc) -> print_value(F) ++ Acc end, [], Vs)]),
     show_stats(Ss).
+
+print_value({_, []})  ->
+    io_lib:format(" ~20s |", [" "]);
+print_value({<<"entered_timestamp">>, V})  ->
+    io_lib:format(" ~20s |", [kz_time:pretty_print_datetime(V)]);
+print_value({<<"queue_id">>, V})  ->
+    io_lib:format(" ~32s |", [V]);
+print_value({<<"call_id">>, V})  ->
+    io_lib:format(" ~32s |", [V]);
+print_value({_, V}) when is_binary(V) ->
+    io_lib:format(" ~20s |", [V]);
+print_value({_, V}) ->
+    io_lib:format(" ~20.B |", [V]).
+
+print_field(<<"agent_id">> = V)  ->
+    io_lib:format(" ~32s |", [V]);
+print_field(<<"queue_id">> = V)  ->
+    io_lib:format(" ~32s |", [V]);
+print_field(<<"call_id">> = V)  ->
+    io_lib:format(" ~32s |", [V]);
+print_field(Else) ->
+    io_lib:format(" ~20s |", [Else]).
 
 -spec refresh() -> 'ok'.
 refresh() ->
@@ -461,12 +483,15 @@ show_agents_summary([{P, {AccountId, AgentId, _AMQPQueue}}|Qs]) ->
 -spec agents_detail() -> 'ok'.
 agents_detail() ->
     kz_util:put_callid(?MODULE),
+    ?PRINT("~s", [lists:foldr(fun(F, Acc) -> print_field(F) ++ Acc end, [], [<<"agent_id">>, <<"status">>] ++ ?AGENT_INFO_FIELDS)]),
     acdc_agents_sup:status().
 
 -spec agents_detail(kz_term:ne_binary()) -> 'ok'.
 agents_detail(AccountId) ->
     kz_util:put_callid(?MODULE),
     Supervisors = acdc_agents_sup:find_acct_supervisors(AccountId),
+    ?PRINT("Acct: ~s", [AccountId]),
+    ?PRINT("~s", [lists:foldr(fun(F, Acc) -> print_field(F) ++ Acc end, [], [<<"agent_id">>, <<"status">>] ++ ?AGENT_INFO_FIELDS)]),
     lists:foreach(fun acdc_agent_sup:status/1, Supervisors).
 
 -spec agent_detail(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
@@ -510,7 +535,7 @@ agent_pause(AccountId, AgentId, Timeout) ->
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AccountId}
                ,{<<"Agent-ID">>, AgentId}
-               ,{<<"Time-Limit">>, Timeout}
+               ,{<<"Time-Limit">>, binary_to_integer(Timeout)}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kz_amqp_worker:cast(Update, fun kapi_acdc_agent:publish_pause/1),

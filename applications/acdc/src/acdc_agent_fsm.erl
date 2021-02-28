@@ -2431,12 +2431,6 @@ monitor_endpoint('undefined', _) -> 'ok';
 monitor_endpoint(EP, AccountId) ->
     Username = find_username(EP),
     Extension = find_extension(EP),
-
-    %% Bind for outbound call requests
-    acdc_agent_listener:add_endpoint_bindings(AgentListener
-                                             ,kz_endpoint:get_sip_realm(EP, AccountId)
-                                             ,Username
-                                             ),
     %% Inform us of device changes
     catch gproc:reg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:reg(?NEW_CHANNEL_REG(AccountId, Username)),
@@ -2448,12 +2442,6 @@ monitor_endpoint(EP, AccountId) ->
 unmonitor_endpoint(EP, AccountId) ->
     Username = find_username(EP),
     Extension = find_extension(EP),
-
-    %% Bind for outbound call requests
-    acdc_agent_listener:remove_endpoint_bindings(AgentListener
-                                                ,kz_endpoint:get_sip_realm(EP, AccountId)
-                                                ,Username
-                                                ),
     %% Inform us of device changes
     catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, Username)),

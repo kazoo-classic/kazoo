@@ -83,6 +83,7 @@
                                                          ]}
                                         ,{'account_id', A}
                                         ,{'queue_id', Q}
+                                        ,'federate'
                                         ]}                                     
                         ,{'presence', [{'restrict_to', ['probe']}]}
                         ,{'acdc_stats', [{'restrict_to', ['status_stat']}
@@ -577,14 +578,15 @@ handle_cast({'start_workers'}, #state{account_id=AccountId
                                 ])
     of
         {'ok', []} ->
-            lager:debug("no agents yet, but create a worker anyway"),
+            lager:warning("no agents yet, but create a worker anyway"),
             acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId);
         {'ok', [Result]} ->
             QWC = kz_json:get_integer_value(<<"value">>, Result),
+            lager:info("starting ~p workers", [QWC]),
             acdc_queue_workers_sup:new_workers(WorkersSup, AccountId, QueueId, QWC),
             'ok';
         {'error', _E} ->
-            lager:debug("failed to find agent count: ~p", [_E]),
+            lager:warning("failed to find agent count: ~p", [_E]),
             QWC = kapps_config:get_integer(?CONFIG_CAT, <<"queue_worker_count">>, 5),
             acdc_queue_workers_sup:new_workers(WorkersSup, AccountId, QueueId, QWC)
     end,
@@ -597,6 +599,7 @@ handle_cast({'start_worker', N}, #state{account_id=AccountId
                                        ,supervisor=QueueSup
                                        }=State) ->
     WorkersSup = acdc_queue_sup:workers_sup(QueueSup),
+    lager:info("queue ~s starting ~p workers", [QueueId, N]),
     acdc_queue_workers_sup:new_workers(WorkersSup, AccountId, QueueId, N),
     {'noreply', State};
 
@@ -744,7 +747,10 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
     %% SBRR needs extra workers, priority feature needs extra workers
-    maybe_start_queue_workers(QueueSup, length(Calls) + 1, Strategy),
+    case Strategy of
+        'sbrr' -> maybe_start_queue_workers(QueueSup, length(Calls) + 1, 'sbrr');
+        _Else -> 'ok'
+    end,
 
     State1 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
                         ,State
@@ -765,7 +771,10 @@ handle_cast({'handle_queue_member_add', JObj}, #state{supervisor=QueueSup
     lager:debug("received notification of new queue member ~s with priority ~p", [CallId, Priority]),
 
     %% SBRR needs extra workers, priority feature needs extra workers
-    maybe_start_queue_workers(QueueSup, length(Calls) + 1, Strategy),
+    case Strategy of
+        'sbrr' -> maybe_start_queue_workers(QueueSup, length(Calls) + 1, 'sbrr');
+        _Else -> 'ok'
+    end,
 
     State1 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
                         ,State
@@ -1561,13 +1570,15 @@ ss_size('mi', #strategy_state{agents=Agents
 ss_size('sbrr', #strategy_state{agents=#{rr_queue := RRQueue}}=SS, 'free') ->
     ss_size('mi', SS#strategy_state{agents=pqueue4:to_list(RRQueue)}, 'free').
 
-maybe_start_queue_workers(_QueueSup, _Count, 'all') ->
+maybe_start_queue_workers(_QueueSup, _Count, 'all')  ->
     ok;
 maybe_start_queue_workers(QueueSup, Count, _Strategy) ->
     WSup = acdc_queue_sup:workers_sup(QueueSup),
     case acdc_queue_workers_sup:worker_count(WSup) of
         N when N >= Count -> 'ok';
-        N when N < Count -> gen_listener:cast(self(), {'start_worker', Count - N})
+        N when N < Count ->
+            lager:info("queue sup ~p workers: ~p need ~p", [QueueSup, N, Count]),
+            gen_listener:cast(self(), {'start_worker', Count - N})
     end.
 
 -spec update_properties(kz_json:object(), mgr_state()) -> mgr_state().

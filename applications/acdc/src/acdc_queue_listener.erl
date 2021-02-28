@@ -372,7 +372,7 @@ handle_cast({'timeout_member_call', JObj}, #state{delivery=Delivery
                                                  ,my_id=MyId
                                                  ,agent_id=AgentId
                                                  }=State) ->
-    lager:debug("member call has timed out, we're done"),
+    lager:warning("member call ~s has timed out, we're done", [kapps_call:call_id(Call)]),
 
     acdc_util:unbind_from_call_events(Call),
     lager:debug("unbound from call events for ~s", [kapps_call:call_id(Call)]),
@@ -381,7 +381,7 @@ handle_cast({'timeout_member_call', JObj}, #state{delivery=Delivery
 
     publish_queue_member_remove(AccountId, QueueId, kapps_call:call_id(Call)),
     acdc_queue_shared:ack(Pid, Delivery),
-    send_member_call_failure(Q, AccountId, QueueId, kapps_call:call_id(Call), MyId, AgentId),
+    send_member_call_failure(Q, AccountId, QueueId, kapps_call:call_id(Call), MyId, AgentId, <<"call timed out waiting in queue">>),
 
     {'noreply', clear_call_state(State), 'hibernate'};
 handle_cast({'ignore_member_call', Call, Delivery}, #state{shared_pid=Pid}=State) ->
@@ -563,7 +563,7 @@ code_change(_OldVsn, State, _Extra) ->
 maybe_timeout_agent('undefined', _QueueId, _Call, _JObj) -> 'ok';
 maybe_timeout_agent(_AgentId, _QueueId, _Call, 'undefined') -> 'ok';
 maybe_timeout_agent(_AgentId, QueueId, Call, JObj) ->
-    lager:debug("timing out winning agent because they should not be able to pick up after the queue timeout"),
+    lager:warning("timing out winning agent ~s because they should not be able to pick up after the queue ~s timeout", [_AgentId, QueueId]),
     send_agent_timeout(JObj, Call, QueueId).
 
 -spec send_member_connect_req(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
@@ -627,8 +627,6 @@ send_member_call_success(Q, AccountId, QueueId, MyId, AgentId, CallId) ->
              ]),
     publish(Q, Resp, fun kapi_acdc_queue:publish_member_call_success/2).
 
-send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId) ->
-    send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId, 'undefined').
 send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId, Reason) ->
     Resp = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
