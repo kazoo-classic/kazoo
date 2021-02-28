@@ -40,7 +40,10 @@
        ).
 
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
-request(Number, JObj) ->
+request(Number, JObj0) ->
+    
+    Thinq_number = to_thinq_number(Number),
+    JObj = set_phone_number(Thinq_number, JObj0),
     Url = kz_term:to_list(get_http_url(JObj)),
     case kz_http:get(Url, get_http_headers(JObj), get_http_options()) of
         {'ok', 404, _, _} ->
@@ -112,3 +115,14 @@ maybe_truncate(CallerInformation) -> CallerInformation.
 basic_auth(Username, Password) ->
     Encoded = base64:encode_to_string(Username ++ [$: | Password]),
     {"Authorization", lists:flatten(["Basic ", Encoded])}.
+
+
+
+-spec to_thinq_number(kz_term:ne_binary()) -> kz_term:ne_binary().
+to_thinq_number(<<"+1", Number/binary>>) -> Number;
+to_thinq_number(Number) -> Number.
+
+-spec set_phone_number(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
+set_phone_number(Num, JObj) ->
+    kz_json:set_value(<<"phone_number">>, kz_util:uri_encode(Num), JObj).
+
