@@ -272,8 +272,6 @@ ready('cast', {'member_call', CallJObj, Delivery}, #state{listener_proc=Listener
                                                  }=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, CallJObj)),
     CallId = kapps_call:call_id(Call),
-%%    kz_util:put_callid(CallId),
-
     case acdc_queue_manager:should_ignore_member_call(MgrSrv, Call, CallJObj) of
         'false' ->
             maybe_delay_connect_req(Call, CallJObj, Delivery, State);
@@ -848,7 +846,6 @@ clear_member_call(#state{connection_timer_ref=ConnRef
                         ,agent_ring_timer_ref=AgentRef
                         ,collect_ref=CollectRef
                         }=State) ->
-%%    kz_util:put_callid(QueueId),
     maybe_stop_timer(ConnRef),
     maybe_stop_timer(AgentRef),
     maybe_stop_timer(CollectRef),
