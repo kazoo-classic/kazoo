@@ -9,11 +9,15 @@
 %%% /agents/stats
 %%%   GET: call stats for all agents for the last hour
 %%% /agents/stats_summary
-%%%   GET: aggregate call stats for agents
-%%% /agents/statuses
-%%%   GET: statuses for each agents
+%%%   GET: aggregate call stats for all agents
+%%% /agents/status
+%%%   GET: current status for all agents
 %%% /agents/{agent_id}
 %%%   GET: agent details
+%%% /agents/{agent_id}}/stats
+%%%   GET: call stats for  agent_id 
+%%% /agents/{agent_id}}/stats_summary
+%%%   GET: aggregate call stats for agent_id
 %%% /agents/{agent_id}/queue_status
 %%%   POST: login/logout agent to/from queue
 %%%
@@ -21,7 +25,7 @@
 %%%   POST: force-restart a stuck agent
 %%%
 %%% /agents/{agent_id}/status
-%%%   GET: last 10 status updates
+%%%   GET: current status for agent_id
 %%%
 %%% @end
 %%% @contributors:
@@ -114,6 +118,8 @@ allowed_methods(?STATUS_PATH_TOKEN, _UserId) -> [?HTTP_GET, ?HTTP_POST];
 allowed_methods(_UserId, ?STATUS_PATH_TOKEN) -> [?HTTP_GET, ?HTTP_POST];
 allowed_methods(?STATS_PATH_TOKEN, _UserId) -> [?HTTP_GET];
 allowed_methods(_UserId, ?STATS_PATH_TOKEN) -> [?HTTP_GET];
+allowed_methods(?STATS_SUMMARY_PATH_TOKEN, _UserId) -> [?HTTP_GET];
+allowed_methods(_UserId, ?STATS_SUMMARY_PATH_TOKEN) -> [?HTTP_GET];
 allowed_methods(_UserId, ?QUEUE_STATUS_PATH_TOKEN) -> [?HTTP_GET, ?HTTP_POST];
 allowed_methods(_UserId, ?RESTART_PATH_TOKEN) -> [?HTTP_POST].
 
@@ -135,6 +141,8 @@ resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
 resource_exists(?STATUS_PATH_TOKEN, _) -> 'true';
 resource_exists(_, ?STATS_PATH_TOKEN) -> 'true';
 resource_exists(?STATS_PATH_TOKEN, _) -> 'true';
+resource_exists(_, ?STATS_SUMMARY_PATH_TOKEN) -> 'true';
+resource_exists(?STATS_SUMMARY_PATH_TOKEN, _) -> 'true';
 resource_exists(_, ?QUEUE_STATUS_PATH_TOKEN) -> 'true';
 resource_exists(_, ?RESTART_PATH_TOKEN) -> 'true'.
 
@@ -164,6 +172,8 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
     end.
 content_types_provided(Context, ?STATUS_PATH_TOKEN, _) -> Context;
 content_types_provided(Context, _, ?STATUS_PATH_TOKEN) -> Context;
+content_types_provided(Context, ?STATS_SUMMARY_PATH_TOKEN, _) -> Context;
+content_types_provided(Context, _, ?STATS_SUMMARY_PATH_TOKEN) -> Context;
 content_types_provided(Context, _, ?QUEUE_STATUS_PATH_TOKEN) -> Context;
 content_types_provided(Context, _, ?RESTART_PATH_TOKEN) -> Context.
 
@@ -192,9 +202,9 @@ validate(Context, PathToken) ->
 validate_agent(Context, ?STATUS_PATH_TOKEN, ?HTTP_GET) ->
     fetch_all_agent_statuses(Context);
 validate_agent(Context, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
-    fetch_all_agent_stats(Context);
+    fetch_agent_stats('all', Context, 'false');
 validate_agent(Context, ?STATS_SUMMARY_PATH_TOKEN, ?HTTP_GET) ->
-    fetch_stats_summary(Context);
+    fetch_agent_stats('all', Context, 'true');
 validate_agent(Context, Id, ?HTTP_GET) ->
     read(Id, Context).
 
@@ -208,9 +218,13 @@ validate_agent_action(Context, AgentId, ?STATUS_PATH_TOKEN, ?HTTP_GET) ->
 validate_agent_action(Context, ?STATUS_PATH_TOKEN, AgentId, ?HTTP_GET) ->
     fetch_agent_status(AgentId, Context);
 validate_agent_action(Context, AgentId, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
-    fetch_agent_stats(AgentId, Context);
+    fetch_agent_stats(AgentId, Context, 'false');
 validate_agent_action(Context, ?STATS_PATH_TOKEN, AgentId, ?HTTP_GET) ->
-    fetch_agent_stats(AgentId, Context);
+    fetch_agent_stats(AgentId, Context, 'false');
+validate_agent_action(Context, AgentId, ?STATS_SUMMARY_PATH_TOKEN, ?HTTP_GET) ->
+    fetch_agent_stats(AgentId, Context, 'true');
+validate_agent_action(Context, ?STATS_SUMMARY_PATH_TOKEN, AgentId, ?HTTP_GET) ->
+    fetch_agent_stats(AgentId, Context, 'true');
 validate_agent_action(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN, ?HTTP_POST) ->
     OnSuccess = fun (C) -> maybe_queues_change(read(AgentId, C)) end,
     cb_context:validate_request_data(<<"queue_update">>, Context, OnSuccess);
@@ -322,47 +336,41 @@ read(Id, Context) ->
 fetch_all_agent_statuses(Context) ->
     case kz_term:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
-            fetch_current_status(Context, 'undefined');
+            fetch_current_status(Context
+                                 ,'undefined'
+                                 ,cb_context:req_value(Context, <<"status">>) 
+                                );
         'true' ->
-            fetch_all_current_statuses(Context
-                                      ,'undefined'
-                                      ,cb_context:req_value(Context, <<"status">>)
-                                      )
+            fetch_all_statuses(Context
+                               ,'undefined'
+                               ,cb_context:req_value(Context, <<"status">>)
+                              )
     end.
 
 -spec fetch_agent_status(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 fetch_agent_status(AgentId, Context) ->
     case kz_term:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
-            fetch_current_status(Context, AgentId);
+            fetch_current_status(Context
+                                 ,AgentId
+                                 ,cb_context:req_value(Context, <<"status">>)
+                                 );
         'true' ->
-            fetch_all_current_statuses(Context
-                                      ,AgentId
-                                      ,cb_context:req_value(Context, <<"status">>)
-                                      )
+            fetch_all_statuses(Context
+                               ,AgentId
+                               ,cb_context:req_value(Context, <<"status">>)
+                              )
     end.
 
--spec fetch_agent_stats(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
-fetch_agent_stats(AgentId, Context) ->
+-spec fetch_agent_stats(kz_term:api_binary(), cb_context:context(), boolean()) -> cb_context:context().
+fetch_agent_stats(AgentId, Context, Summarize) ->
     case cb_context:req_value(Context, <<"start_range">>) of
-        'undefined' -> fetch_current_agent_stats(Context, AgentId);
-        StartRange -> fetch_ranged_agent_stats(AgentId, Context, StartRange)
+        'undefined' -> fetch_current_agent_stats(AgentId, Context, Summarize);
+        StartRange -> fetch_ranged_agent_stats(AgentId, Context, StartRange, Summarize)
     end.
 
--spec fetch_all_agent_stats(cb_context:context()) -> cb_context:context().
-fetch_all_agent_stats(Context) ->
-    case cb_context:req_value(Context, <<"start_range">>) of
-        'undefined' -> fetch_all_current_agent_stats(Context);
-        StartRange -> fetch_ranged_agent_stats(Context, StartRange)
-    end.
-
--spec fetch_stats_summary(cb_context:context()) -> cb_context:context().
-fetch_stats_summary(Context) ->
-    Req = props:filter_undefined(
-            [{<<"Account-ID">>, cb_context:account_id(Context)}
-            ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
-             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ]),
+-spec fetch_stats_summary_from_amqp(cb_context:context(), kz_term:kz_proplist()) -> cb_context:context().
+fetch_stats_summary_from_amqp(Context, Req) ->
     case kz_amqp_worker:call(Req
                                      ,fun kapi_acdc_stats:publish_agent_calls_req/1
                                      ,fun kapi_acdc_stats:agent_calls_resp_v/1
@@ -377,13 +385,8 @@ fetch_stats_summary(Context) ->
 format_stats_summary_response(Context, Resp) ->
     case kz_json:get_value(<<"Event-Name">>, Resp) of
         <<"agent_calls_err">> -> format_stats_summary_error(Context, Resp);
-        <<"agent_calls_resp">> ->  format_stats_summary_stats(Context, Resp)
+        <<"agent_calls_resp">> ->  format_stats_summary(Context, Resp)
     end.
-
--spec format_stats_summary_stats(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
-format_stats_summary_stats(Context, Resp) ->
-    crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, kz_json:new()), Context).
 
 -spec format_stats_summary_error(cb_context:context(), kz_json:object()) ->
                           cb_context:context().
@@ -392,37 +395,30 @@ format_stats_summary_error(Context, Resp) ->
                             ,kz_json:get_value(<<"Error-Reason">>, Resp)
                             ,Context
     ).
--spec fetch_current_agent_stats(cb_context:context(), kz_term:api_binary()) -> cb_context:context().
-fetch_current_agent_stats(Context, AgentId) ->
-    fetch_all_current_stats(Context
-                           ,AgentId
-                           ).
 
--spec fetch_all_current_agent_stats(cb_context:context()) -> cb_context:context().
-fetch_all_current_agent_stats(Context) ->
-    fetch_all_current_stats(Context
-                           ,'undefined'
-                           ).
-
--spec fetch_all_current_stats(cb_context:context(), kz_term:api_binary()) -> cb_context:context().
-fetch_all_current_stats(Context, AgentId) ->
+-spec fetch_current_agent_stats(kz_term:api_binary() | 'all', cb_context:context() , boolean()) -> cb_context:context().
+fetch_current_agent_stats(AgentId, Context, Summarize) ->
     Now = kz_time:current_tstamp(),
     Yday = Now - ?SECONDS_IN_DAY,
 
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
-            ,{<<"Agent-ID">>, AgentId}
+            ,{<<"Agent-ID">>, case AgentId of
+                                        'all' -> cb_context:req_value(Context, <<"agent_id">>);
+                                        Else -> Else
+                              end}
             ,{<<"Start-Range">>, Yday}
             ,{<<"End-Range">>, Now}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    fetch_stats_from_amqp(Context, Req).
+    fetch_stats_from_amqp(Context, Req, Summarize).
 
--spec fetch_current_status(cb_context:context(), kz_term:api_binary()) -> cb_context:context().
-fetch_current_status(Context, AgentId) ->
+-spec fetch_current_status(cb_context:context(), kz_term:api_binary(),  kz_term:api_binary()) -> cb_context:context().
+fetch_current_status(Context, AgentId, Status) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
-            ,{<<"Agent-ID">>, AgentId}
+             ,{<<"Status">>, Status}
+             ,{<<"Agent-ID">>, AgentId}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case kz_amqp_worker:call(Req
@@ -455,9 +451,9 @@ format_current_status_error(Context, Resp) ->
 format_current_status_stats(Context, Resp) ->
     crossbar_util:response(kz_json:get_value(<<"Agents">>, Resp, kz_json:new()), Context).
 
--spec fetch_all_current_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
+-spec fetch_all_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
                                         cb_context:context().
-fetch_all_current_statuses(Context, AgentId, Status) ->
+fetch_all_statuses(Context, AgentId, Status) ->
     Now = kz_time:now_s(),
     From = Now - min(?SECONDS_IN_DAY, ?ACDC_CLEANUP_WINDOW),
 
@@ -472,12 +468,8 @@ fetch_all_current_statuses(Context, AgentId, Status) ->
     {'ok', Resp} = acdc_agent_util:most_recent_statuses(cb_context:account_id(Context), Opts),
     crossbar_util:response(Resp, Context).
 
--spec fetch_ranged_agent_stats(cb_context:context(), pos_integer()) -> cb_context:context().
-fetch_ranged_agent_stats(Context, StartRange) ->
-    fetch_ranged_agent_stats('undefined', Context, StartRange).
-
--spec fetch_ranged_agent_stats(kz_term:api_binary(), cb_context:context(), pos_integer()) -> cb_context:context().
-fetch_ranged_agent_stats(AgentId, Context, StartRange) ->
+-spec fetch_ranged_agent_stats(kz_term:api_binary(), cb_context:context(), pos_integer(), boolean()) -> cb_context:context().
+fetch_ranged_agent_stats(AgentId, Context, StartRange, Summarize) ->
     MaxRange = ?ACDC_CLEANUP_WINDOW,
 
     Now = kz_time:current_tstamp(),
@@ -495,48 +487,45 @@ fetch_ranged_agent_stats(AgentId, Context, StartRange) ->
             cb_context:add_validation_error(<<"end_range">>, <<"maximum">>, Msg, Context);
         F when F < MaxFrom ->
             %% Range is too big
-            fetch_ranged_agent_stats(AgentId, Context, MaxFrom, To, MaxFrom >= Past);
+            fetch_ranged_agent_stats(AgentId, Context, MaxFrom, To, MaxFrom >= Past, Summarize);
         F when F < Past, To > Past ->
             %% range overlaps archived/real data, use real
-            fetch_ranged_agent_stats(AgentId, Context, Past, To, Past >= Past);
+            fetch_ranged_agent_stats(AgentId, Context, Past, To, Past >= Past, Summarize);
         F ->
-            fetch_ranged_agent_stats(AgentId, Context, F, To, F >= Past)
+            fetch_ranged_agent_stats(AgentId, Context, F, To, F >= Past, Summarize)
     end.
 
--spec fetch_ranged_agent_stats(kz_term:api_binary(), cb_context:context(), pos_integer(), pos_integer(), boolean()) ->
+-spec fetch_ranged_agent_stats(kz_term:api_binary(), cb_context:context(), pos_integer(), pos_integer(), boolean(), boolean) ->
                                       cb_context:context().
-fetch_ranged_agent_stats(AgentId, Context, From, To, 'true') ->
+fetch_ranged_agent_stats(AgentId, Context, From, To, 'true', Summarize) ->
     lager:debug("ranged query from ~b to ~b(~b) of current stats (now ~b)", [From, To, To-From, kz_time:current_tstamp()]),
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
-            ,{<<"Agent-ID">>, AgentId}
+            ,{<<"Agent-ID">>, case AgentId of
+                                        'all' -> cb_context:req_value(Context, <<"agent_id">>);
+                                        Else -> Else
+                              end}
             ,{<<"Start-Range">>, From}
             ,{<<"End-Range">>, To}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    fetch_stats_from_amqp(Context, Req);
-fetch_ranged_agent_stats(_AgentId, Context, From, To, 'false') ->
+    fetch_stats_from_amqp(Context, Req, Summarize);
+fetch_ranged_agent_stats(_AgentId, Context, From, To, 'false', _Summarize) ->
     lager:debug("ranged query from ~b to ~b of archived stats", [From, To]),
     Context.
 
--spec fetch_stats_from_amqp(cb_context:context(), kz_term:kz_proplist()) -> cb_context:context().
-fetch_stats_from_amqp(Context, Req) ->
+-spec fetch_stats_from_amqp(cb_context:context(), kz_term:kz_proplist(), boolean()) -> cb_context:context().
+fetch_stats_from_amqp(Context, Req, 'true') ->
+    fetch_stats_summary_from_amqp(Context, Req);
+fetch_stats_from_amqp(Context, Req, Summarize) ->
     case kz_amqp_worker:call(Req
                             ,fun kapi_acdc_stats:publish_current_calls_req/1
                             ,fun kapi_acdc_stats:current_calls_resp_v/1
                             )
     of
         {'error', Resp} -> format_error(Context, Resp);
-        {'ok', Resp} -> add_misses_to_query(Context, Req, Resp)
-    end.
-
--spec format_response(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
-format_response(Context, {Resp, Missed}) ->
-    case kz_json:get_value(<<"Event-Name">>, Resp) of
-        <<"current_calls_err">> -> format_error(Context, Resp);
-        <<"current_calls_resp">> ->  format_stats(Context, Resp, Missed)
+        {'ok', Resp} -> format_stats(Context, Resp)
     end.
 
 -spec format_error(cb_context:context(), kz_json:object()) ->
@@ -547,22 +536,31 @@ format_error(Context, Resp) ->
                             ,Context
     ).
 
--spec format_stats(cb_context:context(), kz_json:object(), kz_json:object()) ->
-                          cb_context:context().
-format_stats(Context, Resp, Missed) ->
-    Stats = kz_json:get_value(<<"Handled">>, Resp, [])
-        ++ kz_json:get_value(<<"Abandoned">>, Resp, [])
-        ++ kz_json:get_value(<<"Waiting">>, Resp, [])
-        ++ kz_json:get_value(<<"Processed">>, Resp, []),
 
+-spec format_stats_summary(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats_summary(Context, Resp) ->
+    Stats = kz_json:get_value(<<"Handled">>, Resp, [])
+    ++ kz_json:get_value(<<"Abandoned">>, Resp, [])
+    ++ kz_json:get_value(<<"Waiting">>, Resp, [])
+    ++ kz_json:get_value(<<"Processed">>, Resp, [])
+    ++ kz_json:get_value(<<"Missed">>, Resp, []),
     crossbar_util:response(
-        add_misses_to_resp(Missed,
             lists:foldl(fun format_stats_fold/2
                      ,kz_json:new()
                      ,Stats 
-                    )
-        )
-        ,Context).
+            )
+            ,Context).    
+
+-spec format_stats(cb_context:context(), kz_json:object()) ->
+                          cb_context:context().
+format_stats(Context, Resp) ->
+    Stats = kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))
+        ++ kz_doc:public_fields(kz_json:get_value(<<"Abandoned">>, Resp, []))
+        ++ kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))
+        ++ kz_doc:public_fields(kz_json:get_value(<<"Processed">>, Resp, [])),
+    crossbar_util:response(Stats,Context).
+
 
 -spec format_stats_fold(kz_json:object(), kz_json:object()) ->
                                kz_json:object().
@@ -579,10 +577,11 @@ format_stats_fold(Stat, Acc) ->
             QTotals = kz_json:get_integer_value(QTotalsK, Acc, 0),
 
             AnsweredData = maybe_add_answered(Stat, Acc),
+            MissedData = maybe_add_missed(Stat, Acc),
             kz_json:set_values([{TotalsK, Totals + 1}
-                                ,{QTotalsK, QTotals + 1}
-                                 | AnsweredData
-                                ]
+                                ,{QTotalsK, QTotals + 1}]
+                                ++ AnsweredData
+                                ++ MissedData
                                ,Acc
                                )
     end.
@@ -606,71 +605,107 @@ maybe_add_answered(_, _, _S) ->
 add_answered(Stat, Acc) ->
     AgentId = kz_json:get_value(<<"agent_id">>, Stat),
     QueueId = kz_json:get_value(<<"queue_id">>, Stat),
+    STalkTime = kz_json:get_value(<<"talk_time">>, Stat, 0),
 
     AnsweredK = [AgentId, <<"answered_calls">>],
     QAnsweredK = [AgentId, <<"queues">>, QueueId, <<"answered_calls">>],
+ 
     TalkTimeK = [AgentId, <<"talk_time">>],
     QTalkTimeK = [AgentId, <<"queues">>, QueueId, <<"talk_time">>],
 
     Answered = kz_json:get_integer_value(AnsweredK, Acc, 0),
     QAnswered = kz_json:get_integer_value(QAnsweredK, Acc, 0),
+
     TalkTime = kz_json:get_integer_value(TalkTimeK, Acc, 0),
     QTalkTime = kz_json:get_integer_value(QTalkTimeK, Acc, 0),
 
     [{AnsweredK, Answered + 1}
     ,{QAnsweredK, QAnswered + 1}
-    ,{TalkTimeK, TalkTime + kz_json:get_value(<<"talk_time">>, Stat, 0)}
-    ,{QTalkTimeK, QTalkTime + kz_json:get_value(<<"talk_time">>, Stat, 0)}
+    ,{TalkTimeK, TalkTime + STalkTime}
+    ,{QTalkTimeK, QTalkTime + STalkTime}
     ].
 
--spec add_misses_to_query(kz_json:object(), kz_json:object(), kz_term:ne_binary()) ->
-                              kz_json:object().
-add_misses_to_query(Context, Req0, Resp0) ->
-    Req = props:set_value(<<"Status">>, <<"missed">>, Req0),
-    case kz_amqp_worker:call(Req
-                            ,fun kapi_acdc_stats:publish_agent_calls_req/1
-                            ,fun kapi_acdc_stats:agent_calls_resp_v/1
-                            )
-    of
-        {'error', Resp} -> format_error(Context, Resp);
-        {'ok', Resp} -> format_response(Context, {Resp0, Resp})
-    end.
+-spec maybe_add_missed(kz_json:object(), kz_json:object()) ->
+                                [{kz_json:path(), non_neg_integer()}].
+-spec maybe_add_missed(kz_json:object(), kz_json:object(), kz_term:api_binary()) ->
+                                [{kz_json:path(), non_neg_integer()}].
+maybe_add_missed(Stat, Acc) ->
+    maybe_add_missed(Stat, Acc, kz_json:get_value(<<"status">>, Stat)).
+maybe_add_missed(Stat, Acc, <<"missed">>) ->
+    add_missed(Stat, Acc);
+maybe_add_missed(_, _, _S) ->
+    lager:debug("status ~s not indicative of an answered call", [_S]),
+    [].
 
-add_misses_to_resp(Data, Acc) ->
-    case kz_json:recursive_to_proplist(kz_json:get_value(<<"Missed">>, Data, [])) of
-        [] -> Acc;
-        Misses ->
-            lists:foldl(fun(Miss, AccJObj) ->
-                                add_miss(Miss, AccJObj)
-                        end
-                       ,Acc
-                       ,Misses
-                       )
-    end.
+-spec add_missed(kz_json:object(), kz_json:object()) ->
+                          [{kz_json:path(), non_neg_integer()},...].
+add_missed(Stat, Acc) ->
+    AgentId = kz_json:get_value(<<"agent_id">>, Stat),
+    QueueId = kz_json:get_value(<<"queue_id">>, Stat),
 
--spec add_miss(list(), kz_json:object()) -> kz_json:object().
-add_miss(Miss, Acc) ->
-    AgentId = props:get_value(<<"agent_id">>, Miss),
-    QueueId = props:get_value(<<"queue_id">>, Miss),
-    MissesK = [AgentId, <<"missed_calls">>],
-    QMissesK = [AgentId, <<"queues">>, QueueId, <<"missed_calls">>],
+    MissedK = [AgentId, <<"missed_calls">>],
+    QMissedK = [AgentId, <<"queues">>, QueueId, <<"missed_calls">>],
+ 
+    Missed = kz_json:get_integer_value(MissedK, Acc, 0),
+    QMissed = kz_json:get_integer_value(QMissedK, Acc, 0),
 
-    Misses = kz_json:get_integer_value(MissesK, Acc, 0),
-    QMisses = kz_json:get_integer_value(QMissesK, Acc, 0),
+    [{MissedK, Missed + 1}
+    ,{QMissedK, QMissed + 1}
+    ].
 
-    TotalsK = [AgentId, <<"total_calls">>],
-    QTotalsK = [AgentId, <<"queues">>, QueueId, <<"total_calls">>],
 
-    Totals = kz_json:get_integer_value(TotalsK, Acc, 0),
-    QTotals = kz_json:get_integer_value(QTotalsK, Acc, 0),
 
-    kz_json:set_values([{MissesK, Misses + 1}
-                       ,{QMissesK, QMisses + 1}
-                       ,{TotalsK, Totals + 1}
-                       ,{QTotalsK, QTotals + 1}
-                       ]
-                      ,Acc
-                      ).
+
+
+
+%% -spec add_misses_to_query(kz_json:object(), kz_json:object(), kz_term:ne_binary()) ->
+%%                               kz_json:object().
+%% add_misses_to_query(Context, Req0, Resp0) ->
+%%     Req = props:set_value(<<"Status">>, <<"missed">>, Req0),
+%%     case kz_amqp_worker:call(Req
+%%                             ,fun kapi_acdc_stats:publish_agent_calls_req/1
+%%                             ,fun kapi_acdc_stats:agent_calls_resp_v/1
+%%                             )
+%%     of
+%%         {'error', Resp} -> format_error(Context, Resp);
+%%         {'ok', Resp} -> format_stats_summary_response(Context, {Resp0, Resp})
+%%     end.
+
+%add_misses_to_resp(Data, Acc) ->
+%    case kz_json:recursive_to_proplist(kz_json:get_value(<<"Missed">>, Data, [])) of
+%        [] -> Acc;
+%        Misses ->
+%            lists:foldl(fun(Miss, AccJObj) ->
+%                                add_miss(Miss, AccJObj)
+%                        end
+%                       ,Acc
+%                       ,Misses
+%                       )
+%    end.
+%
+%-spec add_miss(list(), kz_json:object()) -> kz_json:object().
+%add_miss(Miss, Acc) ->
+%    AgentId = props:get_value(<<"agent_id">>, Miss),
+%    QueueId = props:get_value(<<"queue_id">>, Miss),
+%    MissesK = [AgentId, <<"missed_calls">>],
+%    QMissesK = [AgentId, <<"queues">>, QueueId, <<"missed_calls">>],
+%
+%    Misses = kz_json:get_integer_value(MissesK, Acc, 0),
+%    QMisses = kz_json:get_integer_value(QMissesK, Acc, 0),
+%
+%    TotalsK = [AgentId, <<"total_calls">>],
+%    QTotalsK = [AgentId, <<"queues">>, QueueId, <<"total_calls">>],
+%
+%    Totals = kz_json:get_integer_value(TotalsK, Acc, 0),
+%    QTotals = kz_json:get_integer_value(QTotalsK, Acc, 0),
+%
+%    kz_json:set_values([{MissesK, Misses + 1}
+%                       ,{QMissesK, QMisses + 1}
+%                       ,{TotalsK, Totals + 1}
+%                       ,{QTotalsK, QTotals + 1}
+%                       ]
+%                      ,Acc
+%                      ).
 
 %%--------------------------------------------------------------------
 %% @private

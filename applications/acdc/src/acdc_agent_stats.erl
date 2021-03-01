@@ -465,10 +465,12 @@ query_agent_calls(Match, _Limit) ->
             [];
         Stats ->
             Dict = dict:from_list([{<<"handled">>, []}
+                                    ,{<<"processed">>, []}
                                     ,{<<"missed">>, []}
                                     ]),
             QueryResult = lists:foldl(fun query_agent_calls_fold/2, Dict, Stats),
             [{<<"Missed">>, dict:fetch(<<"missed">>, QueryResult)}
+            ,{<<"Processed">>, dict:fetch(<<"processed">>, QueryResult)}
             ,{<<"Handled">>, dict:fetch(<<"handled">>, QueryResult)}
             ]  
     end.
@@ -477,8 +479,6 @@ query_agent_calls(Match, _Limit) ->
 query_agent_calls_fold(#agent_call_stat{status=Status}=Stat, Acc) ->
     Doc = agent_call_stat_to_doc(Stat),
     dict:update(Status, fun(L) -> [Doc | L] end, [Doc], Acc).
-%    AgentJObj = kz_json:get_value(AgentId, JObj, []),
-%    kz_json:set_value(AgentId, increment_agent_calls(Stat, AgentJObj), JObj).
 
 -spec agent_call_stat_to_doc(agent_call_stat()) -> kz_json:object().
 agent_call_stat_to_doc(#agent_call_stat{id=Id
@@ -487,6 +487,7 @@ agent_call_stat_to_doc(#agent_call_stat{id=Id
                                         ,agent_id=AgentId
                                         ,call_id=CallId
                                         ,status=Status
+                                        ,talk_time=TalkTime
                                         ,timestamp=Timestamp
                                         }) ->
     Prop = [{<<"_id">>, Id}
@@ -494,6 +495,7 @@ agent_call_stat_to_doc(#agent_call_stat{id=Id
            ,{<<"agent_id">>, AgentId}
            ,{<<"timestamp">>, Timestamp}
            ,{<<"status">>, Status}
+           ,{<<"talk_time">>, TalkTime}
            ,{<<"queue_id">>, QueueId}
            ],
     kz_doc:update_pvt_parameters(kz_json:from_list(Prop)
@@ -501,23 +503,6 @@ agent_call_stat_to_doc(#agent_call_stat{id=Id
                                 ,[{'account_id', AccountId}
                                  ,{'type', <<"agent_call_stat">>}
                                  ]).
-
-%-spec increment_agent_calls(agent_call_stat(), kz_json:object()) -> kz_json:object().
-%increment_agent_calls(#agent_call_stat{queue_id=QueueId
-%                                      ,status=Status
-%                                      }, AgentJObj) ->
-%    case Status of
-%        <<"handled">> -> increment_agent_calls(QueueId, AgentJObj, <<"answered_calls">>);
-%        <<"missed">> -> increment_agent_calls(QueueId, AgentJObj, <<"missed_calls">>);
-%        _ -> AgentJObj
-%    end.
-%
-%-spec increment_agent_calls(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
-%increment_agent_calls(QueueId, AgentJObj, Key) ->
-%    Count = kz_json:get_integer_value([QueueId, Key], AgentJObj, 0) + 1,
-%    kz_json:set_value([QueueId, Key], Count, AgentJObj).
-
-
 
 status_build_match_spec(JObj) ->
     case kz_json:get_value(<<"Account-ID">>, JObj) of
@@ -622,6 +607,10 @@ cur_status_match_builder_fold(_, _, {'error', _Err}=E) -> E;
 cur_status_match_builder_fold(<<"Agent-ID">>, AgentId, {StatusStat, Contstraints}) ->
     {StatusStat#status_stat{agent_id='$2'}
     ,[{'=:=', '$2', {'const', AgentId}} | Contstraints]
+    };
+cur_status_match_builder_fold(<<"Status">>, Status, {StatusStat, Contstraints}) ->
+    {StatusStat#status_stat{status='$3'}
+    ,[{'=:=', '$3', {'const', Status}} | Contstraints]
     };
 cur_status_match_builder_fold(_, _, Acc) -> Acc.
 

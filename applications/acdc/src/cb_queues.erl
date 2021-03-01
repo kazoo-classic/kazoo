@@ -18,8 +18,6 @@
 %%%   GET: retrieve stats for this queue
 %%% /queues/QID/stats_summary
 %%%   GET: retrieve minimal current stats for queues
-%%% /queues/QID/stats/realtime
-%%%   GET: retrieve realtime stats for the queues
 %%%
 %%% /queues/QID/roster
 %%%   GET: get list of agent_ids
@@ -134,6 +132,8 @@ allowed_methods(_QueueId) ->
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_QueueId, ?ROSTER_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
+allowed_methods(_QueueId, ?STATS_PATH_TOKEN) ->
+    [?HTTP_GET];
 allowed_methods(_QueueId, ?STATS_SUMMARY_PATH_TOKEN) ->
     [?HTTP_GET];
 allowed_methods(_QueueId, ?EAVESDROP_PATH_TOKEN) ->
@@ -159,6 +159,7 @@ resource_exists(_) -> 'true'.
 
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, ?ROSTER_PATH_TOKEN) -> 'true';
+resource_exists(_, ?STATS_PATH_TOKEN) -> 'true';
 resource_exists(_, ?STATS_SUMMARY_PATH_TOKEN) -> 'true';
 resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true'.
 
@@ -179,7 +180,9 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
                                          ,[{'to_json', ?JSON_CONTENT_TYPES}
                                           ,{'to_csv', ?CSV_CONTENT_TYPES}
                                           ]);
-content_types_provided(Context, ?STATS_SUMMARY_PATH_TOKEN) -> Context.
+content_types_provided(Context, ?STATS_SUMMARY_PATH_TOKEN) -> Context;
+content_types_provided(Context, ?EAVESDROP_PATH_TOKEN) -> Context.
+
 
 %%------------------------------------------------------------------------------
 %% @doc Check the request (request body, query string params, path tokens, etc)
@@ -203,7 +206,7 @@ validate(Context, PathToken) ->
     validate_queue(Context, PathToken, cb_context:req_verb(Context)).
 
 validate_queue(Context, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
-    fetch_all_queue_stats(Context);
+    fetch_queue_stats(Context, 'all');
 validate_queue(Context, ?STATS_SUMMARY_PATH_TOKEN, ?HTTP_GET) ->
     fetch_stats_summary(Context, 'all');
 validate_queue(Context, ?EAVESDROP_PATH_TOKEN, ?HTTP_PUT) ->
@@ -224,6 +227,8 @@ validate(Context, Id, Token) ->
 
 validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_GET) ->
     load_agent_roster(Id, Context);
+validate_queue_operation(Context, Id, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
+    fetch_queue_stats(Context, Id);
 validate_queue_operation(Context, Id, ?STATS_SUMMARY_PATH_TOKEN, ?HTTP_GET) ->
     fetch_stats_summary(Context, Id);
 validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_POST) ->
@@ -667,11 +672,11 @@ maybe_rm_queue_from_agent(Id, A) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec fetch_all_queue_stats(cb_context:context()) -> cb_context:context().
-fetch_all_queue_stats(Context) ->
+-spec fetch_queue_stats(cb_context:context(), kz_term:ne_binary()|'all') -> cb_context:context().
+fetch_queue_stats(Context, QueueId) ->
     case cb_context:req_value(Context, <<"start_range">>) of
-        'undefined' -> fetch_all_current_queue_stats(Context);
-        StartRange -> fetch_ranged_queue_stats(Context, StartRange)
+        'undefined' -> fetch_current_queue_stats(Context, QueueId);
+        StartRange -> fetch_ranged_queue_stats(Context, StartRange, QueueId)
     end.
 
 -spec fetch_stats_summary(cb_context:context(), kz_term:ne_binary()|'all') -> cb_context:context().
@@ -732,7 +737,7 @@ fetch_ranged_stats_summary(Context, From, To, QueueId) ->
             ]),
     fetch_call_summary_stats_from_amqp(Context, Req).
 
-fetch_ranged_queue_stats(Context, StartRange) ->
+fetch_ranged_queue_stats(Context, StartRange, QueueId) ->
     MaxRange = ?ACDC_CLEANUP_WINDOW,
 
     Now = kz_time:current_tstamp(),
@@ -749,33 +754,41 @@ fetch_ranged_queue_stats(Context, StartRange) ->
             cb_context:add_validation_error(<<"end_range">>, <<"maximum">>, Msg, Context);
         F when F < Past, To > Past ->
             %% range overlaps archived/real data, use real
-            fetch_ranged_queue_stats(Context, Past, To, 'true');
+            fetch_ranged_queue_stats(Context, QueueId, Past, To, 'true');
         F ->
-            fetch_ranged_queue_stats(Context, F, To, F >= Past)
+            fetch_ranged_queue_stats(Context, QueueId, F, To, F >= Past)
     end.
 
-fetch_ranged_queue_stats(Context, From, To, 'true') ->
+fetch_ranged_queue_stats(Context, QueueId, From, To, 'true') ->
     lager:debug("ranged query from ~b to ~b(~b) of current stats (now ~b)", [From, To, To-From, kz_time:current_tstamp()]),
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
             ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+            ,{<<"Queue-ID">>, case QueueId of
+                      'all' -> cb_context:req_value(Context, <<"queue_id">>);
+                      Else -> Else
+                  end}
             ,{<<"Start-Range">>, From}
             ,{<<"End-Range">>, To}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     fetch_from_amqp(Context, Req);
-fetch_ranged_queue_stats(Context, From, To, 'false') ->
+fetch_ranged_queue_stats(Context, _QueueId, From, To, 'false') ->
     lager:debug("ranged query from ~b to ~b of archived stats", [From, To]),
     Context.
 
--spec fetch_all_current_queue_stats(cb_context:context()) -> cb_context:context().
-fetch_all_current_queue_stats(Context) ->
+-spec fetch_current_queue_stats(cb_context:context(), kz_term:ne_binary()|'all') -> cb_context:context().
+fetch_current_queue_stats(Context, QueueId) ->
     lager:debug("querying for all recent stats"),
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
             ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+            ,{<<"Queue-ID">>, case QueueId of
+                      'all' -> cb_context:req_value(Context, <<"queue_id">>);
+                      Else -> Else
+                  end}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     fetch_from_amqp(Context, Req).

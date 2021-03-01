@@ -1450,7 +1450,7 @@ maybe_add_summary_stat(#call_stat{status=Status}=Stat)
 maybe_add_summary_stat(_) -> 'false'.
 
 -spec maybe_add_agent_call_stat(call_stat()) -> boolean().
-maybe_add_agent_call_stat(#call_stat{status= <<"handled">>}=Stat) ->
+maybe_add_agent_call_stat(#call_stat{status= <<"processed">>}=Stat) ->
     ets:insert(agent_call_table_id(), call_stat_to_agent_call_stat(Stat));
 maybe_add_agent_call_stat(_) -> 'false'.
 
@@ -1515,6 +1515,7 @@ call_stat_to_agent_call_stat(#call_stat{id=Id
                                        ,queue_id=QueueId
                                        ,agent_id=AgentId
                                        ,status=Status
+                                       ,processed_timestamp=ProcessedTimestamp
                                        ,handled_timestamp=HandledTimestamp
                                        }) ->
     #agent_call_stat{id=Id
@@ -1523,8 +1524,10 @@ call_stat_to_agent_call_stat(#call_stat{id=Id
                     ,agent_id=AgentId
                     ,call_id=CallId
                     ,status=Status
+                    ,talk_time=talk_time(HandledTimestamp, ProcessedTimestamp)
                     ,timestamp=HandledTimestamp
                     }.
+
 %% Logic to determine current queue where a call just ended and publish summary stats over EDR
 %% This serves to reliably update the dashboard in case of duplicate events
 -spec maybe_send_summary_stat(call_stat()) -> boolean().
