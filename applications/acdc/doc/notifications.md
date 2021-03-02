@@ -1,6 +1,19 @@
+### Agents
+
+#### BLF AgentId
+
+Green : Agent logged in
+Red : Agent logged out
+Amber/Red Flashing : Agent paused
+
 ### Queues
 
-#### About Queue Webhooks
+#### BLF QueueId
+
+Green: Queue is empty
+Amber/Red Flashing : Calls waiting in the Queue 
+
+#### Queue Webhooks
 
 Kazoo queues support sending notification webhooks when certain events occur. HTTP notifications can be sent either as GET or POST.
 
