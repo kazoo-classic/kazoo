@@ -115,7 +115,7 @@ maybe_enable_auth(Props, AccountId) ->
 -spec get_config_param(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                             kz_term:ne_binary().
 get_config_param(AccountId, Param, Default) -> 
-    ResellerId = kzd_accounts:reseller_id(AccountId),
+    ResellerId = kz_services_reseller:get_id(AccountId),
     Value = ?GET_CONFIG_STRING(AccountId, 
                                Param, 
                                ?GET_CONFIG_STRING(ResellerId, Param, Default)),

@@ -66,7 +66,7 @@ request(Number, JObj0) ->
 -spec get_http_url(kz_json:object()) -> kz_term:ne_binary().
 get_http_url(JObj) ->
     AccountId = kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
-    Template = ?CNAM_HTTP_URL(AccountId, kzd_accounts:reseller_id(AccountId)),
+    Template = ?CNAM_HTTP_URL(AccountId, kz_services_reseller:get_id(AccountId)),
     {'ok', SrcUrl} = stepswitch_cnam:render(JObj, Template),
     iolist_to_binary(SrcUrl).
 
