@@ -21,8 +21,8 @@
         ,agent_connected/5, agent_connected/6
         ,agent_wrapup/3
         ,agent_paused/4
-        ,agent_outbound/3
-        ,agent_inbound/3
+        ,agent_outbound/5
+        ,agent_inbound/5
 
         ,status_stat_id/3
 
@@ -209,14 +209,16 @@ agent_paused(AccountId, AgentId, PauseTime, Alias) ->
                        ,fun kapi_acdc_stats:publish_status_paused/1
                        ).
 
--spec agent_outbound(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-agent_outbound(AccountId, AgentId, CallId) ->
+-spec agent_outbound(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+agent_outbound(AccountId, AgentId, CallId, Number, Name) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Agent-ID">>, AgentId}
              ,{<<"Timestamp">>, kz_time:current_tstamp()}
              ,{<<"Status">>, <<"outbound">>}
              ,{<<"Call-ID">>, CallId}
+             ,{<<"Callee-Number">>, Number}
+             ,{<<"Callee-Name">>, Name}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     edr_log_status_change(AccountId, Prop),
@@ -224,14 +226,16 @@ agent_outbound(AccountId, AgentId, CallId) ->
                        ,fun kapi_acdc_stats:publish_status_outbound/1
                        ).
 
--spec agent_inbound(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-agent_inbound(AccountId, AgentId, CallId) ->
+-spec agent_inbound(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+agent_inbound(AccountId, AgentId, CallId, Number, Name) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Agent-ID">>, AgentId}
              ,{<<"Timestamp">>, kz_time:current_tstamp()}
              ,{<<"Status">>, <<"inbound">>}
              ,{<<"Call-ID">>, CallId}
+             ,{<<"Caller-Number">>, Number}
+             ,{<<"Caller-Name">>, Name}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     edr_log_status_change(AccountId, Prop),
