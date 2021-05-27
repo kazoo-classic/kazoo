@@ -50,6 +50,7 @@
                 "    wait_time: 0,",
                 "    talk_time: 0,",
                 "    entered_position: 0",
+                "    max_wait_time: 0",
                 "  };",
                 "  for (var i = 0; i < values.length; i++) {",
                 "    result.calls = result.calls + values[i].calls;",
@@ -57,6 +58,7 @@
                 "    result.wait_time = result.wait_time + values[i].wait_time;",
                 "    result.talk_time = result.talk_time + values[i].talk_time;",
                 "    result.entered_position = Math.max(result.entered_position, values[i].entered_position);",
+                "    result.max_wait_time =  Math.max(result.wait_time, values[i].wait_time);",
                 "  }",
                 "  return (result);",
                 "}"

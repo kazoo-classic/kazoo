@@ -152,8 +152,10 @@ query_call_summary(Queues) ->
                                      QueueJObj = kz_json:set_values([{<<"total_calls">>, TotalCalls }
                                                                     ,{<<"abandoned_calls">>, AbandonedCalls}
                                                                     ,{<<"average_wait_time">>, kz_json:get_value(<<"wait_time">>, QR) div TotalCalls}
-                                                                    ,{<<"average_talk_time">>, kz_json:get_value(<<"talk_time">>, QR) div (TotalCalls - AbandonedCalls)}
+                                                                    ,{<<"average_talk_time">>, kz_json:get_value(<<"talk_time">>, QR) div case TT = (TotalCalls - AbandonedCalls) of 0 -> 1; _ -> TT end}
+
                                                                     ,{<<"max_entered_position">>, kz_json:get_value(<<"entered_position">>, QR)}
+                                                                    ,{<<"max_wait_time">>, kz_json:get_value(<<"max_wait_time">>, QR)}
                                                                     ]
                                                                    ,kz_json:new()),
                                      kz_json:set_value(QueueId, QueueJObj, JObj)

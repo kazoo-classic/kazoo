@@ -2328,7 +2328,7 @@ start_outbound_call_handling(CallId, Number, Name, #state{agent_listener=AgentLi
     kz_util:put_callid(CallId),
     lager:debug("agent making outbound call, not receiving ACDc calls"),
     acdc_agent_listener:outbound_call(AgentListener, CallId, Number, Name),
-    acdc_agent_stats:agent_outbound(AccountId, AgentId, CallId),
+    acdc_agent_stats:agent_outbound(AccountId, AgentId, CallId, Number, Name),
     State#state{outbound_call_ids=[CallId | lists:delete(CallId, OutboundCallIds)]}.
 
 
@@ -2341,7 +2341,7 @@ start_inbound_call_handling(CallId, Number, Name, #state{agent_listener=AgentLis
     kz_util:put_callid(CallId),
     lager:info("agent ~s direct inbound call ~s not receiving ACDc calls", [AgentId, CallId]),
     acdc_agent_listener:inbound_call(AgentListener, CallId, Number, Name),
-    acdc_agent_stats:agent_inbound(AccountId, AgentId, CallId),
+    acdc_agent_stats:agent_inbound(AccountId, AgentId, CallId, Number, Name),
     State#state{inbound_call_ids=[CallId | lists:delete(CallId, InboundCallIds)]}.
 
 -spec outbound_hungup(state()) -> kz_term:handle_fsm_ret(state()).
