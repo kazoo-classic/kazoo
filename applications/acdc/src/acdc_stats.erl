@@ -623,7 +623,7 @@ handle_cast({'update_call', Id, Updates}, State) ->
     Stat = find_call_stat(Id),
     maybe_add_summary_stat(Stat),
     maybe_add_agent_call_stat(Stat),
-    maybe_send_summary_stat(Stat),
+    maybe_send_call_and_summary_stat(Stat),
     {'noreply', State};
 handle_cast({'update_call_summ', Id, Updates}, State) ->
     lager:debug("updating call summary stat ~s: ~p", [Id, Updates]),
@@ -924,12 +924,13 @@ query_call_summary(Match, _Limit) ->
             [];
         Stats ->
             QueryResult = lists:foldl(fun query_call_summary_fold/2, [], Stats),
-            JsonResult = lists:foldl(fun({QueueId, {TotalCalls, AbandonedCalls, TotalWaitTime, TotalTalkTime, MaxEnteredPosition}}, JObj) ->
+            JsonResult = lists:foldl(fun({QueueId, {TotalCalls, AbandonedCalls, TotalWaitTime, TotalTalkTime, MaxEnteredPosition, MaxWaitTime}}, JObj) ->
                                              QueueJObj = kz_json:set_values([{<<"total_calls">>, TotalCalls}
                                                                             ,{<<"abandoned_calls">>, AbandonedCalls}
                                                                             ,{<<"average_wait_time">>, TotalWaitTime div TotalCalls}
                                                                             ,{<<"average_talk_time">>, TotalTalkTime div case TT = (TotalCalls - AbandonedCalls) of 0 -> 1; _ -> TT end}
                                                                             ,{<<"max_entered_position">>, MaxEnteredPosition}
+                                                                            ,{<<"max_wait_time">>, MaxWaitTime}
                                                                             ]
                                                                            ,kz_json:new()),
                                              kz_json:set_value(QueueId, QueueJObj, JObj)
@@ -946,12 +947,12 @@ query_call_summary_fold(#call_summary_stat{queue_id=QueueId
                                           ,talk_time=TalkTime
                                           ,entered_position=EnteredPos
                                           }, Props) ->
-    {TotalCalls, AbandonedCalls, TotalWaitTime, TotalTalkTime, MaxEnteredPosition} = props:get_value(QueueId, Props, {0, 0, 0, 0, 0}),
+    {TotalCalls, AbandonedCalls, TotalWaitTime, TotalTalkTime, MaxEnteredPosition, MaxWaitTime} = props:get_value(QueueId, Props, {0, 0, 0, 0, 0, 0}),
     {AbandonedCalls1, TotalWaitTime1, TotalTalkTime1} = case Status of
                                                             <<"processed">> -> {AbandonedCalls, TotalWaitTime + WaitTime, TotalTalkTime + TalkTime};
                                                             <<"abandoned">> -> {AbandonedCalls + 1, TotalWaitTime, TotalTalkTime}
                                                         end,
-    props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1, TotalTalkTime1, to_max(MaxEnteredPosition,EnteredPos)}, Props).
+    props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1, TotalTalkTime1, to_max(MaxEnteredPosition,EnteredPos), to_max(MaxWaitTime, WaitTime)}, Props).
 
 to_max('undefined', X) -> X;
 to_max(X, 'undefined') -> X;
@@ -1530,8 +1531,8 @@ call_stat_to_agent_call_stat(#call_stat{id=Id
 
 %% Logic to determine current queue where a call just ended and publish summary stats over EDR
 %% This serves to reliably update the dashboard in case of duplicate events
--spec maybe_send_summary_stat(call_stat()) -> boolean().
-maybe_send_summary_stat(#call_stat{status=Status}=Stat)
+-spec maybe_send_call_and_summary_stat(call_stat()) -> boolean().
+maybe_send_call_and_summary_stat(#call_stat{status=Status}=Stat)
   when Status =:= <<"processed">>
        orelse Status =:= <<"abandoned">> ->
     JObj = call_stat_to_json(Stat),
@@ -1553,8 +1554,9 @@ maybe_send_summary_stat(#call_stat{status=Status}=Stat)
                 ,{<<"Calls-Summary">>, kz_json:get_value([<<"Data">>, QueueId], kz_json:from_list(Summary))}
                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                 ]),
+    edr_log_call_stat(AccountId, kz_json:set_value(<<"Event">>, <<"call_stat">>, JObj)),
     edr_log_stats_summary(AccountId, EdrJObj);
-maybe_send_summary_stat(_) -> 'false'.
+maybe_send_call_and_summary_stat(_) -> 'false'.
 
 -spec call_state_change(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 call_state_change(AccountId, Status, Prop) ->
@@ -1566,6 +1568,13 @@ call_state_change(AccountId, Status, Prop) ->
 
 -spec edr_log_stats_summary(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 edr_log_stats_summary(AccountId, JObj) ->
-    lager:debug("emitting stats via EDR ~s: ~p", [AccountId, JObj]),
+    lager:debug("emitting stats summary via EDR ~s: ~p", [AccountId, JObj]),
     Body = kz_json:normalize(JObj),
     kz_edr:event(?APP_NAME, ?APP_VERSION, 'ok', 'info', Body, AccountId).
+
+-spec edr_log_call_stat(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
+edr_log_call_stat(AccountId, JObj) ->
+    lager:debug("emitting call stat via EDR ~s: ~p", [AccountId, JObj]),
+    Body = kz_json:normalize(JObj),
+    kz_edr:event(?APP_NAME, ?APP_VERSION, 'ok', 'info', Body, AccountId).
+
