@@ -153,6 +153,7 @@ process_specific_event(Event, Event, UUID, Props, Node) ->
 maybe_build_presence_event(Node, UUID, Props) ->
     Routines = [fun check_proto/3
                ,fun check_publish_state/3
+               ,fun check_restrict_presence/3 
                ],
     case lists:all(fun(F) -> F(Node, UUID, Props) end, Routines) of
         'true' -> build_presence_event(Node, UUID, Props);
@@ -174,6 +175,24 @@ check_proto(_Proto) ->
 check_publish_state(_Node, _UUID, Props) ->
     props:is_true(<<"Force-Publish-Event-State">>, Props, 'false')
         orelse props:is_true(<<"Publish-Channel-State">>, Props, 'true').
+
+-spec check_restrict_presence(atom(), kz_term:api_binary(), kz_term:proplist()) -> boolean().
+check_restrict_presence(_Node, _UUID, Props) ->
+    case kapps_config:get_boolean(?APP_NAME, <<"restrict_channel_state_publisher">>, 'false') of
+        'false' -> 'true';
+        'true' -> maybe_restrict_presence(Props)
+    end.
+
+-spec maybe_restrict_presence(kz_term:proplist()) -> 'ok'.
+maybe_restrict_presence(Props) ->
+    EcallmgrNode = kz_term:to_binary(node()),
+    case props:get_value(?GET_CCV(<<"Ecallmgr-Node">>), Props) of
+        'undefined' -> 'true';
+        EcallmgrNode -> 'true';
+        _OtherEcallmgr ->
+            lager:debug("presence state controlled by another ecallmgr(~s), not publishing", [ _OtherEcallmgr]),
+            'false'
+    end.
 
 -spec realm(kz_term:proplist()) -> kz_term:ne_binary().
 realm(Props) ->
