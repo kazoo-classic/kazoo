@@ -58,7 +58,7 @@
          end)(AccountId)).
 -else.
 -define(CARRIER_MODULES(AccountId)
-       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES)
+       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, [])
        ).
 -endif.
 
@@ -74,7 +74,7 @@
 
 
 -define(TF_CARRIER_MODULES(AccountId)
-       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, ?DEFAULT_TF_CARRIER_MODULES)
+       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, [])
        ).
 
 -define(TF_CARRIER_MODULES
@@ -171,9 +171,12 @@ get_available_carriers(Options) ->
 
 -spec carrier_modules(kz_term:boolean(), kz_term:binary() | 'undefined', kz_term:binary() | 'undefined') -> kz_term:binary().
 carrier_modules(IsTollFree, AccountId, ResellerId) when IsTollFree =:= 'false' ->
-    ?CARRIER_MODULES(AccountId, ResellerId);
+    case ?CARRIER_MODULES(AccountId, ResellerId) of
+        [] -> ?CARRIER_MODULES;
+        C -> C
+    end;
 %system_config/number_manager
-carrier_modules(_, 'undefined', 'undefined') ->
+carrier_modules('true', 'undefined', 'undefined') ->
     case {?CARRIER_MODULES, ?TF_CARRIER_MODULES} of
         {[], []} -> ?DEFAULT_CARRIER_MODULES;
         {C, []} -> 
@@ -182,24 +185,23 @@ carrier_modules(_, 'undefined', 'undefined') ->
         {_, C} -> C
     end;
 %Reseller
-carrier_modules(_, ResellerId, 'undefined') ->
+carrier_modules('true', ResellerId, 'undefined') ->
     case {?CARRIER_MODULES(ResellerId), ?TF_CARRIER_MODULES(ResellerId)} of
         {[], []} -> carrier_modules('true', 'undefined', 'undefined');
-        {C, []} -> 
-            kapps_account_config:set(ResellerId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, C),
-            C;
+        {_, []} -> 
+            kapps_account_config:set(ResellerId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, [?CARRIER_LOCAL]),
+            [?CARRIER_LOCAL];
         {_, C} -> C
     end;
 %Account
-carrier_modules(_, AccountId, ResellerId) ->
+carrier_modules('true', AccountId, ResellerId) ->
     case {?CARRIER_MODULES(AccountId), ?TF_CARRIER_MODULES(AccountId)} of
         {[], []} -> carrier_modules('true', ResellerId, 'undefined');
-        {C, []} -> 
-            kapps_account_config:set(AccountId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, C),
-            C;
+        {_, []} ->
+            kapps_account_config:set(AccountId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, [?CARRIER_LOCAL]),
+            [?CARRIER_LOCAL];
         {_, C} -> C
     end.
-
 
 -spec default_carriers() -> kz_term:atoms().
 default_carriers() ->
