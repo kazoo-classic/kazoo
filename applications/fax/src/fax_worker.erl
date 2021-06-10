@@ -819,7 +819,7 @@ send_fax(JobId, JObj, Q, ToDID) ->
                 ,{<<"Application-Data">>, get_proxy_url(JobId)}
                 ,{<<"Origination-Call-ID">>, CallId}
                 ,{<<"Bypass-E164">>, kz_json:is_true(<<"bypass_e164">>, JObj)}
-                ,{<<"Fax-T38-Enabled">>, false}
+                ,{<<"Fax-T38-Enabled">>, true}
                  | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
                 ]),
     lager:debug("sending fax originate request ~s with call-id ~s", [JobId, CallId]),
