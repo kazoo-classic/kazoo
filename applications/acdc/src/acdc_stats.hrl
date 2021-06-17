@@ -4,9 +4,14 @@
 -define(CLEANUP_MSG, 'time_to_cleanup').
 
 -define(VALID_STATUSES, [<<"waiting">>, <<"handled">>, <<"abandoned">>, <<"processed">>]).
+-define(VALID_AGENT_STATUSES, [<<"handled">>, <<"processed">>, <<"missed">>]).
+
 
 -define(STATS_QUERY_LIMITS_ENABLED, kapps_config:get_is_true(?CONFIG_CAT, <<"stats_query_limits_enabled">>, 'true')).
 -define(MAX_RESULT_SET, kapps_config:get_integer(?CONFIG_CAT, <<"max_result_set">>, 25)).
+
+%% Wiggle room for queries in case the AMQP message is delayed a little
+-define(QUERY_WINDOW_WIGGLE_ROOM_S, 5).
 
 -record(agent_miss, {agent_id :: kz_term:api_binary()
                     ,miss_reason :: kz_term:api_binary()
@@ -64,20 +69,20 @@
                          ,agent_id :: kz_term:api_binary() | '_'
                          ,call_id :: kz_term:api_binary() | '_'
                          ,status :: kz_term:api_binary() | '_'
+                         ,talk_time :: kz_term:api_integer() | '_'
                          ,timestamp :: kz_term:api_integer() | '_'
                          }).
 -type agent_call_stat() :: #agent_call_stat{}.
 
 -define(STATUS_STATUSES, [<<"logged_in">>, <<"logged_out">>, <<"ready">>
                          ,<<"connecting">>, <<"connected">>
-                         ,<<"wrapup">>, <<"paused">>, <<"outbound">>
+                         ,<<"wrapup">>, <<"paused">>, <<"outbound">>, <<"inbound">>
                          ]).
 -record(status_stat, {id :: kz_term:api_binary() | '_'
                      ,agent_id :: kz_term:api_binary() | '$2' | '_'
                      ,account_id :: kz_term:api_binary() | '$1' | '_'
                      ,status :: kz_term:api_binary() | '$4' | '_'
                      ,timestamp :: kz_term:api_pos_integer() | '$1' | '$3' | '$5' | '_'
-
                      ,wait_time :: kz_term:api_integer() | '_'
                      ,pause_time :: kz_term:api_integer() | '_'
                      ,pause_alias :: kz_term:api_binary() | '_'

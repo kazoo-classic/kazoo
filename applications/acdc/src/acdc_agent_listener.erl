@@ -1,17 +1,19 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
+%%% @author James Aimonetti
+%%% @author Daniel Finke
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%%
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_agent_listener).
 -behaviour(gen_listener).
 
 %% API
--export([start_link/2, start_link/3, start_link/5
+-export([start_link/3, start_link/4, start_link/5
         ,member_connect_resp/2
         ,member_connect_retry/2
         ,member_connect_accepted/1, member_connect_accepted/2, member_connect_accepted/3
@@ -39,15 +41,12 @@
         ,add_acdc_queue/3
         ,rm_acdc_queue/2
         ,call_status_req/1, call_status_req/2
-        ,stop/1
         ,fsm_started/2
-        ,add_endpoint_bindings/3, remove_endpoint_bindings/3
         ,outbound_call_id/2
         ,remove_cdr_urls/2
         ,logout_agent/1
         ,agent_info/2
         ,maybe_update_presence_id/2
-        ,maybe_update_presence_state/2
         ,presence_update/2
         ,update_agent_status/2
         ]).
@@ -79,11 +78,11 @@
                ,original_call :: kapps_call:call()
                ,acdc_queue_id :: api_kz_term:ne_binary() % the ACDc Queue ID
                ,msg_queue_id :: api_kz_term:ne_binary() % the AMQP Queue ID of the ACDc Queue process
-               ,agent_id :: api_kz_term:ne_binary()
+               ,agent_id :: kz_term:api_ne_binary()
                ,agent_priority :: agent_priority()
                ,skills :: kz_term:ne_binaries() % skills this agent has
-               ,acct_db :: api_kz_term:ne_binary()
-               ,acct_id :: api_kz_term:ne_binary()
+               ,acct_db :: kz_term:api_ne_binary()
+               ,acct_id :: kz_term:api_binary()
                ,fsm_pid :: kz_term:api_pid()
                ,agent_queues = [] :: kz_term:ne_binaries()
                ,last_connect :: kz_term:kz_now() | undefined % last connection
@@ -97,7 +96,7 @@
                ,recording_url :: kz_term:api_binary() %% where to send recordings after the call
                ,is_thief = 'false' :: boolean()
                ,agent :: agent()
-               ,agent_call_ids = [] :: kz_term:api_binaries() | kz_term:kz_proplist()
+               ,agent_call_ids = [] :: kz_term:api_binaries() | kz_term:proplist()
                ,cdr_urls = dict:new() :: dict:dict() %% {CallId, Url}
                ,agent_presence_id :: kz_term:api_binary()
                }).
@@ -105,9 +104,9 @@
 
 -type agent() :: kapps_call:call() | kz_json:object().
 
-%%%===================================================================
+%%%=============================================================================
 %%% Defines for different functionality
-%%%===================================================================
+%%%=============================================================================
 
 %% On init, an aget process sends a sync_req and waits SYNC_TIMER_TIMEOUT ms
 %% The agent process checks its list of received
@@ -127,17 +126,18 @@
 %% When an agent is paused (on break, logged out, etc)
 -define(PAUSED_TIMER_MESSAGE, 'paused_timeout').
 
--define(BINDINGS(AcctId, AgentId), [{'self', []}
-                                   ,{'acdc_agent', [{'account_id', AcctId}
-                                                   ,{'agent_id', AgentId}
-                                                   ,{'restrict_to', ['member_connect_win', 'sync', 'fsm_shared']}
-                                                   ]}
-                                   ,{'conf', [{'action', <<"*">>}
-                                             ,{'db', kz_util:format_account_id(AcctId, 'encoded')}
-                                             ,{'id', AgentId}
-                                             ,'federate'
-                                             ]}
-                                   ]).
+-define(BINDINGS(AccountId, AgentId), [{'self', []}
+                                      ,{'acdc_agent', [{'account_id', AccountId}
+                                                      ,{'agent_id', AgentId}
+                                                      ,{'restrict_to', ['member_connect_win', 'member_connect_satisfied', 'sync', 'fsm_shared']}
+                                                      ,'federate'
+                                                      ]}
+                                      ,{'conf', [{'action', <<"*">>}
+                                                ,{'db', kz_util:format_account_id(AccountId, 'encoded')}
+                                                ,{'id', AgentId}
+                                                ,'federate'
+                                                ]}
+                                      ]).
 
 -define(RESPONDERS, [{{'acdc_agent_handler', 'handle_sync_req'}
                      ,[{<<"agent">>, <<"sync_req">>}]
@@ -168,45 +168,41 @@
                      }
                     ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(pid(), kz_json:object()) -> kz_term:startlink_ret().
--spec start_link(pid(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binaries()) -> kz_term:startlink_ret().
--spec start_link(pid(), kapps_call:call(), kz_term:ne_binary()) -> kz_term:startlink_ret().
-start_link(Supervisor, AgentJObj) ->
-    AgentId = kz_doc:id(AgentJObj),
-    AcctId = account_id(AgentJObj),
-    Queues = kz_json:get_value(<<"queues">>, AgentJObj, []),
-    start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues).
-
-start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues) ->
-    lager:debug("start bindings for ~s(~s) in ready", [AcctId, AgentId]),
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link(pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kz_term:ne_binaries()) -> kz_types:startlink_ret().
+start_link(Supervisor, AccountId, AgentId, AgentJObj, Queues) ->
+    lager:debug("start bindings for ~s(~s) in ready", [AccountId, AgentId]),
     gen_listener:start_link(?SERVER
-                           ,[{'bindings', ?BINDINGS(AcctId, AgentId)}
+                           ,[{'bindings', ?BINDINGS(AccountId, AgentId)}
                             ,{'responders', ?RESPONDERS}
                             ]
                            ,[Supervisor, AgentJObj, Queues]
                            ).
 
+-spec start_link(pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> kz_types:startlink_ret().
+start_link(Supervisor, AccountId, AgentId, AgentJObj) ->
+    Queues = kz_json:get_value(<<"queues">>, AgentJObj, []),
+    start_link(Supervisor, AccountId, AgentId, AgentJObj, Queues).
+
+-spec start_link(pid(), kapps_call:call(), kz_term:ne_binary()) -> kz_term:startlink_ret().
 start_link(Supervisor, ThiefCall, QueueId) ->
     AgentId = kapps_call:owner_id(ThiefCall),
-    AcctId = kapps_call:account_id(ThiefCall),
+    AccountId = kapps_call:account_id(ThiefCall),
 
-    lager:debug("starting thief agent ~s(~s)", [AgentId, AcctId]),
+    lager:debug("starting thief agent ~s(~s)", [AgentId, AccountId]),
     gen_listener:start_link(?SERVER
-                           ,[{'bindings', ?BINDINGS(AcctId, AgentId)}
+                           ,[{'bindings', ?BINDINGS(AccountId, AgentId)}
                             ,{'responders', ?RESPONDERS}
                             ]
                            ,[Supervisor, ThiefCall, [QueueId]]
                            ).
-
--spec stop(pid()) -> 'ok'.
-stop(Srv) -> gen_listener:cast(Srv, {'stop_agent', self()}).
 
 -spec member_connect_resp(pid(), kz_json:object()) -> 'ok'.
 member_connect_resp(Srv, ReqJObj) ->
@@ -220,12 +216,14 @@ member_connect_retry(Srv, WinJObj) ->
 agent_timeout(Srv) -> gen_listener:cast(Srv, 'agent_timeout').
 
 -spec member_connect_accepted(pid()) -> 'ok'.
--spec member_connect_accepted(pid(), kz_term:ne_binary()) -> 'ok'.
--spec member_connect_accepted(pid(), kz_term:ne_binary(), kapps_call:call()) -> 'ok'.
 member_connect_accepted(Srv) ->
     gen_listener:cast(Srv, {'member_connect_accepted'}).
+
+-spec member_connect_accepted(pid(), kz_term:ne_binary()) -> 'ok'.
 member_connect_accepted(Srv, ACallId) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId}).
+
+-spec member_connect_accepted(pid(), kz_term:ne_binary(), kapps_call:call()) -> 'ok'.
 member_connect_accepted(Srv, ACallId, MemberCall) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId, MemberCall}).
 
@@ -242,7 +240,7 @@ hangup_call(Srv) ->
     gen_listener:cast(Srv, {'hangup_call'}).
 
 -spec monitor_call(pid(), kapps_call:call(), kz_json:object(), kz_term:api_binary()) ->
-                          'ok'.
+          'ok'.
 monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
     gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
 
@@ -302,8 +300,9 @@ send_agent_busy(Srv) ->
 send_sync_req(Srv) -> gen_listener:cast(Srv, {'send_sync_req'}).
 
 -spec send_sync_resp(pid(), kz_term:text(), kz_json:object()) -> 'ok'.
--spec send_sync_resp(pid(), kz_term:text(), kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
 send_sync_resp(Srv, Status, ReqJObj) -> send_sync_resp(Srv, Status, ReqJObj, []).
+
+-spec send_sync_resp(pid(), kz_term:text(), kz_json:object(), kz_term:proplist()) -> 'ok'.
 send_sync_resp(Srv, Status, ReqJObj, Options) ->
     gen_listener:cast(Srv, {'send_sync_resp', Status, ReqJObj, Options}).
 
@@ -330,31 +329,16 @@ rm_acdc_queue(Srv, Q) ->
     gen_listener:cast(Srv, {'rm_acdc_queue', Q}).
 
 -spec call_status_req(pid()) -> 'ok'.
--spec call_status_req(pid(), kz_term:ne_binary()) -> 'ok'.
 call_status_req(Srv) ->
     gen_listener:cast(Srv, 'call_status_req').
+
+-spec call_status_req(pid(), kz_term:ne_binary()) -> 'ok'.
 call_status_req(Srv, CallId) ->
     gen_listener:cast(Srv, {'call_status_req', CallId}).
 
 -spec fsm_started(pid(), pid()) -> 'ok'.
 fsm_started(Srv, FSM) ->
     gen_listener:cast(Srv, {'fsm_started', FSM}).
-
--spec add_endpoint_bindings(pid(), kz_term:ne_binary(), api_kz_term:ne_binary()) -> 'ok'.
-add_endpoint_bindings(_Srv, _Realm, 'undefined') ->
-    lager:debug("ignoring adding endpoint bindings for undefined user @ ~s", [_Realm]);
-add_endpoint_bindings(Srv, Realm, User) ->
-    lager:debug("adding route bindings to ~p for endpoint ~s@~s", [Srv, User, Realm]),
-    gen_listener:add_binding(Srv, 'route', [{'realm', Realm}
-                                           ,{'user', User}
-                                           ]).
-
--spec remove_endpoint_bindings(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-remove_endpoint_bindings(Srv, Realm, User) ->
-    lager:debug("removing route bindings to ~p for endpoint ~s@~s", [Srv, User, Realm]),
-    gen_listener:rm_binding(Srv, 'route', [{'realm', Realm}
-                                          ,{'user', User}
-                                          ]).
 
 -spec remove_cdr_urls(pid(), kz_term:ne_binary()) -> 'ok'.
 remove_cdr_urls(Srv, CallId) -> gen_listener:cast(Srv, {'remove_cdr_urls', CallId}).
@@ -366,11 +350,6 @@ logout_agent(Srv) -> gen_listener:cast(Srv, 'logout_agent').
 maybe_update_presence_id(_Srv, 'undefined') -> 'ok';
 maybe_update_presence_id(Srv, Id) ->
     gen_listener:cast(Srv, {'presence_id', Id}).
-
--spec maybe_update_presence_state(pid(), api_kz_term:ne_binary()) -> 'ok'.
-maybe_update_presence_state(_Srv, 'undefined') -> 'ok';
-maybe_update_presence_state(Srv, State) ->
-    presence_update(Srv, State).
 
 -spec presence_update(pid(), api_kz_term:ne_binary()) -> 'ok'.
 presence_update(_, 'undefined') -> 'ok';
@@ -393,21 +372,16 @@ queues(Srv) ->
 id(Srv) ->
     gen_listener:call(Srv, 'my_id').
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Initializes the server
+%% @doc Initializes the server
 %%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init([atom() | agent() | kz_term:ne_binaries()]) -> {'ok', state()}.
 init([Supervisor, Agent, Queues]) ->
     AgentId = agent_id(Agent),
@@ -428,20 +402,12 @@ init([Supervisor, Agent, Queues]) ->
                  ,agent_presence_id=AgentId
                  }}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling call messages
+%% @doc Handling call messages
 %%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {'reply', Reply, State} |
-%%                                   {'reply', Reply, State, Timeout} |
-%%                                   {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_term:handle_call_ret_state(state()).
 handle_call({'originate_callback_return', Call}, _, #state{my_q=MyQ}=State) ->
     MemberCallId = do_originate_callback_return(MyQ, Call),
@@ -456,25 +422,21 @@ handle_call('my_id', _, #state{agent_id=AgentId}=State) ->
     {'reply', AgentId, State, 'hibernate'};
 handle_call({'agent_info', Field}, _, #state{agent=Agent}=State) ->
     {'reply', kz_json:get_value(Field, Agent), State};
-handle_call('config', _From, #state{acct_id=AcctId
+handle_call('config', _From, #state{acct_id=AccountId
                                    ,agent_id=AgentId
                                    ,my_q=Q
                                    }=State) ->
-    {'reply', {AcctId, AgentId, Q}, State};
+    {'reply', {AccountId, AgentId, Q}, State};
 handle_call(_Request, _From, #state{}=State) ->
     lager:debug("unhandled call from ~p: ~p", [_From, _Request]),
     {'reply', {'error', 'unhandled_call'}, State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling cast messages
+%% @doc Handling cast messages
 %%
-%% @spec handle_cast(Msg, State) -> {'noreply', State} |
-%%                                  {'noreply', State, Timeout} |
-%%                                  {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_term:handle_cast_ret_state(state()).
 handle_cast({'refresh_config', JObj, StateName}, #state{agent_priority=Priority0
                                                        ,skills=Skills0
@@ -502,10 +464,6 @@ handle_cast({'refresh_config', JObj, StateName}, #state{agent_priority=Priority0
     {'noreply', State#state{agent_priority=Priority
                            ,skills=Skills
                            }};
-handle_cast({'stop_agent', Req}, #state{supervisor=Supervisor}=State) ->
-    lager:debug("stop agent requested by ~p", [Req]),
-    _ = kz_util:spawn(fun acdc_agent_sup:stop/1, [Supervisor]),
-    {'noreply', State};
 
 handle_cast({'fsm_started', FSMPid}, State) ->
     lager:debug("fsm started: ~p", [FSMPid]),
@@ -529,21 +487,21 @@ handle_cast({'add_acdc_queue', Q, StateName}, #state{agent_queues=Qs}=State) whe
     end;
 
 handle_cast({'rm_acdc_queue', Q}, #state{agent_queues=[Q]
-                                        ,acct_id=AcctId
+                                        ,acct_id=AccountId
                                         ,agent_id=AgentId
                                         ,fsm_pid=FSM
                                         }=State) ->
     lager:debug("agent logged out of last known queue ~s, logging out", [Q]),
-    rm_queue_binding(AcctId, AgentId, Q),
+    rm_queue_binding(AccountId, AgentId, Q),
     acdc_agent_fsm:agent_logout(FSM),
     {'noreply', State#state{agent_queues=[]}};
 handle_cast({'rm_acdc_queue', Q}, #state{agent_queues=Qs
-                                        ,acct_id=AcctId
+                                        ,acct_id=AccountId
                                         ,agent_id=AgentId
                                         }=State) ->
     case lists:member(Q, Qs) of
         'true' ->
-            rm_queue_binding(AcctId, AgentId, Q),
+            rm_queue_binding(AccountId, AgentId, Q),
             {'noreply', State#state{agent_queues=lists:delete(Q, Qs)}, 'hibernate'};
         'false' ->
             lager:debug("not logged into queue ~s", [Q]),
@@ -590,8 +548,7 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
                     ,'hibernate'};
                 'true' ->
                     lager:debug("thief is done, going down"),
-                    stop(self()),
-                    {'noreply', State}
+                    {'stop', 'normal', State}
             end;
         _ ->
             case props:get_value(CallId, ACallIds) of
@@ -662,7 +619,7 @@ handle_cast({'member_connect_retry', WinJObj}, #state{my_id=MyId
 
 handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #state{is_thief='false'
                                                                                   ,agent_queues=Qs
-                                                                                  ,acct_id=AcctId
+                                                                                  ,acct_id=AccountId
                                                                                   ,agent_id=AgentId
                                                                                   ,my_q=MyQ
                                                                                   ,agent_call_ids=ACallIds
@@ -687,7 +644,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
                                                    ]),
 
     lager:debug("originate sent, waiting on successful bridge now"),
-    update_my_queues_of_change(AcctId, AgentId, Call, Qs),
+    update_my_queues_of_change(AccountId, AgentId, Call, Qs),
     {'noreply', State#state{call=Call
                            ,acdc_queue_id=kz_json:get_value(<<"Queue-ID">>, WinJObj)
                            ,record_calls=ShouldRecord
@@ -745,7 +702,7 @@ handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
     ,'hibernate'};
 
 handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}, #state{agent_queues=Qs
-                                                                                                     ,acct_id=AcctId
+                                                                                                     ,acct_id=AccountId
                                                                                                      ,agent_id=AgentId
                                                                                                      ,my_q=MyQ
                                                                                                      ,agent_call_ids=ACallIds
@@ -766,7 +723,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
                                ,ACallIds),
 
     lager:debug("originate sent, waiting on bridge of agent and callback call"),
-    update_my_queues_of_change(AcctId, AgentId, Call, Qs),
+    update_my_queues_of_change(AccountId, AgentId, Call, Qs),
     {'noreply', State#state{call=Call
                            ,record_calls=ShouldRecord
                            ,acdc_queue_id=kz_json:get_value(<<"Queue-ID">>, WinJObj)
@@ -782,7 +739,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
 
 handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
                                                ,call=Call
-                                               ,acct_id=AcctId
+                                               ,acct_id=AccountId
                                                ,agent_id=AgentId
                                                ,agent_queues=Qs
                                                ,my_id=MyId
@@ -792,13 +749,13 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
     lager:debug("member bridged to agent! waiting on agent call id though"),
     maybe_start_recording(Call, ShouldRecord, RecordingUrl),
 
-    send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
-    [send_agent_busy(AcctId, AgentId, QueueId, Call) || QueueId <- Qs],
+    send_member_connect_accepted(AmqpQueue, call_id(Call), AccountId, AgentId, MyId),
+    _ = [send_agent_busy(AccountId, AgentId, QueueId, Call) || QueueId <- Qs],
     {'noreply', State};
 
 handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
                                                         ,call=Call
-                                                        ,acct_id=AcctId
+                                                        ,acct_id=AccountId
                                                         ,agent_id=AgentId
                                                         ,agent_queues=Qs
                                                         ,my_id=MyId
@@ -813,13 +770,13 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
 
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
-    send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
-    [send_agent_busy(AcctId, AgentId, QueueId, Call) || QueueId <- Qs],
+    send_member_connect_accepted(AmqpQueue, call_id(Call), AccountId, AgentId, MyId),
+    _ = [send_agent_busy(AccountId, AgentId, QueueId, Call) || QueueId <- Qs],
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
 
 handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
                                                                  ,call=Call
-                                                                 ,acct_id=AcctId
+                                                                 ,acct_id=AccountId
                                                                  ,agent_id=AgentId
                                                                  ,agent_queues=Qs
                                                                  ,my_id=MyId
@@ -834,8 +791,8 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
 
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
-    send_member_connect_accepted(AmqpQueue, call_id(Call), call_id(NewCall), AcctId, AgentId, MyId),
-    [send_agent_busy(AcctId, AgentId, QueueId, Call) || QueueId <- Qs],
+    send_member_connect_accepted(AmqpQueue, call_id(Call), call_id(NewCall), AccountId, AgentId, MyId),
+    _ = [send_agent_busy(AccountId, AgentId, QueueId, Call) || QueueId <- Qs],
     {'noreply', State#state{call=NewCall
                            ,original_call=Call
                            ,agent_call_ids=ACallIds1
@@ -847,19 +804,24 @@ handle_cast({'monitor_connect_accepted', ACallId}, #state{agent_call_ids=ACallId
 
 handle_cast({'member_callback_accepted', ACall}, #state{msg_queue_id=AmqpQueue
                                                        ,call=Call
+                                                       ,acct_id=AccountId
+                                                       ,agent_id=AgentId
+                                                       ,my_id=MyId
                                                        ,agent_call_ids=ACallIds
                                                        }=State) ->
     lager:debug("agent answered callback, mark call as accepted"),
 
     ACallId = kapps_call:call_id(ACall),
-    ACallIds1 = filter_agent_calls(ACallIds, ACallId),
+    %%    ACallIds1 = filter_agent_calls(ACallIds, ACallId),
+    ACallIds1 = [ACallId],
 
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
-    send_member_callback_accepted(AmqpQueue, call_id(Call)),
+    send_member_callback_accepted(AmqpQueue, call_id(Call), AccountId, AgentId, MyId),
 
-    ACall1 = kapps_call:set_control_queue(props:get_value(ACallId, ACallIds), ACall),
-    kapps_call_command:prompt(<<"queue-now_calling_back">>, ACall1),
+    CtrlQ = props:get_value(ACallId, ACallIds),
+    ACall1 = kapps_call:set_control_queue(CtrlQ, ACall),
+    kapps_call_command:audio_macro([{'prompt', <<"queue-now_calling_back">>}], ACall1),
 
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
 
@@ -916,25 +878,25 @@ handle_cast({'originate_uuid', UUID, CtlQ}, #state{agent_call_ids=ACallIds}=Stat
     {'noreply', State#state{agent_call_ids=props:set_value(UUID, CtlQ, ACallIds)}};
 
 handle_cast({'outbound_call', CallId, Number, Name}, #state{agent_id=AgentId
-                                             ,acct_id=AcctId
-                                             ,agent_queues=Qs
-                                             }=State) ->
+                                                           ,acct_id=AccountId
+                                                           ,agent_queues=Qs
+                                                           }=State) ->
     _ = kz_util:put_callid(CallId),
     acdc_util:bind_to_call_events(CallId),
     Call = kapps_call:set_call_id(CallId, kapps_call:new()),
-    [send_agent_busy(AcctId, AgentId, QueueId, Call, 'outbound', Number, Name) || QueueId <- Qs],
+    _ = [send_agent_busy(AccountId, AgentId, QueueId, Call, 'outbound', Number, Name) || QueueId <- Qs],
 
     lager:debug("bound to agent's outbound call ~s", [CallId]),
     {'noreply', State#state{call=Call}, 'hibernate'};
 
 handle_cast({'inbound_call', CallId, Number, Name}, #state{agent_id=AgentId
-                                             ,acct_id=AcctId
-                                             ,agent_queues=Qs
-                                             }=State) ->
+                                                          ,acct_id=AccountId
+                                                          ,agent_queues=Qs
+                                                          }=State) ->
     _ = kz_util:put_callid(CallId),
     acdc_util:bind_to_call_events(CallId),
     Call = kapps_call:set_call_id(CallId, kapps_call:new()),
-    [send_agent_busy(AcctId, AgentId, QueueId, Call, 'inbound', Number, Name) || QueueId <- Qs],
+    _ = [send_agent_busy(AccountId, AgentId, QueueId, Call, 'inbound', Number, Name) || QueueId <- Qs],
 
     lager:debug("bound to agent's outbound call ~s", [CallId]),
     {'noreply', State#state{call=Call}, 'hibernate'};
@@ -942,22 +904,22 @@ handle_cast({'inbound_call', CallId, Number, Name}, #state{agent_id=AgentId
 handle_cast('send_agent_available', #state{agent_id=AgentId
                                           ,agent_priority=Priority
                                           ,skills=Skills
-                                          ,acct_id=AcctId
+                                          ,acct_id=AccountId
                                           ,agent_queues=Qs
                                           }=State) ->
-    [send_agent_available(AcctId, AgentId, QueueId, Priority, Skills) || QueueId <- Qs],
+    [send_agent_available(AccountId, AgentId, QueueId, Priority, Skills) || QueueId <- Qs],
     {'noreply', State};
 
 handle_cast('send_agent_busy', #state{agent_id=AgentId
-                                     ,acct_id=AcctId
+                                     ,acct_id=AccountId
                                      ,agent_queues=Qs
                                      }=State) ->
-    [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
+    [send_agent_busy(AccountId, AgentId, QueueId) || QueueId <- Qs],
     {'noreply', State};
 
 handle_cast({'send_sync_req'}, #state{my_id=MyId
                                      ,my_q=MyQ
-                                     ,acct_id=AcctId
+                                     ,acct_id=AccountId
                                      ,agent_id=AgentId
                                      }=State) ->
     _ = case MyQ of
@@ -966,22 +928,22 @@ handle_cast({'send_sync_req'}, #state{my_id=MyId
                 timer:apply_after(100 , 'gen_listener', 'cast', [self(), {'send_sync_req'}]);
             _ ->
                 lager:debug("queue retrieved: ~p , sending sync request", [MyQ]),
-                send_sync_request(AcctId, AgentId, MyId, MyQ)
+                send_sync_request(AccountId, AgentId, MyId, MyQ)
         end,
     {'noreply', State};
 
 handle_cast({'send_sync_resp', Status, ReqJObj, Options}, #state{my_id=MyId
-                                                                ,acct_id=AcctId
+                                                                ,acct_id=AccountId
                                                                 ,agent_id=AgentId
                                                                 ,my_q=MyQ
                                                                 }=State) ->
-    send_sync_response(ReqJObj, AcctId, AgentId, MyId, MyQ, Status, Options),
+    send_sync_response(ReqJObj, AccountId, AgentId, MyId, MyQ, Status, Options),
     {'noreply', State};
 
-handle_cast({'send_status_update', Status}, #state{acct_id=AcctId
+handle_cast({'send_status_update', Status}, #state{acct_id=AccountId
                                                   ,agent_id=AgentId
                                                   }=State) ->
-    send_status_update(AcctId, AgentId, Status),
+    send_status_update(AccountId, AgentId, Status),
     {'noreply', State};
 
 handle_cast('call_status_req', #state{call=Call, my_q=Q}=State) ->
@@ -1008,11 +970,11 @@ handle_cast({'call_status_req', Call}, State) ->
 handle_cast({'remove_cdr_urls', CallId}, #state{cdr_urls=Urls}=State) ->
     {'noreply', State#state{cdr_urls=dict:erase(CallId, Urls)}, 'hibernate'};
 
-handle_cast('logout_agent', #state{acct_id=AcctId
+handle_cast('logout_agent', #state{acct_id=AccountId
                                   ,agent_id=AgentId
                                   }=State) ->
     Update = props:filter_undefined(
-               [{<<"Account-ID">>, AcctId}
+               [{<<"Account-ID">>, AccountId}
                ,{<<"Agent-ID">>, AgentId}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
@@ -1027,24 +989,24 @@ handle_cast({'presence_id', PresenceId}, #state{agent_presence_id=_Id}=State) ->
     lager:debug("updating presence id from ~s to ~s", [_Id, PresenceId]),
     {'noreply', State#state{agent_presence_id=PresenceId}};
 
-handle_cast({'presence_update', PresenceState}, #state{acct_id=AcctId
+handle_cast({'presence_update', PresenceState}, #state{acct_id=AccountId
                                                       ,agent_presence_id='undefined'
                                                       ,agent_id=AgentId
                                                       }=State) ->
     lager:debug("no custom presence id, using ~s for ~s", [AgentId, PresenceState]),
-    acdc_util:presence_update(AcctId, AgentId, PresenceState),
+    acdc_util:presence_update(AccountId, AgentId, PresenceState),
     {'noreply', State};
-handle_cast({'presence_update', PresenceState}, #state{acct_id=AcctId
+handle_cast({'presence_update', PresenceState}, #state{acct_id=AccountId
                                                       ,agent_presence_id=PresenceId
                                                       }=State) ->
     lager:debug("custom presence id, using ~s for ~s", [PresenceId, PresenceState]),
-    acdc_util:presence_update(AcctId, PresenceId, PresenceState),
+    acdc_util:presence_update(AccountId, PresenceId, PresenceState),
     {'noreply', State};
 
 handle_cast({'update_status', Status}, #state{agent_id=AgentId
-                                             ,acct_id=AcctId
+                                             ,acct_id=AccountId
                                              }=State) ->
-    catch acdc_agent_util:update_status(AcctId, AgentId, Status),
+    catch acdc_agent_util:update_status(AccountId, AgentId, Status),
     {'noreply', State};
 
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
@@ -1054,82 +1016,78 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State, 'hibernate'}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling all non call/cast messages
+%% @doc Handling all non call/cast messages
 %%
-%% @spec handle_info(Info, State) -> {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {stop, Reason, State}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_info(any(), state()) -> kz_term:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handling all messages from the message bus
+%% @doc Handling all messages from the message bus
 %%
-%% @spec handle_info(JObj, State) -> {'reply', Proplist} |
-%%                                   ignore
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, #state{fsm_pid='undefined'}) -> 'ignore';
 handle_event(_JObj, #state{fsm_pid=FSM
                           ,agent_id=AgentId
-                          ,acct_id=AcctId
+                          ,acct_id=AccountId
                           ,cdr_urls=Urls
                           ,agent_call_ids=AgentCallIds
                           }) ->
     {'reply', [{'fsm_pid', FSM}
               ,{'agent_id', AgentId}
-              ,{'acct_id', AcctId}
+              ,{'acct_id', AccountId}
               ,{'cdr_urls', Urls}
               ,{'agent_call_ids', AgentCallIds}
               ]}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
+%% @doc This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
 %% necessary cleaning up. When it returns, the gen_server terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(Reason, #state{agent_queues=Queues
-                        ,acct_id=AcctId
+                        ,acct_id=AccountId
                         ,agent_id=AgentId
                         }
          ) when Reason == 'normal'; Reason == 'shutdown' ->
-    _ = [rm_queue_binding(AcctId, AgentId, QueueId) || QueueId <- Queues],
+    _ = [rm_queue_binding(AccountId, AgentId, QueueId) || QueueId <- Queues],
+    Reason =:= 'normal' %% Prevent race condition of supervisor delete_child/restart_child
+        andalso kz_util:spawn(fun acdc_agents_sup:stop_agent/2, [AccountId, AgentId]),
     lager:debug("agent process going down: ~p", [Reason]);
 terminate(_Reason, _State) ->
     lager:debug("agent process going down: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Convert process state when code is changed
+%% @doc Convert process state when code is changed
 %%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec is_valid_queue(kz_term:ne_binary(), kz_term:ne_binaries()) -> boolean().
 is_valid_queue(Q, Qs) -> lists:member(Q, Qs).
 
@@ -1151,7 +1109,6 @@ send_member_connect_resp(JObj, MyQ, AgentId, MyId, LastConn) ->
     kapi_acdc_queue:publish_member_connect_resp(Queue, Resp).
 
 -spec send_member_connect_retry(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
--spec send_member_connect_retry(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_member_connect_retry(JObj, MyId, AgentId) ->
     send_member_connect_retry(kz_json:get_value(<<"Server-ID">>, JObj)
                              ,call_id(JObj)
@@ -1159,6 +1116,7 @@ send_member_connect_retry(JObj, MyId, AgentId) ->
                              ,AgentId
                              ).
 
+-spec send_member_connect_retry(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_member_connect_retry('undefined', _, _, _) ->
     lager:debug("no queue to send the retry to, seems bad");
 send_member_connect_retry(Queue, CallId, MyId, AgentId) ->
@@ -1168,23 +1126,23 @@ send_member_connect_retry(Queue, CallId, MyId, AgentId) ->
              ,{<<"Agent-ID">>, AgentId}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-%% Delay the retry by 0.5 secs to allow agents to settle after RING timeout
+    %% Delay the retry by 0.5 secs to allow agents to settle after RING timeout
     timer:apply_after(2000, kapi_acdc_queue, publish_member_connect_retry, [Queue, Resp]).
 
 -spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
--spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId) ->
+send_member_connect_accepted(Queue, CallId, AccountId, AgentId, MyId) ->
     Resp = props:filter_undefined([{<<"Call-ID">>, CallId}
-                                  ,{<<"Account-ID">>, AcctId}
+                                  ,{<<"Account-ID">>, AccountId}
                                   ,{<<"Agent-ID">>, AgentId}
                                   ,{<<"Process-ID">>, MyId}
                                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                   ]),
     kapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
 
-send_member_connect_accepted(Queue, CallId, NewCallId, AcctId, AgentId, MyId) ->
+-spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+send_member_connect_accepted(Queue, CallId, NewCallId, AccountId, AgentId, MyId) ->
     Resp = props:filter_undefined([{<<"Call-ID">>, NewCallId}
-                                  ,{<<"Account-ID">>, AcctId}
+                                  ,{<<"Account-ID">>, AccountId}
                                   ,{<<"Agent-ID">>, AgentId}
                                   ,{<<"Process-ID">>, MyId}
                                   ,{<<"Old-Call-ID">>, CallId}
@@ -1192,9 +1150,12 @@ send_member_connect_accepted(Queue, CallId, NewCallId, AcctId, AgentId, MyId) ->
                                   ]),
     kapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
 
--spec send_member_callback_accepted(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-send_member_callback_accepted(Queue, CallId) ->
+-spec send_member_callback_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+send_member_callback_accepted(Queue, CallId, AccountId, AgentId, MyId) ->
     Resp = props:filter_undefined([{<<"Call-ID">>, CallId}
+                                  ,{<<"Account-ID">>, AccountId}
+                                  ,{<<"Agent-ID">>, AgentId}
+                                  ,{<<"Process-ID">>, MyId}
                                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                   ]),
     kapi_acdc_queue:publish_member_callback_accepted(Queue, Resp).
@@ -1208,16 +1169,16 @@ send_originate_execute(JObj, Q) ->
     kapi_dialplan:publish_originate_execute(kz_json:get_value(<<"Server-ID">>, JObj), Prop).
 
 -spec send_sync_request(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-send_sync_request(AcctId, AgentId, MyId, MyQ) ->
-    Prop = [{<<"Account-ID">>, AcctId}
+send_sync_request(AccountId, AgentId, MyId, MyQ) ->
+    Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Agent-ID">>, AgentId}
            ,{<<"Process-ID">>, MyId}
             | kz_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
            ],
     kapi_acdc_agent:publish_sync_req(Prop).
 
-send_sync_response(ReqJObj, AcctId, AgentId, MyId, MyQ, Status, Options) ->
-    Prop = [{<<"Account-ID">>, AcctId}
+send_sync_response(ReqJObj, AccountId, AgentId, MyId, MyQ, Status, Options) ->
+    Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Agent-ID">>, AgentId}
            ,{<<"Process-ID">>, MyId}
            ,{<<"Status">>, kz_term:to_binary(Status)}
@@ -1228,9 +1189,9 @@ send_sync_response(ReqJObj, AcctId, AgentId, MyId, MyQ, Status, Options) ->
     lager:debug("sending sync resp to ~s", [Q]),
     kapi_acdc_agent:publish_sync_resp(Q, Prop).
 
-send_status_update(AcctId, AgentId, 'resume') ->
+send_status_update(AccountId, AgentId, 'resume') ->
     Update = props:filter_undefined(
-               [{<<"Account-ID">>, AcctId}
+               [{<<"Account-ID">>, AccountId}
                ,{<<"Agent-ID">>, AgentId}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
@@ -1242,7 +1203,7 @@ idle_time('undefined') -> 'undefined';
 idle_time(T) -> kz_time:elapsed_s(T).
 
 -spec call_id(kapps_call:call() | kz_term:api_object()) ->
-                     kz_term:api_binary().
+          kz_term:api_binary().
 call_id('undefined') -> 'undefined';
 call_id(Call) ->
     case kapps_call:is_call(Call) of
@@ -1258,15 +1219,15 @@ call_id(Call) ->
     end.
 
 -spec maybe_connect_to_agent(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()) ->
-                                    kz_term:kz_proplist().
+          kz_term:proplist().
 maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     MCallId = kapps_call:call_id(Call),
     kz_util:put_callid(MCallId),
 
     ReqId = kz_binary:rand_hex(6),
-    AcctId = kapps_call:account_id(Call),
+    AccountId = kapps_call:account_id(Call),
 
-    CCVs = props:filter_undefined([{<<"Account-ID">>, AcctId}
+    CCVs = props:filter_undefined([{<<"Account-ID">>, AccountId}
                                   ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
                                   ,{<<"Request-ID">>, ReqId}
                                   ,{<<"Retain-CID">>, <<"true">>}
@@ -1299,7 +1260,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
                                                  ,<<"Authorizing-ID">>
                                                  ,<<"Authorizing-Type">>
                                                  ]}
-             ,{<<"Account-ID">>, AcctId}
+             ,{<<"Account-ID">>, AccountId}
              ,{<<"Resource-Type">>, <<"originate">>}
              ,{<<"Application-Name">>, <<"bridge">>}
              ,{<<"Caller-ID-Name">>, CIDName}
@@ -1319,15 +1280,15 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
 
 -spec maybe_originate_callback(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()
                               ,kz_json:object()) ->
-                                      kz_term:kz_proplist().
+          kz_term:proplist().
 maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
     MCallId = kapps_call:call_id(Call),
     put('callid', MCallId),
 
     ReqId = kz_binary:rand_hex(6),
-    AcctId = kapps_call:account_id(Call),
+    AccountId = kapps_call:account_id(Call),
 
-    CCVs = props:filter_undefined([{<<"Account-ID">>, AcctId}
+    CCVs = props:filter_undefined([{<<"Account-ID">>, AccountId}
                                   ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
                                   ,{<<"Authorizing-Type">>, <<"user">>}
                                   ,{<<"Request-ID">>, ReqId}
@@ -1353,7 +1314,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
 
     Prop = props:filter_undefined([{<<"Application-Name">>, <<"park">>}
                                   ,{<<"Resource-Type">>, <<"originate">>}
-                                  ,{<<"Account-ID">>, AcctId}
+                                  ,{<<"Account-ID">>, AccountId}
                                   ,{<<"Endpoints">>, Endpoints}
                                   ,{<<"Msg-ID">>, kz_binary:rand_hex(6)}
                                   ,{<<"Timeout">>, Timeout}
@@ -1389,11 +1350,11 @@ outbound_call_id(CallId, AgentId) when is_binary(CallId) ->
 outbound_call_id(Call, AgentId) ->
     outbound_call_id(kapps_call:call_id(Call), AgentId).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Complete a callback to the callback number (in CCV)
 %% Returns a target call id that has been hooked for events
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec do_originate_callback_return(kz_term:ne_binary(), kapps_call:call()) -> kz_term:ne_binary().
 do_originate_callback_return(MyQ, Call) ->
     MsgId = kz_binary:rand_hex(4),
@@ -1458,42 +1419,42 @@ create_call_id() ->
     <<"callback-", (kz_binary:rand_hex(4))/binary>>.
 
 -spec add_queue_binding(kz_term:ne_binary(), fsm_state_name(), state()) -> 'ok'.
-add_queue_binding(QueueId, StateName, #state{acct_id=AcctId}=State) ->
+add_queue_binding(QueueId, StateName, #state{acct_id=AccountId}=State) ->
     lager:debug("adding queue binding for ~s", [QueueId]),
     gen_listener:add_binding(self()
                             ,'acdc_queue'
                             ,[{'restrict_to', ['member_connect_req']}
                              ,{'queue_id', QueueId}
-                             ,{'account_id', AcctId}
+                             ,{'account_id', AccountId}
                              ]),
     send_availability_update(QueueId, StateName, State).
 
 -spec rm_queue_binding(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-rm_queue_binding(AcctId, AgentId, QueueId) ->
+rm_queue_binding(AccountId, AgentId, QueueId) ->
     lager:debug("removing queue binding for ~s", [QueueId]),
     gen_listener:rm_binding(self()
                            ,'acdc_queue'
                            ,[{'restrict_to', ['member_connect_req']}
                             ,{'queue_id', QueueId}
-                            ,{'account_id', AcctId}
+                            ,{'account_id', AccountId}
                             ]),
-    send_agent_unavailable(AcctId, AgentId, QueueId).
+    send_agent_unavailable(AccountId, AgentId, QueueId).
 
 -spec send_availability_update(kz_term:ne_binary(), fsm_state_name(), state()) -> 'ok'.
 send_availability_update(QueueId, 'ready', #state{agent_id=AgentId
                                                  ,agent_priority=Priority
                                                  ,skills=Skills
-                                                 ,acct_id=AcctId
+                                                 ,acct_id=AccountId
                                                  }) ->
-    send_agent_available(AcctId, AgentId, QueueId, Priority, Skills);
+    send_agent_available(AccountId, AgentId, QueueId, Priority, Skills);
 send_availability_update(QueueId, _, #state{agent_id=AgentId
-                                           ,acct_id=AcctId
+                                           ,acct_id=AccountId
                                            }) ->
-    send_agent_busy(AcctId, AgentId, QueueId).
+    send_agent_busy(AccountId, AgentId, QueueId).
 
 -spec send_agent_available(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), agent_priority(), kz_term:ne_binaries()) -> 'ok'.
-send_agent_available(AcctId, AgentId, QueueId, Priority, Skills) ->
-    Prop = [{<<"Account-ID">>, AcctId}
+send_agent_available(AccountId, AgentId, QueueId, Priority, Skills) ->
+    Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Agent-ID">>, AgentId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Priority">>, Priority}
@@ -1504,8 +1465,8 @@ send_agent_available(AcctId, AgentId, QueueId, Priority, Skills) ->
     kapi_acdc_queue:publish_agent_change(Prop).
 
 -spec send_agent_busy(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-send_agent_busy(AcctId, AgentId, QueueId) ->
-    Prop = [{<<"Account-ID">>, AcctId}
+send_agent_busy(AccountId, AgentId, QueueId) ->
+    Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Agent-ID">>, AgentId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Change">>, <<"busy">>}
@@ -1513,15 +1474,15 @@ send_agent_busy(AcctId, AgentId, QueueId) ->
            ],
     kapi_acdc_queue:publish_agent_change(Prop).
 
-send_agent_busy(AcctId, AgentId, QueueId, Call) ->
+send_agent_busy(AccountId, AgentId, QueueId, Call) ->
     Direction = kapps_call:direction(Call),
     {CIDNumber, CIDName} = acdc_util:caller_id(Call),
-    send_agent_busy(AcctId, AgentId, QueueId, Call, Direction, CIDNumber, CIDName).
+    send_agent_busy(AccountId, AgentId, QueueId, Call, Direction, CIDNumber, CIDName).
 
-send_agent_busy(AcctId, AgentId, QueueId, _Call, <<"outbound">>, Number, Name) ->
-    send_agent_busy(AcctId, AgentId, QueueId, _Call, 'outbound', Number, Name);
-send_agent_busy(AcctId, AgentId, QueueId, _Call, 'outbound', Number, Name) ->
-    Prop = [{<<"Account-ID">>, AcctId}
+send_agent_busy(AccountId, AgentId, QueueId, _Call, <<"outbound">>, Number, Name) ->
+    send_agent_busy(AccountId, AgentId, QueueId, _Call, 'outbound', Number, Name);
+send_agent_busy(AccountId, AgentId, QueueId, _Call, 'outbound', Number, Name) ->
+    Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Agent-ID">>, AgentId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Change">>, <<"busy">>}
@@ -1531,10 +1492,10 @@ send_agent_busy(AcctId, AgentId, QueueId, _Call, 'outbound', Number, Name) ->
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     kapi_acdc_queue:publish_agent_change(Prop);
-send_agent_busy(AcctId, AgentId, QueueId, _Call, <<"inbound">>, Number, Name) ->
-    send_agent_busy(AcctId, AgentId, QueueId, _Call, 'inbound', Number, Name);
-send_agent_busy(AcctId, AgentId, QueueId, _Call, 'inbound', Number, Name) ->
-    Prop = [{<<"Account-ID">>, AcctId}
+send_agent_busy(AccountId, AgentId, QueueId, _Call, <<"inbound">>, Number, Name) ->
+    send_agent_busy(AccountId, AgentId, QueueId, _Call, 'inbound', Number, Name);
+send_agent_busy(AccountId, AgentId, QueueId, _Call, 'inbound', Number, Name) ->
+    Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Agent-ID">>, AgentId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Change">>, <<"busy">>}
@@ -1547,8 +1508,8 @@ send_agent_busy(AcctId, AgentId, QueueId, _Call, 'inbound', Number, Name) ->
 
 
 -spec send_agent_unavailable(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-send_agent_unavailable(AcctId, AgentId, QueueId) ->
-    Prop = [{<<"Account-ID">>, AcctId}
+send_agent_unavailable(AccountId, AgentId, QueueId) ->
+    Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Agent-ID">>, AgentId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Change">>, <<"unavailable">>}
@@ -1556,9 +1517,9 @@ send_agent_unavailable(AcctId, AgentId, QueueId) ->
            ],
     kapi_acdc_queue:publish_agent_change(Prop).
 
-update_my_queues_of_change(AcctId, AgentId, Call, Qs) ->
+update_my_queues_of_change(AccountId, AgentId, Call, Qs) ->
     {CIDNumber, CIDName} = acdc_util:caller_id(Call),
-    Props = [{<<"Account-ID">>, AcctId}
+    Props = [{<<"Account-ID">>, AccountId}
             ,{<<"Agent-ID">>, AgentId}
             ,{<<"Caller-ID-Number">>, CIDNumber}
             ,{<<"Caller-ID-Name">>, CIDName}
@@ -1571,7 +1532,7 @@ update_my_queues_of_change(AcctId, AgentId, Call, Qs) ->
     'ok'.
 
 -spec is_prio_or_skills_updated(agent_priority(), kz_term:ne_binaries(), agent_priority(), kz_term:ne_binaries()) ->
-                                       boolean().
+          boolean().
 is_prio_or_skills_updated(Priority0, Skills0, Priority, Skills) ->
     Priority0 =/= Priority
         orelse Skills0 =/= Skills.
@@ -1605,28 +1566,28 @@ recording_format() ->
 
 -spec agent_id(agent()) -> kz_term:api_binary().
 agent_id(Agent) ->
-    case kz_json:is_json_object(Agent) of
-        'true' -> kz_doc:id(Agent);
-        'false' -> kapps_call:owner_id(Agent)
+    case is_thief(Agent) of
+        'true' -> kapps_call:owner_id(Agent);
+        'false' -> kz_doc:id(Agent)
     end.
 
 -spec account_id(agent()) -> kz_term:api_binary().
 account_id(Agent) ->
-    case kz_json:is_json_object(Agent) of
-        'true' -> find_account_id(Agent);
-        'false' -> kapps_call:account_id(Agent)
+    case is_thief(Agent) of
+        'true' -> kapps_call:account_id(Agent);
+        'false' -> find_account_id(Agent)
     end.
 
 -spec account_db(agent()) -> kz_term:api_binary().
 account_db(Agent) ->
-    case kz_json:is_json_object(Agent) of
-        'true' -> kz_doc:account_db(Agent);
-        'false' -> kapps_call:account_db(Agent)
+    case is_thief(Agent) of
+        'true' -> kapps_call:account_db(Agent);
+        'false' -> kz_doc:account_db(Agent)
     end.
 
 -spec record_calls(agent()) -> boolean().
 record_calls(Agent) ->
-    kz_json:is_json_object(Agent)
+    not is_thief(Agent)
         andalso kz_json:is_true(<<"record_calls">>, Agent, 'false').
 
 -spec is_thief(agent()) -> boolean().
@@ -1645,13 +1606,14 @@ stop_agent_leg(ACallId, ACtrlQ) ->
     lager:debug("sending hangup to ~s: ~s", [ACallId, ACtrlQ]),
     kapi_dialplan:publish_command(ACtrlQ, Command).
 
+-spec find_account_id(kz_json:object()) -> kz_term:api_ne_binary().
 find_account_id(JObj) ->
     case kz_doc:account_id(JObj) of
         'undefined' -> kz_util:format_account_id(kz_doc:account_db(JObj), 'raw');
-        AcctId -> AcctId
+        AccountId -> AccountId
     end.
 
--spec filter_agent_calls(kz_term:kz_proplist(), kz_term:ne_binary()) -> kz_term:kz_proplist().
+-spec filter_agent_calls(kz_term:proplist(), kz_term:ne_binary()) -> kz_term:proplist().
 filter_agent_calls(ACallIds, ACallId) ->
     %% These calls should be cancelled, but need to wait for CtrlQ
     lists:filter(fun({ACancelId, 'undefined'}) when ACancelId =/= ACallId ->

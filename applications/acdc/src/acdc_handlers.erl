@@ -1,11 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
+%%% @author James Aimonetti
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%%
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_handlers).
 
 -export([handle_route_req/2
@@ -13,7 +15,7 @@
 
 -include("acdc.hrl").
 
--spec handle_route_req(kz_json:object(), kz_term:kz_proplist()) -> 'ok'.
+-spec handle_route_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_route_req(JObj, Props) ->
     'true' = kapi_route:req_v(JObj),
     _ = kz_util:put_callid(JObj),
@@ -21,16 +23,16 @@ handle_route_req(JObj, Props) ->
     Call = kapps_call:set_controller_queue(props:get_value('queue', Props)
                                           ,kapps_call:from_route_req(JObj)
                                           ),
-    AcctId = kapps_call:account_id(Call),
+    AccountId = kapps_call:account_id(Call),
     Id = kapps_call:request_user(Call),
-    maybe_route_respond(JObj, Call, AcctId, Id).
+    maybe_route_respond(JObj, Call, AccountId, Id).
 
 maybe_route_respond(_JObj, _Call, 'undefined', _Id) -> 'ok';
-maybe_route_respond(ReqJObj, Call, AcctId, Id) ->
+maybe_route_respond(ReqJObj, Call, AccountId, Id) ->
     case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Id) of
         {'error', _} -> 'ok';
         {'ok', Doc} ->
-            maybe_route_respond(ReqJObj, Call, AcctId, Id, kz_doc:type(Doc))
+            maybe_route_respond(ReqJObj, Call, AccountId, Id, kz_doc:type(Doc))
     end.
 
 maybe_route_respond(ReqJObj, Call, AccountId, QueueId, <<"queue">> = T) ->
@@ -49,7 +51,7 @@ send_route_response(ReqJObj, Call, AccountId, Id, Type) ->
            ,{<<"Routes">>, []}
            ,{<<"Method">>, <<"park">>}
            ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
-           ,{<<"From-Realm">>, kz_util:get_account_realm(AccountId)}
+           ,{<<"From-Realm">>, kzd_accounts:fetch_realm(AccountId)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     ServerId = kz_api:server_id(ReqJObj),
@@ -80,12 +82,13 @@ update_agent(Call) ->
     end.
 
 -spec update_acdc_actor(kapps_call:call()) -> any().
--spec update_acdc_actor(kapps_call:call(), kz_term:api_binary(), kz_term:api_binary()) -> any().
 update_acdc_actor(Call) ->
     update_acdc_actor(Call
                      ,kapps_call:custom_channel_var(<<"ACDc-ID">>, Call)
                      ,kapps_call:custom_channel_var(<<"ACDc-Type">>, Call)
                      ).
+
+-spec update_acdc_actor(kapps_call:call(), kz_term:api_binary(), kz_term:api_binary()) -> any().
 update_acdc_actor(_Call, 'undefined', _) -> 'ok';
 update_acdc_actor(_Call, _, 'undefined') -> 'ok';
 update_acdc_actor(Call, QueueId, <<"queue">>) ->
@@ -95,26 +98,26 @@ update_acdc_actor(Call, QueueId, <<"queue">>) ->
     lager:debug("started thief at ~p", [_P]),
     OK;
 update_acdc_actor(Call, AgentId, <<"user">>) ->
-    AcctId = kapps_call:account_id(Call),
+    AccountId = kapps_call:account_id(Call),
 
-    case acdc_agent_util:most_recent_status(AcctId, AgentId) of
+    case acdc_agent_util:most_recent_status(AccountId, AgentId) of
         {'ok', <<"logout">>} ->
-            update_acdc_agent(Call, AcctId, AgentId, <<"login">>, fun kapi_acdc_agent:publish_login/1);
+            update_acdc_agent(Call, AccountId, AgentId, <<"login">>, fun kapi_acdc_agent:publish_login/1);
         {'ok', <<"pause">>} ->
-            update_acdc_agent(Call, AcctId, AgentId, <<"resume">>, fun kapi_acdc_agent:publish_resume/1);
+            update_acdc_agent(Call, AccountId, AgentId, <<"resume">>, fun kapi_acdc_agent:publish_resume/1);
         {'ok', _S} ->
-            update_acdc_agent(Call, AcctId, AgentId, <<"logout">>, fun kapi_acdc_agent:publish_logout/1)
+            update_acdc_agent(Call, AccountId, AgentId, <<"logout">>, fun kapi_acdc_agent:publish_logout/1)
     end.
 
 -spec update_acdc_agent(kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), fun()) -> kz_term:ne_binary().
-update_acdc_agent(Call, AcctId, AgentId, Status, PubFun) ->
+update_acdc_agent(Call, AccountId, AgentId, Status, PubFun) ->
     lager:debug("agent ~s going to new status ~s", [AgentId, Status]),
 
     try update_agent_device(Call, AgentId, Status) of
         {'ok', _D} ->
             lager:debug("updated device with new owner"),
             'ok' = save_status(Call, AgentId, Status),
-            send_new_status(AcctId, AgentId, PubFun),
+            send_new_status(AccountId, AgentId, PubFun),
             play_status_prompt(Call, Status);
         {'error', 'not_owner'} -> play_failed_update(Call)
     catch
@@ -152,7 +155,7 @@ update_agent_device(Call, AgentId, <<"logout">>) ->
 update_agent_device(_, _, _) -> {'ok', 'ok'}.
 
 -spec move_agent_device(kapps_call:call(), kz_term:ne_binary(), kz_json:object()) ->
-                               {'ok', kz_json:object()}.
+          {'ok', kz_json:object()}.
 move_agent_device(Call, AgentId, Device) ->
     DeviceId = kz_doc:id(Device),
 
@@ -167,9 +170,9 @@ move_agent_device(Call, AgentId, Device) ->
     {'ok', _} = kz_datamgr:save_doc(kapps_call:account_db(Call), kz_json:set_value(<<"owner_id">>, AgentId, Device)).
 
 -spec send_new_status(kz_term:ne_binary(), kz_term:ne_binary(), kz_amqp_worker:publish_fun()) -> 'ok'.
-send_new_status(AcctId, AgentId, PubFun) ->
+send_new_status(AccountId, AgentId, PubFun) ->
     Update = props:filter_undefined(
-               [{<<"Account-ID">>, AcctId}
+               [{<<"Account-ID">>, AccountId}
                ,{<<"Agent-ID">>, AgentId}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),

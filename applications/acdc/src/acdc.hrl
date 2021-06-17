@@ -12,31 +12,29 @@
 
 -define(CACHE_NAME, 'acdc_cache').
 
--define(ABANDON_TIMEOUT, 'member_timeout').
--define(ABANDON_EXIT, 'member_exit').
--define(ABANDON_HANGUP, 'member_hangup').
--define(ABANDON_EMPTY, 'member_exit_empty').
+-define(ABANDON_TIMEOUT, <<"member_timeout">>).
+-define(ABANDON_EXIT, <<"member_exit">>).
+-define(ABANDON_HANGUP, <<"member_hangup">>).
+-define(ABANDON_EMPTY, <<"member_exit_empty">>).
+-define(ABANDON_INTERNAL_ERROR, <<"INTERNAL ERROR">>).
 
 -define(PRESENCE_GREEN, <<"terminated">>).
 -define(PRESENCE_RED_FLASH, <<"early">>).
 -define(PRESENCE_RED_SOLID, <<"confirmed">>).
 
--define(ENDPOINT_UPDATE_REG(AcctId, EPId), {'p', 'l', {'endpoint_update', AcctId, EPId}}).
+-define(ENDPOINT_UPDATE_REG(AccountId, EPId), {'p', 'l', {'endpoint_update', AccountId, EPId}}).
 -define(ENDPOINT_CREATED(EP), {'endpoint_created', EP}).
 -define(ENDPOINT_EDITED(EP), {'endpoint_edited', EP}).
 -define(ENDPOINT_DELETED(EP), {'endpoint_deleted', EP}).
 
--define(OWNER_UPDATE_REG(AcctId, OwnerId), {'p', 'l', {'owner_update', AcctId, OwnerId}}).
+-define(OWNER_UPDATE_REG(AccountId, OwnerId), {'p', 'l', {'owner_update', AccountId, OwnerId}}).
 
--define(NEW_CHANNEL_REG(AcctId, User), {'p', 'l', {'new_channel', AcctId, User}}).
+-define(NEW_CHANNEL_REG(AccountId, User), {'p', 'l', {'new_channel', AccountId, User}}).
 -define(NEW_CHANNEL_TO(CallId, Number, Name), {{'call_to', Number, Name},  CallId}).
 -define(NEW_CHANNEL_FROM(CallId, Number, Name, MemberCallId), {{'call_from', Number, Name}, CallId, MemberCallId}).
 
--define(DESTROYED_CHANNEL_REG(AcctId, User), {'p', 'l', {'destroyed_channel', AcctId, User}}).
+-define(DESTROYED_CHANNEL_REG(AccountId, User), {'p', 'l', {'destroyed_channel', AccountId, User}}).
 -define(DESTROYED_CHANNEL(CallId, HangupCause), {'call_down', CallId, HangupCause}).
-
--type abandon_reason() :: ?ABANDON_TIMEOUT | ?ABANDON_EXIT |
-                          ?ABANDON_HANGUP.
 
 -type deliveries() :: [gen_listener:basic_deliver()].
 
@@ -66,5 +64,12 @@
                               io:format(Fmt++"\n", Args)
                           end).
 
+-define(AGENT_INFO_FIELDS, kapps_config:get(?CONFIG_CAT, <<"agent_info_fields">>
+                                           ,[<<"presence_id">>, <<"first_name">>, <<"last_name">>, <<"username">>, <<"email">>]
+                                           )).
+
+-define(CALL_INFO_FIELDS, kapps_config:get(?CONFIG_CAT, <<"call_info_fields">>
+                                           ,[<<"call_id">>, <<"queue_id">>, <<"entered_timestamp">>, <<"entered_position">>, <<"caller_id_name">>, <<"caller_id_number">>, <<"required_skills">>]
+                                           )).
 -define(ACDC_HRL, 'true').
 -endif.

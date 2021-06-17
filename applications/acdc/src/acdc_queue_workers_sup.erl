@@ -1,11 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
+%%% @author James Aimonetti
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%%
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_queue_workers_sup).
 
 -behaviour(supervisor).
@@ -26,26 +28,27 @@
 
 -define(CHILDREN, [?SUPER_TYPE('acdc_queue_worker_sup', 'transient')]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Starts the supervisor
-%%--------------------------------------------------------------------
+%% @end
+%%------------------------------------------------------------------------------
 -spec start_link() -> kz_term:startlink_ret().
 start_link() ->
     supervisor:start_link(?SERVER, []).
 
 -spec new_worker(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-new_worker(WorkersSup, AcctId, QueueId) ->
-    new_workers(WorkersSup, AcctId, QueueId, 1).
+new_worker(WorkersSup, AccountId, QueueId) ->
+    new_workers(WorkersSup, AccountId, QueueId, 1).
 
 -spec new_workers(pid(), kz_term:ne_binary(), kz_term:ne_binary(), integer()) -> 'ok'.
 new_workers(_, _,_,N) when N =< 0 -> 'ok';
-new_workers(WorkersSup, AcctId, QueueId, N) when is_integer(N) ->
-    _ = supervisor:start_child(WorkersSup, [self(), AcctId, QueueId]),
-    new_workers(WorkersSup, AcctId, QueueId, N-1).
+new_workers(WorkersSup, AccountId, QueueId, N) when is_integer(N) ->
+    _ = supervisor:start_child(WorkersSup, [self(), AccountId, QueueId]),
+    new_workers(WorkersSup, AccountId, QueueId, N-1).
 
 -spec workers(pid()) -> kz_term:pids().
 workers(Super) ->
@@ -59,20 +62,19 @@ status(Super) ->
     ?PRINT("  Workers Supervisor: ~p", [Super]),
     lists:foreach(fun acdc_queue_worker_sup:status/1, workers(Super)).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%% @doc Whenever a supervisor is started using supervisor:start_link/[2,3],
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> kz_term:sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 1,
@@ -82,6 +84,6 @@ init([]) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
