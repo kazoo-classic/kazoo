@@ -2254,7 +2254,6 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                ,agent_call_id = 'undefined'
                ,agent_callback_call = 'undefined'
                ,caller_exit_key = <<"#">>
-               ,monitoring = 'false'
                }.
 
 -spec current_call(kapps_call:call() | 'undefined', atom(), kz_term:ne_binary(), 'undefined' | kz_term:kz_now()) ->
@@ -2282,11 +2281,16 @@ wrapup_timer(#state{agent_listener=AgentListener
                    ,agent_id = AgentId
                    ,member_call_id = CallId
                    ,member_call_start=_Started
+                   ,monitoring=Monitor
                    }) ->
     acdc_agent_listener:unbind_from_events(AgentListener, CallId),
     lager:info("call lasted ~b s", [elapsed(_Started)]),
     lager:info("going into a wrapup period ~p: ~s", [WrapupTimeout, CallId]),
-    acdc_agent_stats:agent_wrapup(AccountId, AgentId, WrapupTimeout),
+    case Monitor of
+        'true' -> ok;
+        'false' -> acdc_agent_stats:agent_wrapup(AccountId, AgentId, WrapupTimeout)
+    end,
+%%    acdc_agent_stats:agent_wrapup(AccountId, AgentId, WrapupTimeout),
     start_wrapup_timer(WrapupTimeout).
 
 -spec hangup_call(state(), 'member' | 'agent') -> reference().
@@ -2656,24 +2660,26 @@ apply_state_updates(#state{agent_state_updates=Q
     apply_state_updates_fold({'next_state', FoldDefaultState, State#state{agent_state_updates=[]}}, lists:reverse(Q)).
 
 -spec apply_state_updates_fold({'next_state', atom(), state()}, list()) -> kz_term:handle_fsm_ret(state()).
-apply_state_updates_fold({_, StateName, #state{account_id=AccountId
+apply_state_updates_fold({Next, StateName, #state{account_id=AccountId
                                               ,agent_id=AgentId
                                               ,agent_listener=AgentListener
                                               ,wrapup_ref=WRef
                                               ,pause_ref=PRef
                                               ,pause_alias=Alias
-                                              }}=Acc, []) ->
-    lager:debug("resulting agent state ~s", [StateName]),
-    case StateName of
+                                              ,monitoring=Monitor
+                                              } = State}, []) ->
+    lager:debug("resulting agent state ~s (monitoring ~p)", [StateName, Monitor]),
+    case not Monitor andalso StateName of
         'ready' ->
             acdc_agent_listener:send_agent_available(AgentListener),
             acdc_agent_stats:agent_ready(AccountId, AgentId);
         'wrapup' -> acdc_agent_stats:agent_wrapup(AccountId, AgentId, time_left(WRef));
         'paused' ->
             acdc_agent_listener:send_agent_busy(AgentListener),
-            acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef), Alias)
+            acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef), Alias);
+        'false' -> ok
     end,
-    Acc;
+    {Next, StateName, State#state{monitoring = 'false'}};
 apply_state_updates_fold({_, _, State}, [{'pause', 'infinity', Alias}|Updates]) ->
     apply_state_updates_fold(handle_pause('infinity', Alias, State), Updates);
 apply_state_updates_fold({_, _, State}, [{'pause', 0, Alias}|Updates]) ->
