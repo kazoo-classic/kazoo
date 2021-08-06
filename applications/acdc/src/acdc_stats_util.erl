@@ -201,7 +201,8 @@ get_results_from_dbs(DBs, Data) ->
 
 merge_results(JObj1, JObj2) ->
     Fun = fun(_,{both, V1, V2}) when is_integer(V1), is_integer(V2) -> {ok, V1 + V2};
-             (_,{both, V, V}) -> {ok, V} end,
+             (_,{both, V, V}) -> {ok, V};
+             (_,{_,V}) -> {ok, V} end,
     kz_json:merge(Fun, [JObj1, JObj2]).
 
 modb_range(AccountId, StartRange, EndRange) ->
