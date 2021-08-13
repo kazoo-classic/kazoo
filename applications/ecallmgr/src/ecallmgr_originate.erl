@@ -23,6 +23,7 @@
 -include("ecallmgr.hrl").
 
 -define(SERVER, ?MODULE).
+-define(ALEG_CALLID_HEADER, kapps_config:get_ne_binary(?APP_NAME, <<"aleg_callid_header">>)).
 
 -type created_uuid() :: {'fs' | 'api', kz_term:ne_binary()}.
 -record(state, {node :: atom()
@@ -835,7 +836,29 @@ update_endpoint(Endpoint, #state{node=Node
 
     EP = kz_json:set_values([{<<"origination_uuid">>, Id}
                             ], Endpoint),
-    fix_hold_media(EP).
+    fix_hold_media(maybe_add_member_cid(EP, JObj)).
+
+maybe_add_member_cid(EP, JObj) ->
+    case member_call_id(JObj) of
+        undefined -> EP;
+        MemberCallId -> 
+            maybe_add_aleg_callid(EP, MemberCallId)
+    end.
+
+maybe_add_aleg_callid(EP, MemberCallId) ->
+    case ?ALEG_CALLID_HEADER of
+        'undefined' -> EP;
+        HeaderName -> 
+            add_aleg_callid(HeaderName, MemberCallId, EP)
+    end.
+
+member_call_id(JObj) ->
+    kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj).
+
+add_aleg_callid(HeaderName, MemberCallId, EP) ->
+    N = kz_json:set_value(HeaderName, MemberCallId, kz_json:new()),
+    C = kz_json:set_value(<<"Custom-SIP-Headers">>, N, kz_json:new()),
+    kz_json:merge(EP, C).
 
 -spec uuid_matches(created_uuid(), created_uuid()) -> boolean().
 uuid_matches({_, UUID}, {_, UUID}) -> 'true';
