@@ -977,9 +977,9 @@ ringing('cast', {'shared_call_id', JObj}, #state{agent_listener=AgentListener}=S
     {'next_state', 'answered', State#state{agent_call_id=ACallId
                                           ,connect_failures=0
                                           }};
-ringing('info', ?NEW_CHANNEL_FROM(CallId,_,_, MemberCallId), #state{member_call_id=MemberCallId}=State) ->
-    lager:debug("new channel ~s for agent", [CallId]),
-    {'next_state', 'ringing', State};
+ringing('info', ?NEW_CHANNEL_FROM(AgentCallId,_,_, MemberCallId), #state{member_call_id=MemberCallId}=State) ->
+    lager:debug("new channel ~s for agent", [AgentCallId]),
+    {'next_state', 'ringing', State#state{agent_call_id=AgentCallId}};
 ringing('info', ?NEW_CHANNEL_FROM(CallId, Number, Name,_), #state{agent_listener=AgentListener}=State) ->
     lager:debug("ringing call_from inbound: ~s", [CallId]),
     acdc_agent_listener:hangup_call(AgentListener),
@@ -1791,7 +1791,7 @@ outbound('cast',{'member_connect_win', _, 'different_node'}, State) ->
     {'next_state', 'outbound', State};
 outbound('cast',{'member_connect_satisfied', _, Node}, State) ->
     lager:info("unexpected connect_satisfied for ~p", [Node]),
-    {'next_state', 'wrapup', State};
+    {'next_state', 'outbound', State};
 outbound('cast',{'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
     {'next_state', 'outbound', State};
@@ -1885,7 +1885,7 @@ inbound('cast', {'member_connect_win', _, 'different_node'}, State) ->
     {'next_state', 'inbound', State};
 inbound('cast', {'member_connect_satisfied', _, Node}, State) ->
     lager:info("unexpected connect_satisfied for ~p", [Node]),
-    {'next_state', 'wrapup', State};
+    {'next_state', 'inbound', State};
 inbound('cast', {'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
     {'next_state', 'inbound', State};
