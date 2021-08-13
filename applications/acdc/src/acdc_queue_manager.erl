@@ -415,6 +415,9 @@ handle_call({'up_next', CallId}, _, #state{strategy='sbrr'
                                           ,strategy_state=#strategy_state{agents=#{call_id_map := CallIdMap}}
                                           }=State) ->
     {'reply', maps:is_key(CallId, CallIdMap), State};
+handle_call({'up_next', _CallId}, _, #state{strategy='all'
+                                          }=State) ->
+    {'reply', 'true', State};
 handle_call({'up_next', CallId}, _, #state{strategy=Strategy
                                           ,strategy_state=SS
                                           ,current_member_calls=Calls
