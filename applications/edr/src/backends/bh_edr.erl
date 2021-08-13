@@ -47,6 +47,7 @@ bindings(_Context, #{account_id := AccountId
                           ,severity=kz_term:to_atom(Severity)
                           ,verbosity=kz_term:to_atom(Verbosity)
                           ,app_name=AppName
+                          ,federate='true'
                           },
     Subscribed = edr_bindings:binding_keys(Binding),
     BindingOptions = kz_json:to_proplist(edr_bindings:bindings_to_json(Binding)),

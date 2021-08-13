@@ -35,6 +35,7 @@
                      ,exact_severity      = 'false' :: boolean()
                      ,verbosity           = 'info'  :: edr_verbosity() | edr_verbosities()
                      ,exact_verbosity     = 'false' :: boolean()
+                     ,federate            = 'false' :: boolean()
                      }).
 -type edr_binding() :: #edr_binding{}.
 -type edr_bindings() :: [edr_binding()].

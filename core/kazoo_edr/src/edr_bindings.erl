@@ -135,6 +135,7 @@ bindings_from_json(JObj) ->
                 ,exact_severity=kz_json:is_true(<<"exact_severity">>, JObj, 'false')
                 ,verbosity=verbosity_from_json(kz_json:get_value(<<"verbosity">>, JObj))
                 ,exact_verbosity=kz_json:is_true(<<"exact_verbosity">>, JObj, 'false')
+                ,federate=kz_json:is_true(<<"federate">>, JObj, 'false')
                 }.
 
 -spec severity_from_json(kz_term:api_ne_binary() | kz_term:api_ne_binaries()) -> edr_severity().
@@ -167,6 +168,7 @@ bindings_to_json(Binding=#edr_binding{}) ->
                       ,{<<"exact_severity">>, Binding#edr_binding.exact_severity}
                       ,{<<"verbosity">>, severity_or_verbosity_to_json(Binding#edr_binding.verbosity)}
                       ,{<<"exact_verbosity">>, Binding#edr_binding.exact_verbosity}
+                      ,{'federate', Binding#edr_binding.federate}
                       ]).
 
 -spec severity_or_verbosity_to_json(edr_severity() | edr_verbosity()) -> kz_term:ne_binary();
