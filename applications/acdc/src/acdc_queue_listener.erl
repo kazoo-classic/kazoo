@@ -501,7 +501,9 @@ handle_cast({'send_sync_req', Type}, #state{my_q=MyQ
 handle_cast({'send_sync_resp', Strategy, StrategyState, ReqJObj}, #state{my_id=Id}=State) ->
     publish_sync_resp(Strategy, StrategyState, ReqJObj, Id),
     {'noreply', State};
-handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
+handle_cast({'gen_listener',{'is_consuming',false}}, State) ->
+    {'noreply', State#state{my_q='undefined'}};
+handle_cast({'gen_listener',{'is_consuming',true}}, State) ->
     {'noreply', State};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
