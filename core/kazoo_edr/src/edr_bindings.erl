@@ -128,7 +128,7 @@ should_push(_Binding, _Event) ->
 bindings_from_json(JObjs) when is_list(JObjs) ->
     [bindings_from_json(JObj) || JObj <- JObjs];
 bindings_from_json(JObj) ->
-    #edr_binding{account_id=kz_doc:account_id(JObj, <<"*">>)
+    #edr_binding{account_id=kz_json:get_binary_value(<<"account_id">>, JObj, <<"*">>)
                 ,include_descendants=kz_json:is_true(<<"include_descendants">>, JObj, 'false')
                 ,app_name=kz_json:get_binary_value(<<"app_name">>, JObj, <<"*">>)
                 ,severity=severity_from_json(kz_json:get_value(<<"severity">>, JObj))
