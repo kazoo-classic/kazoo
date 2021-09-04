@@ -794,19 +794,23 @@ fetch_current_queue_stats(Context, QueueId) ->
     fetch_from_amqp(Context, Req).
 
 format_stats(Context, Resp) ->
-    Stats = kz_json:from_list([{<<"current_timestamp">>, kz_time:current_tstamp()}
-                              ,{<<"stats">>,
-                                kz_doc:public_fields(
-                                  kz_json:get_value(<<"Handled">>, Resp, []) ++
-                                      kz_json:get_value(<<"Abandoned">>, Resp, []) ++
-                                      kz_json:get_value(<<"Waiting">>, Resp, []) ++
-                                      kz_json:get_value(<<"Processed">>, Resp, [])
-                                 )}
-                              ]),
+    HasQs = crossbar_filter:is_defined(Context),
+    Stats = kz_doc:public_fields(
+                 kz_json:get_value(<<"Handled">>, Resp, []) ++
+                 kz_json:get_value(<<"Abandoned">>, Resp, []) ++
+                 kz_json:get_value(<<"Waiting">>, Resp, []) ++
+                 kz_json:get_value(<<"Processed">>, Resp, [])
+           ),
+    Filtered = [JObj || JObj <- Stats,
+                crossbar_filter:by_doc(JObj, Context, HasQs)
+           ],
+    RespData = kz_json:from_list([{<<"current_timestamp">>, kz_time:current_tstamp()}
+                              ,{<<"stats">>, Filtered}
+                             ]),
     cb_context:set_resp_status(
-      cb_context:set_resp_data(Context, Stats)
+      cb_context:set_resp_data(Context, RespData)
                               ,'success'
-     ).
+    ).
 
 
 -spec fetch_from_amqp(cb_context:context(), kz_term:proplist()) -> cb_context:context().
