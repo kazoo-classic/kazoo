@@ -662,9 +662,7 @@ ready('cast', {'member_connect_win', JObj, 'same_node'}, #state{agent_listener=A
                                                  }}
     end;
 ready('cast', {'member_connect_win', JObj, 'different_node'}, #state{agent_listener=AgentListener
-                                                            ,endpoints=OrigEPs
                                                             ,agent_id=AgentId
-                                                            ,connect_failures=CF
                                                             }=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
     CallId = kapps_call:call_id(Call),
@@ -677,35 +675,23 @@ ready('cast', {'member_connect_win', JObj, 'different_node'}, #state{agent_liste
 
     RecordingUrl = recording_url(JObj),
 
-    %% Only start monitoring if the agent can actually take the call
-    case get_endpoints(OrigEPs, Call, AgentId, QueueId) of
-        {'error', 'no_endpoints'} ->
-            lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
-            {'next_state', 'paused', State};
-        {'error', _E} ->
-            lager:debug("can't take the call, skip me: ~p", [_E]),
-            {'next_state', 'ready', State#state{connect_failures=CF+1}};
-        {'ok', UpdatedEPs} ->
-            acdc_util:bind_to_call_events(Call, AgentListener),
-
-            acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
-            %% Need to check if a callback is required to the caller
-            NextState = case kz_json:get_value(<<"Callback-Details">>, JObj) of
-                            'undefined' -> 'ringing';
-                            _Details -> 'ringing_callback'
-                        end,
-            lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
-            {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
-                                                 ,member_call=Call
-                                                 ,member_call_id=CallId
-                                                 ,member_call_start=kz_time:now()
-                                                 ,member_call_queue_id=QueueId
-                                                 ,caller_exit_key=CallerExitKey
-                                                 ,endpoints=UpdatedEPs
-                                                 ,queue_notifications=kz_json:get_value(<<"Notifications">>, JObj)
-                                                 ,monitoring = 'true'
-                                                 }}
-    end;
+    acdc_util:bind_to_call_events(Call, AgentListener),
+    acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
+    %% Need to check if a callback is required to the caller
+    NextState = case kz_json:get_value(<<"Callback-Details">>, JObj) of
+                   'undefined' -> 'ringing';
+                   _Details -> 'ringing_callback'
+                end,
+    lager:info("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
+    {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
+                                         ,member_call=Call
+                                         ,member_call_id=CallId
+                                         ,member_call_start=kz_time:now()
+                                         ,member_call_queue_id=QueueId
+                                         ,caller_exit_key=CallerExitKey
+                                         ,queue_notifications=kz_json:get_value(<<"Notifications">>, JObj)
+                                         ,monitoring = 'true'
+                                         }};
 ready('cast', {'member_connect_satisfied', _, _Node}, State) ->
     lager:debug("unexpected connect_satisfied in state 'ready'"),
     {'next_state', 'ready', State};
