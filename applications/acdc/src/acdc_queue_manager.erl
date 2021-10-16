@@ -401,11 +401,19 @@ init(Super, AccountId, QueueId, QueueJObj) ->
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), mgr_state()) -> kz_term:handle_call_ret_state(mgr_state()).
 handle_call({'should_ignore_member_call', {AccountId, QueueId, CallId}=K}, _, #state{ignored_member_calls=Dict
+                                                                                    ,current_member_calls=Calls
                                                                                     ,account_id=AccountId
                                                                                     ,queue_id=QueueId
                                                                                     }=State) ->
     case catch dict:fetch(K, Dict) of
-        {'EXIT', _} -> {'reply', 'false', State};
+        {'EXIT', _} ->
+            case queue_member(CallId, Calls) of
+                'undefined' ->
+                    lager:error("call ~p not in list of current_member_calls or ignored_member_calls)", [CallId]),
+                    {'reply', 'true', State};
+                _ ->
+                    {'reply', 'false', State}
+            end;
         _Res ->
             publish_queue_member_remove(AccountId, QueueId, CallId),
             {'reply', 'true', State#state{ignored_member_calls=dict:erase(K, Dict)}}
