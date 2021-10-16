@@ -71,9 +71,10 @@ handle_termination(_, _, _, 'false') ->
     lager:debug("doing nothing, call has been bridged or a message was left");
 handle_termination(Call, JObj, Data, 'true') ->
     lager:debug("call went unanswered and left no voicemail message"),
+    Notify = kz_json:set_value(<<"data">>, Data, JObj),
     case find_email_addresses(Call, kz_json:get_value(<<"recipients">>, Data, [])) of
-        [] -> send_missed_alert(Call, JObj, 'undefined');
-        Emails -> send_missed_alert(Call, JObj, Emails)
+        [] -> send_missed_alert(Call, Notify, 'undefined');
+        Emails -> send_missed_alert(Call, Notify, Emails)
     end.
 
 %%%=============================================================================
