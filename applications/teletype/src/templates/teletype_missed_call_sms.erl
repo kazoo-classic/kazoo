@@ -73,7 +73,15 @@ handle_req(JObj, 'true') ->
 process_req(DataJObj) ->
     teletype_util:send_update(DataJObj, <<"pending">>),
 
-    Message = kz_json:get_value([<<"notify">>, <<"data">>, <<"message">>], DataJObj),
+    Data = kz_json:get_value([<<"notify">>, <<"data">>], DataJObj),
+    From_user = kz_json:get_value(<<"from_user">>, Data),
+    To_users = 
+    case kz_json:get_value(<<"to_users">>, Data) of
+        X when X == []; X =:= 'undefined' ->
+            [kz_json:get_value(<<"from_user">>, DataJObj)];
+         Else -> Else
+    end,
+    Message = kz_json:get_value(<<"message">>, Data),
     Macros = props:filter_undefined(
                  [{<<"system">>, teletype_util:system_params()}
                  ,{<<"account">>, teletype_util:account_params(DataJObj)}
@@ -88,11 +96,9 @@ process_req(DataJObj) ->
     AccountId = kz_json:get_value(<<"account_id">>, DataJObj),
     {'ok', TemplateMetaJObj} = teletype_templates:fetch_notification(?TEMPLATE_ID, AccountId),
 
-    To = kz_json:find(<<"to_user">>, [TemplateMetaJObj, DataJObj]),
-    From = kz_json:find(<<"from_user">>, [TemplateMetaJObj, DataJObj]),
     URL = kz_json:get_ne_binary_value(<<"url">>, TemplateMetaJObj),
 
-    case send_sms(To, From, AccountId, URL, RenderedTemplates) of
+    case send_sms(To_users, From_user, AccountId, URL, RenderedTemplates) of
         'ok' -> teletype_util:notification_completed(?TEMPLATE_ID);
         {'error', Reason} -> teletype_util:notification_failed(?TEMPLATE_ID, Reason)
     end.
@@ -114,7 +120,18 @@ missed_call_reason(_DataJObj, HangupCause) ->
     <<"No voicemail message was left (", HangupCause/binary, ")">>.
 
 
-send_sms(To, From, AccountId, Url, [{<<"text/plain">>, Msg}]) ->
+send_sms(To, From, AccountId, Url, RenderedTemplates) ->
+    send_sms(To, From, AccountId, Url, RenderedTemplates, []).
+
+send_sms([], _From, _AccountId, _Url, _RenderedTemplates, Acc) ->
+    case lists:all(fun(X) -> X =:= 'ok' end, Acc) of
+        'true' -> 'ok';
+        'false' ->
+            lager:error("At least one SMS send failed"),
+            {'error', 'failed'}
+    end;
+send_sms([To|Others], From, AccountId, Url, RenderedTemplates, Acc) ->
+    Msg = props:get_value(<<"text/plain">>, RenderedTemplates),
     Payload = kz_json:set_values([{<<"to">>, To}
                                   ,{<<"from">>, From}
                                   ,{<<"account_id">>, AccountId}
@@ -122,7 +139,7 @@ send_sms(To, From, AccountId, Url, [{<<"text/plain">>, Msg}]) ->
                                   ,kz_json:new()),
     Data = kz_json:set_value(<<"data">>, Payload, kz_json:new()),
     Response = kz_http:put(Url, req_headers(), kz_json:encode(Data)),
-    handle_resp(Response).
+    send_sms(Others, From, AccountId, Url, RenderedTemplates, [handle_resp(Response)|Acc]).
 
 req_headers() ->
     props:filter_undefined(
