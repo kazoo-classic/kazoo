@@ -189,7 +189,7 @@ enter_as_callback_loop(#member_call{call=Call}=MC
                     lager:info("member hungup during enter as callback"),
                     cf_exe:stop(Call);
                 _ ->
-                    enter_as_callback_loop(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait))
+                    enter_as_callback_loop(MC, BreakoutState, decr_timeout(Timeout, Wait))
             end
     after Timeout ->
             BreakoutState1 = breakout_invalid_selection(Call, BreakoutState, <<>>),
@@ -253,7 +253,7 @@ process_message(#member_call{call=Call
             cf_exe:continue(Call);
         'false' ->
             lager:info("failure json was for a different queue, ignoring"),
-            wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start)
+            wait_for_bridge(MC, BreakoutState, decr_timeout(Timeout, Wait), Start)
     end;
 process_message(#member_call{call=Call}, _, _, Start, _Wait, _JObj, {<<"member">>, <<"call_success">>}) ->
     lager:info("call was processed by queue (took ~b s)", [kz_time:elapsed_s(Start)]),
@@ -263,7 +263,7 @@ process_message(MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"call_event">>
     DTMF = kz_json:get_value(<<"DTMF-Digit">>, JObj),
     process_dtmf(DTMF, MC, BreakoutState, Timeout, Start, Wait);
 process_message(MC, BreakoutState, Timeout, Start, Wait, _JObj, _Type) ->
-    wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start).
+    wait_for_bridge(MC, BreakoutState, decr_timeout(Timeout, Wait), Start).
 
 -spec process_dtmf(binary(), member_call(), breakout_state(), max_wait(), kz_term:kz_now(), kz_term:kz_now()) -> 'ok'.
 process_dtmf(DTMF, #member_call{call=Call
@@ -284,21 +284,25 @@ process_dtmf(DTMF, #member_call{call=Call
             kapps_call_command:flush(Call),
             kapps_call_command:hold(<<"silence_stream://0">>, Call),
             kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
-            wait_for_bridge(MC, BreakoutState#breakout_state{active='true'}, kz_time:decr_timeout(Timeout, Wait), Start);
+            wait_for_bridge(MC, BreakoutState#breakout_state{active='true'}, decr_timeout(Timeout, Wait), Start);
         _ ->
             lager:info("caller pressed ~s, ignoring", [DTMF]),
-            wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start)
+            wait_for_bridge(MC, BreakoutState, decr_timeout(Timeout, Wait), Start)
     end;
 process_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState, Timeout, Start, Wait) ->
     case breakout_loop(DTMF, MC, BreakoutState) of
         #breakout_state{}=NextState ->
-            wait_for_bridge(MC, NextState, kz_time:decr_timeout(Timeout, Wait), Start);
+            wait_for_bridge(MC, NextState, decr_timeout(Timeout, Wait), Start);
         'callback_registered' ->
             lager:debug("member callback registered, stopping callflow"),
             cf_exe:control_usurped(Call);
         'cancel' ->
-            wait_for_bridge(MC, #breakout_state{}, kz_time:decr_timeout(Timeout, Wait), Start)
+            wait_for_bridge(MC, #breakout_state{}, decr_timeout(Timeout, Wait), Start)
     end.
+
+-spec decr_timeout(timeout(), kz_term:kz_now()) -> timeout().
+decr_timeout(Timeout, Wait) -> 
+    kz_time:decr_timeout(Timeout div ?MILLISECONDS_IN_SECOND, Wait) * ?MILLISECONDS_IN_SECOND.
 
 -spec breakout_loop(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered' | 'cancel'.
 breakout_loop(_, #member_call{call=Call}, #breakout_state{retries=0}) ->
