@@ -36,6 +36,7 @@
 
 %% State handlers
 -export([ready/3
+        ,waiting/3
         ,connect_req/3
         ,connecting/3
         ]).
@@ -328,6 +329,84 @@ ready('info', {'timeout', _, ?COLLECT_RESP_MESSAGE}, State) ->
     {'next_state', 'ready', State};
 ready('info', Evt, State) ->
     handle_info(Evt, 'ready', State).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec waiting(gen_statem:event_type(), any(), state()) -> kz_types:handle_fsm_ret(state()).
+waiting('cast', {'get_listener_proc', WorkerSup}, State) ->
+    ListenerSrv = acdc_queue_worker_sup:listener(WorkerSup),
+    lager:debug("got listener proc: ~p", [ListenerSrv]),
+    {'next_state', 'waiting', State#state{listener_proc=ListenerSrv}};
+
+waiting('cast', {'member_call', CallJObj, Delivery}, #state{listener_proc=ListenerSrv
+                                                 ,manager_proc=MgrSrv
+                                                 }=State) ->
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, CallJObj)),
+    CallId = kapps_call:call_id(Call),
+    case acdc_queue_manager:should_ignore_member_call(MgrSrv, Call, CallJObj) of
+        'false' ->
+            maybe_delay_connect_req(Call, CallJObj, Delivery, State);
+        'true' ->
+            lager:debug("queue mgr said to ignore this call: ~s", [CallId]),
+            acdc_queue_listener:ignore_member_call(ListenerSrv, Call, Delivery),
+            {'next_state', 'ready', State}
+    end;
+
+waiting('cast', {'agent_resp', _Resp}, State) ->
+    lager:debug("someone jumped the gun, or was slow on the draw"),
+    {'next_state', 'waiting', State};
+
+waiting('cast', {'accepted', _AcceptJObj}, State) ->
+    lager:debug("weird to receive accepted in state 'waiting'"),
+    {'next_state', 'waiting', State};
+
+waiting('cast', {'callback_accepted', _AcceptJObj}, State) ->
+    lager:debug("weird to receive callback_acceptance in state 'waiting'"),
+    {'next_state', 'waiting', State};
+
+waiting('cast', {'retry', _RetryJObj}, State) ->
+    lager:debug("weird to receive a retry when we're just hanging here"),
+    {'next_state', 'waiting', State};
+
+waiting('cast', {'member_hungup', _CallEvt}, State) ->
+    lager:debug("member hungup from previous call: ~p", [_CallEvt]),
+    {'next_state', 'waiting', State};
+
+waiting('cast', {'dtmf_pressed', _DTMF}, State) ->
+    lager:debug("DTMF(~s) for old call", [_DTMF]),
+    {'next_state', 'waiting', State};
+
+waiting('cast', Event, State) ->
+    handle_event(Event, waiting, State);
+
+waiting({'call', From}, 'status', #state{member_call=Call
+                         ,cdr_url=Url
+                         ,recording_url=RecordingUrl
+                         }=State) ->
+    {'next_state', 'waiting', State
+    ,{'reply', From, [{'state', <<"waiting">>}
+              ,{<<"call_id">>, kapps_call:call_id(Call)}
+              ,{<<"caller_id_name">>, kapps_call:caller_id_name(Call)}
+              ,{<<"caller_id_number">>, kapps_call:caller_id_name(Call)}
+              ,{<<"to">>, kapps_call:to_user(Call)}
+              ,{<<"from">>, kapps_call:from_user(Call)}
+              ,{<<"cdr_url">>, Url}
+              ,{<<"recording_url">>, RecordingUrl}
+              ]}};
+
+waiting({'call', From}, 'current_call', #state{member_call=Call} = State) ->
+    {'next_state', 'waiting', State
+    ,{'reply', From, current_call(Call, 'undefined', 'undefined')}};
+
+waiting({'call', From}, Event, State) ->
+    handle_sync_event(Event, From, waiting, State);
+
+waiting('info', {'timeout', _, ?COLLECT_RESP_MESSAGE}, State) ->
+    {'next_state', 'waiting', State};
+waiting('info', Evt, State) ->
+    handle_info(Evt, 'waiting', State).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -772,9 +851,9 @@ handle_sync_event(_Event, From, StateName, State) ->
     }.
 
 -spec handle_info(any(), atom(), state()) -> kz_types:handle_fsm_ret(state()).
-handle_info({'member_call', CallJObj, Delivery}, 'ready', State) ->
+handle_info({'member_call', CallJObj, Delivery}, 'waiting', State) ->
     ?MODULE:member_call(self(), CallJObj, Delivery),
-    {'next_state', 'ready', State};
+    {'next_state', 'waiting', State};
 handle_info(_Info, StateName, State) ->
     lager:debug("unhandled message in state ~s: ~p", [StateName, _Info]),
     {'next_state', StateName, State}.
@@ -908,7 +987,7 @@ elapsed(Time) -> kz_time:elapsed_s(Time).
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_delay_connect_req(kapps_call:call(), kz_json:object(), gen_listener:basic_deliver(), state()) ->
-          {'next_state', 'ready' | 'connect_req', state()}.
+          {'next_state', 'waiting' | 'connect_req', state()}.
 maybe_delay_connect_req(Call, CallJObj, Delivery, #state{listener_proc=ListenerSrv
                                                         ,manager_proc=MgrSrv
                                                         ,connection_timeout=ConnTimeout
@@ -935,7 +1014,7 @@ maybe_delay_connect_req(Call, CallJObj, Delivery, #state{listener_proc=ListenerS
         'false' ->
             lager:debug("connect_req delayed (not up next)"),
             erlang:send_after(1000, self(), {'member_call', CallJObj, Delivery}),
-            {'next_state', 'ready', State}
+            {'next_state', 'waiting', State#state{member_call=Call}}
     end.
 
 %%------------------------------------------------------------------------------
