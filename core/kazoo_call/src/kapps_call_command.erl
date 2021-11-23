@@ -2959,10 +2959,12 @@ send_command(Command, Call) when is_list(Command) ->
                 Pid when is_pid(Pid) -> _ = kz_amqp_channel:consumer_pid(Pid), 'ok';
                 _Else -> 'ok'
             end,
-            Prop =
+            Prop0 =
                 props:insert_value(<<"Call-ID">>, CallId, Command) ++
                 kz_api:default_headers(Q, <<"call">>, <<"command">>, AppName, AppVersion),
-            kapi_dialplan:publish_command(CtrlQ, props:filter_undefined(Prop));
+            Prop = props:insert_value(<<"Control-Queue">>, CtrlQ, Prop0),
+            kz_amqp_worker:cast(Prop, fun kapi_dialplan:publish_command/1);
+%%            kapi_dialplan:publish_command(CtrlQ, props:filter_undefined(Prop));
         'false' -> 'ok'
     end;
 send_command(JObj, Call) -> send_command(kz_json:to_proplist(JObj), Call).

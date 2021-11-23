@@ -88,7 +88,7 @@
 
 -export([publish_action/2, publish_action/3
         ,publish_error/2, publish_error/3
-        ,publish_command/2, publish_command/3
+        ,publish_command/1, publish_command/2, publish_command/3
         ,publish_originate_ready/2, publish_originate_ready/3
         ,publish_originate_execute/2, publish_originate_execute/3
         ]).
@@ -1096,6 +1096,11 @@ error_v(JObj) -> error_v(kz_json:to_proplist(JObj)).
 %% @end
 %%------------------------------------------------------------------------------
 
+-spec publish_command(kz_term:api_terms()) -> 'ok'.
+publish_command(Prop) when is_list(Prop) ->
+    publish_command(props:get_value(<<"Control-Queue">>, Prop), Prop);
+publish_command(JObj) ->
+    publish_command(kz_json:to_proplist(JObj)).
 -spec publish_command(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_command(CtrlQ, Prop) when is_list(Prop) ->
     publish_command(CtrlQ, Prop, application_name(Prop));
