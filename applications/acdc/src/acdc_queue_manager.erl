@@ -751,10 +751,6 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                             ,kz_json:get_binary_value(<<"Callback-Number">>, JObj1)
                             ),
 
-    %% Add call to shared queue
-    kapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj1),
-    lager:debug("put call into shared messaging queue"),
-
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
     %% SBRR needs extra workers, priority feature needs extra workers
@@ -769,6 +765,10 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                          ,{fun maybe_schedule_position_announcements/3, [JObj1, Call1]}
                          ,{fun maybe_add_queue_member_as_callback/3, [JObj1, Call1]}
                          ]),
+
+    %% Add call to shared queue
+    erlang:send_after(1000, self(), {publish_shared_member_call, AccountId, QueueId, JObj1}),
+
     {'noreply', State1};
 
 handle_cast({'handle_queue_member_add', JObj}, #state{supervisor=QueueSup
@@ -851,6 +851,10 @@ handle_cast(_Msg, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_info(any(), mgr_state()) -> kz_term:handle_info_ret_state(mgr_state()).
+handle_info({publish_shared_member_call, AccountId, QueueId, JObj}, State) ->
+    lager:info("put member call into shared messaging queue"),
+    kapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
+    {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
