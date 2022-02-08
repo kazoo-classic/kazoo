@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -16,7 +16,18 @@
 cache_profile(Conference) ->
     {ProfileName, Profile} = kapps_conference:profile(Conference),
     lager:debug("caching profile ~s: ~p", [ProfileName, Profile]),
-    kz_cache:store_local(?CACHE_NAME, {'profile', ProfileName}, fix_profile(Conference, Profile)).
+    FixedProfile = fix_profile(Conference, Profile),
+    CacheProps = [{'origin', cache_origin(Conference)}],
+    kz_cache:store_local(?CACHE_NAME, {'profile', ProfileName}, FixedProfile, CacheProps).
+
+cache_origin(Conference) ->
+    case kapps_conference:id(Conference) of
+        undefined -> [];
+        ConferenceId ->
+            AccountId = kapps_conference:account_id(Conference),
+            AccountDB = kz_util:format_account_db(AccountId),
+            [{'db', AccountDB, ConferenceId}]
+    end.
 
 -spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
@@ -27,20 +38,17 @@ handle_req(JObj, _Props) ->
 
 -spec create_conference(kz_json:object()) -> kapps_conference:conference().
 create_conference(JObj) ->
-    Conference = kapps_conference:from_json(JObj),
-    ProfileName = kz_json:get_ne_binary_value(<<"Profile">>, JObj),
-    case binary:split(ProfileName, <<"_">>) of
-        [ConferenceId, AccountId] ->
-            lager:debug("creating conference config for ~s in account ~s", [ConferenceId, AccountId]),
-            Routines = [{fun kapps_conference:set_account_id/2, AccountId}
-                       ,{fun kapps_conference:set_id/2, ConferenceId}
-                       ],
-            kapps_conference:update(Routines, Conference);
-        _Else ->
-            lager:debug("profile name ~s not split: ~p", [ProfileName, _Else]),
-            Routines = [{fun kapps_conference:set_profile_name/2, ProfileName}],
-            kapps_conference:update(Routines, Conference)
-    end.
+    Conference = kapps_conference:new(),
+    Profile = kz_json:get_ne_binary_value(<<"Profile">>, JObj),
+    AccountId = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj),
+    ConferenceId = kz_json:get_ne_binary_value(<<"Conference-ID">>, JObj),
+    lager:debug("creating conference config for ~s in account ~s", [ConferenceId, AccountId]),
+    Routines = [{fun kapps_conference:set_account_id/2, AccountId}
+               ,{fun kapps_conference:set_id/2, ConferenceId}
+               ,{fun kapps_conference:set_profile_name/2, Profile}
+               ,fun kapps_conference:reload/1
+               ],
+    kapps_conference:update(Routines, Conference).
 
 -spec handle_request(kz_term:ne_binary(), kz_json:object(), kapps_conference:conference()) -> 'ok'.
 handle_request(<<"Conference">>, JObj, Conference) ->
@@ -52,9 +60,11 @@ handle_request(<<"Controls">>, JObj, Conference) ->
 handle_profile_request(JObj, Conference) ->
     ProfileName = requested_profile_name(JObj),
     Profile = lookup_profile(ProfileName, Conference),
+    Controls = conference_controls(Conference),
 
     ServerId = kz_api:server_id(JObj),
     Resp = [{<<"Profiles">>, kz_json:from_list([{ProfileName, Profile}])}
+           ,{<<"Caller-Controls">>, Controls}
            ,{<<"Advertise">>, advertise(ProfileName)}
            ,{<<"Chat-Permissions">>, chat_permissions(ProfileName)}
            ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
@@ -155,6 +165,8 @@ add_conference_params(Conference, Profile) ->
     Props = props:filter_undefined(
               [{<<"max-members">>, max_participants(Conference)}
               ,{<<"max-members-sound">>, max_members_sound(Conference)}
+              ,{<<"caller-controls">>, kapps_conference:caller_controls(Conference)}
+              ,{<<"moderator-controls">>, kapps_conference:moderator_controls(Conference)}
               ]),
     kz_json:set_values(Props, Profile).
 
@@ -218,16 +230,19 @@ max_members_sound(Conference) ->
 -spec handle_controls_request(kz_json:object(), kapps_conference:conference()) -> 'ok'.
 handle_controls_request(JObj, Conference) ->
     ProfileName = requested_profile_name(JObj),
-    ControlsType = requested_controls_name(JObj),
-    ControlsName = get_conference_controls_name(ControlsType, Conference),
+    ControlsName = requested_controls_name(JObj),
     Controls = kapps_conference:controls(Conference, ControlsName),
     ServerId = kz_api:server_id(JObj),
-    Resp = [{<<"Caller-Controls">>, controls(ControlsType, Controls)}
+    Resp = [{<<"Caller-Controls">>, controls(ControlsName, Controls)}
            ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
-    lager:debug("returning ~s (~s) controls profile for ~s"
-               ,[ControlsName, ControlsType, ProfileName]
+    lager:debug("returning ~s controls profile for ~s (~s/~s)"
+               ,[ControlsName
+                ,ProfileName
+                ,kapps_conference:account_id(Conference)
+                ,kapps_conference:id(Conference)
+                ]
                ),
     kapi_conference:publish_config_resp(ServerId, Resp).
 
@@ -239,10 +254,8 @@ requested_controls_name(JObj) ->
 controls(ControlsName, Controls) ->
     kz_json:from_list([{ControlsName, Controls}]).
 
--spec get_conference_controls_name(kz_term:ne_binary(), kapps_conference:conference()) -> kz_term:ne_binary().
-get_conference_controls_name(<<"caller-controls">>, Conference) ->
-    kapps_conference:caller_controls(Conference);
-get_conference_controls_name(<<"moderator-controls">>, Conference) ->
-    kapps_conference:moderator_controls(Conference);
-get_conference_controls_name(_Name, Conference) ->
-    kapps_conference:caller_controls(Conference).
+conference_controls(Conference) ->
+    ControlNames = lists:usort([kapps_conference:caller_controls(Conference)
+                               ,kapps_conference:moderator_controls(Conference)
+                               ]),
+    kz_json:from_list([{Name, kapps_conference:controls(Conference, Name)} || Name <- ControlNames]).

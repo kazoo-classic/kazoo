@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -37,15 +37,15 @@ get_json_from_url(Url, ReqHeaders) ->
     end.
 
 -spec fetch_access_code(kz_term:ne_binary() | map(), kz_term:ne_binary() ) ->
-                               {'ok', kz_json:object()} |
-                               {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 fetch_access_code(AppId, AuthorizationCode) ->
     fetch_access_code(AppId, AuthorizationCode, <<"postmessage">>).
 
 
 -spec fetch_access_code(kz_term:ne_binary() | map(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                               {'ok', kz_json:object()} |
-                               {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 fetch_access_code(AppId, AuthorizationCode, RedirectUri)
   when is_binary(AppId) ->
     lager:debug("getting auth-app ~p",[AppId]),
@@ -67,8 +67,10 @@ fetch_access_code(#{auth_app := #{name := ClientId
              ,{"code", AuthorizationCode}
              ],
     Body = string:join(lists:append(lists:map(fun({K,V}) -> [string:join([K, kz_term:to_list(V)], "=") ] end, Fields)),"&"),
+    lager:debug("POST ~s: ~s", [URL, Body]),
     case kz_http:post(kz_term:to_list(URL), Headers, Body, [{'ssl', [{'versions', ['tlsv1.2']}]}]) of
-        {'ok', 200, _RespHeaders, RespXML} -> {'ok', kz_json:decode(RespXML)};
+        {'ok', 200, _RespHeaders, RespJSON} ->
+            {'ok', kz_json:decode(RespJSON)};
         Else ->
             lager:error("~p", [Else]),
             {'error', Else}

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -67,7 +67,7 @@ system(Node) ->
     kapps_config:fetch_current(?APP_NAME, <<"acls">>, kz_json:new(), Node).
 
 -spec collect(kz_json:object(), kz_term:pid_refs()) ->
-                     kz_json:object().
+          kz_json:object().
 collect(ACLs, PidRefs) ->
     collect(ACLs, PidRefs, request_timeout()).
 
@@ -76,7 +76,7 @@ request_timeout() ->
     ?REQUEST_TIMEOUT + ?REQUEST_TIMEOUT_FUDGE.
 
 -spec collect(kz_json:object(), kz_term:pid_refs(), timeout()) ->
-                     kz_json:object().
+          kz_json:object().
 collect(ACLs, [], _Timeout) ->
     lager:debug("acls built with ~p ms to spare", [_Timeout]),
     ACLs;
@@ -107,8 +107,38 @@ system_config_acls(Node) ->
         {'error', Error} ->
             lager:warning("error getting system acls : ~p", [Error]),
             kz_json:new();
-        JObj -> JObj
+        JObj -> resolve_system_config_acls(JObj)
     end.
+
+resolve_system_config_acls(JObj) ->
+    kz_json:map(fun resolve_system_config_acls/2, JObj).
+
+resolve_system_config_acls(K, JObj) ->
+    CIDR = kz_json:get_value(<<"cidr">>, JObj),
+    {K, kz_json:set_value(<<"cidr">>, maybe_resolve_cidr(CIDR), JObj)}.
+
+maybe_resolve_cidr(CIDRS)
+  when is_list(CIDRS) ->
+    [maybe_resolve_cidr(CIDR) || CIDR <- CIDRS];
+maybe_resolve_cidr(CIDR)
+  when is_binary(CIDR) ->
+    case is_cidr(CIDR) of
+        'true' -> CIDR;
+        'false' -> resolve_cidr(CIDR)
+    end.
+
+resolve_cidr(CIDR) ->
+    case kz_network_utils:is_ipv4(CIDR) of
+        true ->
+            kz_network_utils:to_cidr(CIDR);
+        false ->
+            IPs = kz_network_utils:resolve(CIDR),
+            [kz_network_utils:to_cidr(IP) || IP <- IPs]
+    end.
+
+-spec is_cidr(kz_term:text()) -> boolean().
+is_cidr(Address) ->
+    kz_network_utils:is_cidr(Address, true).
 
 -spec sip_auth_ips(pid()) -> 'ok'.
 sip_auth_ips(Collector) ->

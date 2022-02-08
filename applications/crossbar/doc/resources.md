@@ -28,6 +28,18 @@ Schema for resources
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
+`caller_id_options.type` | Caller ID type to choose | `string('internal' | 'external' | 'emergency')` |   | `false` |  
+`caller_id_options` | Caller ID options | `object()` |   | `false` |  
+`cid_rules.[]` |   | `string()` |   | `false` |  
+`cid_rules` | Regexps to match against caller ID | `array(string())` |   | `false` |  
+`classifiers./.+/.emergency` | Determines if the resource represents emergency services | `boolean()` | `false` | `false` |  
+`classifiers./.+/.enabled` | Determines if the resource is currently enabled | `boolean()` | `true` | `false` |  
+`classifiers./.+/.prefix` | A string to prepend to the dialed number or capture group of the matching rule | `string(0..64)` |   | `false` |  
+`classifiers./.+/.regex` | regexp to match against dialed number | `string()` |   | `false` |  
+`classifiers./.+/.suffix` | A string to append to the dialed number or capture group of the matching rule | `string(0..64)` |   | `false` |  
+`classifiers./.+/.weight_cost` | A value between 0 and 100 that determines the order of resources when multiple can be used | `integer()` | `50` | `false` |  
+`classifiers./.+/` |   | `object()` |   | `false` |  
+`classifiers` | Resource classifiers to use as rules when matching against dialed numbers | `object()` |   | `false` |  
 `emergency` | Determines if the resource represents emergency services | `boolean()` | `false` | `false` |  
 `enabled` | Determines if the resource is currently enabled | `boolean()` | `true` | `false` |  
 `flags.[]` |   | `string()` |   | `false` |  
@@ -36,7 +48,9 @@ Key | Description | Type | Default | Required | Support Level
 `flat_rate_whitelist` | Regex for determining if the number is eligible for flat-rate trunking | `string()` |   | `false` |  
 `format_from_uri` | When set to true requests to this resource will have a reformatted SIP From Header | `boolean()` |   | `false` |  
 `formatters` | Schema for request formatters | `object()` |   | `false` |  
+`from_account_realm` | When formatting SIP From on outbound requests, use the calling account's SIP realm | `boolean()` | `false` | `false` |  
 `from_uri_realm` | When formatting SIP From on outbound requests this can be used to override the realm | `string()` |   | `false` |  
+`gateway_strategy` | The strategy of choosing gateways from list: sequential or random | `string('sequential' | 'random')` |   | `false` |  
 `gateways.[].bypass_media` | The resource gateway bypass media mode | `boolean()` |   | `false` |  
 `gateways.[].caller_id_type` | The type of caller id to use | `string('internal' | 'external' | 'emergency')` |   | `false` |  
 `gateways.[].channel_selection` | Automatic selection of the channel within the span: ascending starts at 1 and moves up; descending is the opposite | `string('ascending' | 'descending')` | `ascending` | `false` |  
@@ -81,6 +95,8 @@ Key | Description | Type | Default | Required | Support Level
 `require_flags` | When set to true this resource is ignored if the request does not specify outbound flags | `boolean()` |   | `false` |  
 `rules.[]` |   | `string()` |   | `false` |  
 `rules` | A list of regular expressions of which one must match for the rule to be eligible, they can optionally contain capture groups | `array(string())` | `[]` | `false` |  
+`rules_test.[]` |   | `string()` |   | `false` |  
+`rules_test` | A list of regular expressions of which if matched denotes a test rule | `array(string())` | `[]` | `false` |  
 `weight_cost` | A value between 0 and 100 that determines the order of resources when multiple can be used | `integer()` | `50` | `false` |  
 
 ### custom_sip_headers
@@ -170,6 +186,21 @@ and assuming the requesting call has pass-through (with value `pass-through=0288
 ```
 INVITE sip:+14158867900@10.26.0.88;npid;id=XXXX;pass-through=0288 SIP/2.0
 ```
+
+
+## rules_test.[]
+
+The `rules_test` object defines an array of regular expressions for test patterns of the given resource.
+
+For example, if the resource handles emergency routes in North America:
+
+```
+  "rules_test": [
+      "^\\+{0,1}(933)$"
+  ],
+```
+
+defining `933` as a test route, will inform teletype this emergency call is a test and will be reflected as such in the notification.
 
 
 ## Fetch

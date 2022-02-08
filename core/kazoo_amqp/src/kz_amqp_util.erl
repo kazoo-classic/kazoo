@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Utilities to facilitate AMQP interaction.
 %%%
 %%% @author James Aimonetti
@@ -505,6 +505,15 @@ basic_publish(Exchange, RoutingKey, Payload, ContentType) ->
 basic_publish(Exchange, RoutingKey, Payload, ContentType, Prop)
   when is_list(Payload) ->
     basic_publish(Exchange, RoutingKey, iolist_to_binary(Payload), ContentType, Prop);
+basic_publish(Exchange, <<"pid://", _/binary>>=RoutingKey, ?NE_BINARY = Payload, ContentType, Props)
+  when is_binary(Exchange),
+       is_binary(RoutingKey),
+       is_binary(ContentType),
+       is_list(Props) ->
+    Headers = props:get_value('headers', Props, []),
+    {'match', [Pid, RK]}= re:run(RoutingKey, <<"pid://(.*)/(.*)">>, [{'capture', [1,2], 'binary'}]),
+    NewProps = props:set_value('headers', [{?KEY_DELIVER_TO_PID, binary, Pid} | Headers], Props),
+    basic_publish(Exchange, RK, Payload, ContentType, NewProps);
 basic_publish(Exchange, RoutingKey, ?NE_BINARY = Payload, ContentType, Props)
   when is_binary(Exchange),
        is_binary(RoutingKey),
@@ -538,7 +547,7 @@ basic_publish(Exchange, RoutingKey, ?NE_BINARY = Payload, ContentType, Props)
                   ,cluster_id = ?P_GET('cluster_id', Props) % cluster
                   },
 
-    AM = #'amqp_msg'{payload = Payload
+    AM = #'amqp_msg'{payload = encode(MsgProps#'P_basic'.content_encoding, Payload)
                     ,props = MsgProps
                     },
 
@@ -546,6 +555,9 @@ basic_publish(Exchange, RoutingKey, ?NE_BINARY = Payload, ContentType, Props)
         'true' -> kz_amqp_channel:maybe_publish(BP, AM);
         'false' -> kz_amqp_channel:publish(BP, AM)
     end.
+
+encode(<<"gzip">>, Payload) -> zlib:gzip(Payload);
+encode(_ContentType, Payload) -> Payload.
 
 %%------------------------------------------------------------------------------
 %% @doc Create AMQP exchanges.
@@ -1131,7 +1143,7 @@ bind_q_to_exchange(Queue, Routing, Exchange, Options) ->
 %%------------------------------------------------------------------------------
 
 -spec unbind_q_from_conference(kz_term:ne_binary(), conf_routing_type()) ->
-                                      'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_conference(Queue, 'discovery') ->
     unbind_q_from_conference(Queue, 'discovery', 'undefined');
 unbind_q_from_conference(Queue, 'command') ->
@@ -1142,7 +1154,7 @@ unbind_q_from_conference(Queue, 'event') ->
     unbind_q_from_conference(Queue, 'event', <<"*">>).
 
 -spec unbind_q_from_conference(kz_term:ne_binary(), conf_routing_type(), kz_term:api_binary()) ->
-                                      'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_conference(Queue, 'discovery', _) ->
     unbind_q_from_exchange(Queue, ?KEY_CONFERENCE_DISCOVERY, ?EXCHANGE_CONFERENCE);
 unbind_q_from_conference(Queue, 'event', ConfId) ->
@@ -1153,83 +1165,83 @@ unbind_q_from_conference(Queue, 'command', ConfId) ->
     unbind_q_from_exchange(Queue, conference_command_binding(ConfId), ?EXCHANGE_CONFERENCE).
 
 -spec unbind_q_from_conference(kz_term:ne_binary(), 'event', kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                      'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_conference(Queue, 'event', ConfId, CallId) ->
     unbind_q_from_exchange(Queue, <<?KEY_CONFERENCE_EVENT/binary, ConfId/binary, ".", CallId/binary>>, ?EXCHANGE_CONFERENCE).
 
 -spec unbind_q_from_callctl(kz_term:ne_binary()) ->
-                                   'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_callctl(Queue) ->
     unbind_q_from_exchange(Queue, Queue, ?EXCHANGE_CALLCTL).
 
 -spec unbind_q_from_notifications(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                         'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_notifications(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_NOTIFICATIONS).
 
 -spec unbind_q_from_sysconf(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                   'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_sysconf(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_SYSCONF).
 
 -spec unbind_q_from_bookkeepers(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                       'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_bookkeepers(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_BOOKKEEPERS).
 
 -spec unbind_q_from_resource(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                    'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_resource(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_RESOURCE).
 
 -spec unbind_q_from_callevt(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                   'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_callevt(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_CALLEVT).
 
 -spec unbind_q_from_callmgr(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                   'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_callmgr(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_CALLMGR).
 
 -spec unbind_q_from_configuration(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                         'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_configuration(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_CONFIGURATION).
 
 -spec unbind_q_from_targeted(kz_term:ne_binary()) ->
-                                    'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_targeted(Queue) ->
     unbind_q_from_exchange(Queue, Queue, ?EXCHANGE_TARGETED).
 
 -spec unbind_q_from_nodes(kz_term:ne_binary()) ->
-                                 'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_nodes(Queue) ->
     unbind_q_from_exchange(Queue, Queue, ?EXCHANGE_NODES).
 
 -spec unbind_q_from_kapps(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                 'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_kapps(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_KAPPS).
 
 -spec unbind_q_from_presence(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                    'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_presence(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_PRESENCE).
 
 -spec unbind_q_from_registrar(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                     'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_registrar(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_REGISTRAR).
 
 -spec unbind_q_from_tasks(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                 'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_tasks(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_TASKS).
 
 
 -spec unbind_q_from_exchange(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                    'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 unbind_q_from_exchange(Queue, Routing, Exchange) ->
     UB = #'queue.unbind'{queue = Queue
                         ,exchange = Exchange

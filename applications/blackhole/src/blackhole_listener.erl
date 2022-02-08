@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -11,6 +11,8 @@
         ,add_binding/1, remove_binding/1
         ,add_bindings/1, remove_bindings/1
         ,flush/0
+
+        ,wait_until_consuming/1
         ]).
 
 -export([init/1
@@ -65,16 +67,22 @@ start_link() ->
                            ,[]
                            ).
 
+-spec wait_until_consuming(timeout()) -> 'ok' | {'error', 'timeout'}.
+wait_until_consuming(Timeout) ->
+    gen_listener:wait_until_consuming(?SERVER, Timeout).
+
 -spec handle_amqp_event(kz_json:object(), kz_term:proplist(), gen_listener:basic_deliver() | kz_term:ne_binary()) -> 'ok'.
 handle_amqp_event(EventJObj, _Props, ?MODULE_REQ_ROUTING_KEY) ->
     handle_module_req(EventJObj);
-handle_amqp_event(EventJObj, _Props, <<_/binary>> = RoutingKey) ->
+handle_amqp_event(EventJObj, _Props, <<RoutingKey/binary>>) ->
     Evt = kz_util:get_event_type(EventJObj),
     lager:debug("recv event ~p (~s)", [Evt, RoutingKey]),
     RK = <<"blackhole.event.", RoutingKey/binary>>,
-    {Time, Res} = timer:tc(blackhole_bindings, pmap, [RK, [RoutingKey, EventJObj]]),
+
+    StartTime = kz_time:start_time(),
+    Res = blackhole_bindings:pmap(RK, [RoutingKey, EventJObj]),
     lager:debug("delivered the event ~p (~s) to ~b subscriptions in ~b ms"
-               ,[Evt, RoutingKey, length(Res), Time div 1000]
+               ,[Evt, RoutingKey, length(Res), kz_time:elapsed_ms(StartTime)]
                );
 handle_amqp_event(EventJObj, Props, BasicDeliver) ->
     handle_amqp_event(EventJObj, Props, gen_listener:routing_key_used(BasicDeliver)).
@@ -168,17 +176,18 @@ send_error_module_resp(EventJObj, Error) ->
     kapi_websockets:publish_module_resp(ServerId, Resp).
 
 -type bh_amqp_binding() :: {'amqp', atom(), kz_term:proplist()}.
--type bh_hook_binding() :: {'hook', kz_term:ne_binary()} | {'hook', kz_term:ne_binary(), kz_term:ne_binary()}.
+-type bh_hook_binding() :: {'hook', kz_term:ne_binary()} |
+                           {'hook', kz_term:ne_binary(), kz_term:ne_binary()}.
 -type bh_event_binding() :: bh_amqp_binding() | bh_hook_binding().
 -type bh_event_bindings() :: [bh_event_binding()].
 
 -spec add_binding(bh_event_binding()) -> 'ok'.
 add_binding(Binding) ->
-    gen_listener:cast(?SERVER, {'add_bh_binding', Binding}).
+    gen_listener:call(?SERVER, {'add_bh_binding', Binding}).
 
 -spec add_bindings(bh_event_bindings()) -> 'ok'.
 add_bindings(Bindings) ->
-    gen_listener:cast(?SERVER, {'add_bh_bindings', Bindings}).
+    gen_listener:call(?SERVER, {'add_bh_bindings', Bindings}).
 
 -spec remove_binding(bh_event_binding()) -> 'ok'.
 remove_binding(Binding) ->
@@ -198,13 +207,20 @@ remove_bindings(Bindings) ->
 %%------------------------------------------------------------------------------
 -spec init(list()) -> {'ok', state()}.
 init([]) ->
-    {'ok', #state{bindings=ets:new(bindings, [])}}.
+    kz_util:put_callid(?MODULE),
+    {'ok', #state{bindings=ets:new(?MODULE, [])}}.
 
 %%------------------------------------------------------------------------------
 %% @doc Handling call messages.
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
+handle_call({'add_bh_bindings', Bindings}, _From, #state{bindings=ETS}=State) ->
+    _ = add_bh_bindings(ETS, Bindings),
+    {'reply', 'ok', State};
+handle_call({'add_bh_binding', Binding}, _From, #state{bindings=ETS}=State) ->
+    _ = add_bh_binding(ETS, Binding),
+    {'noreply', 'ok', State};
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -230,7 +246,7 @@ handle_cast({'gen_listener', {'created_queue', _QueueNAme}}, State) ->
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
 handle_cast('flush_bh_bindings', #state{bindings=ETS}=State) ->
-    ets:delete_all_objects(ETS),
+    flush_bh_bindings(ETS),
     {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
@@ -240,7 +256,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_info(?HOOK_EVT(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()), state()) ->
-                         {'noreply', state()}.
+          {'noreply', state()}.
 handle_info(?HOOK_EVT(AccountId, EventType, JObj), State) ->
     _ = kz_util:spawn(fun handle_hook_event/3, [AccountId, EventType, JObj]),
     {'noreply', State};
@@ -338,6 +354,14 @@ remove_bh_binding(_ETS, _Binding, _Key, _Else) ->
     lager:debug("listener still have ~b references, not removing binding for ~p"
                ,[_Else, _Binding]
                ).
+
+flush_bh_bindings(ETS) ->
+    ets:foldl(fun flush_bh_binding/2, ETS, ETS).
+
+flush_bh_binding({Key, _Counter}, ETS) ->
+    Binding = binary_to_term(base64:decode(Key)),
+    remove_bh_binding(ETS, Binding, Key, 0),
+    ETS.
 
 add_bh_binding({'hook', AccountId}) ->
     kz_hooks:register(AccountId);

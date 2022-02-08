@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Various utilities specific to ecallmgr. More general utilities go
 %%% in kazoo_util.erl
 %%%
@@ -36,6 +36,7 @@
 -export([build_bridge_channels/1, build_simple_channels/1]).
 -export([create_masquerade_event/2, create_masquerade_event/3]).
 -export([media_path/1, media_path/2, media_path/3, media_path/4
+        ,moh_media_path/4
         ,lookup_media/4
         ]).
 -export([unserialize_fs_array/1, unserialize_fs_props/1]).
@@ -73,6 +74,10 @@
 -define(FAILOVER_IF_ALL_UNREGED
        ,kapps_config:get_boolean(?APP_NAME, <<"failover_when_all_unreg">>, 'false')
        ).
+
+-define(KZ_MOH_KEY, <<"Hold-Media-Preserve-Position">>).
+-define(KZ_MOH_CONFIG_KEY, kz_json:normalize_key(?KZ_MOH_KEY)).
+-define(KZ_MOH_DEFAULT, kapps_config:get_boolean(?APP_NAME, ?KZ_MOH_CONFIG_KEY, 'false')).
 
 -type send_cmd_ret() :: fs_sendmsg_ret() | fs_api_ret().
 -export_type([send_cmd_ret/0]).
@@ -121,6 +126,12 @@ send_cmd(_Node, _UUID, "kz_multiset", "^^") -> 'ok';
 send_cmd(Node, UUID, "playstop", _Args) ->
     lager:debug("execute on node ~s: uuid_break(~s all)", [Node, UUID]),
     freeswitch:api(Node, 'uuid_break', kz_term:to_list(<<UUID/binary, " all">>));
+send_cmd(Node, UUID, "playseek", Cmd) ->
+    Args = iolist_to_binary([UUID, " ", Cmd]),
+    lager:debug("execute on node ~s: uuid_fileman(~s)", [Node, Args]),
+    Resp = freeswitch:api(Node, 'uuid_fileman', kz_term:to_list(Args)),
+    lager:debug("uuid_fileman resulted in: ~p", [Resp]),
+    Resp;
 send_cmd(Node, UUID, "unbridge", _) ->
     lager:debug("execute on node ~s: uuid_park(~s)", [Node, UUID]),
     freeswitch:api(Node, 'uuid_park', kz_term:to_list(UUID));
@@ -649,11 +660,14 @@ get_fs_kv(Key, Value) ->
 
 -spec get_fs_kv(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary()) -> binary().
 get_fs_kv(<<"Hold-Media">>, Media, UUID) ->
-    list_to_binary(["hold_music="
-                   ,kz_term:to_list(media_path(Media, 'extant', UUID, kz_json:new()))
-                   ]);
+    MediaPath = moh_media_path(Media, 'extant', UUID, kz_json:new()),
+    list_to_binary(["hold_music=", MediaPath]);
 get_fs_kv(?CCV(Key), Val, UUID) ->
     get_fs_kv(Key, Val, UUID);
+get_fs_kv(<<"Media-Names">>, [FileName1 | []], _) ->
+    list_to_binary([get_fs_key(<<"Media-Names">>), "=", maybe_sanitize_fs_value(<<"Media-Names">>, FileName1)]);
+get_fs_kv(<<"Media-Recordings">>, [FileName1 | []], _) ->
+    list_to_binary([get_fs_key(<<"Media-Recordings">>), "=", maybe_sanitize_fs_value(<<"Media-Recordings">>, FileName1)]);
 get_fs_kv(Key, Val, _) ->
     list_to_binary([get_fs_key(Key), "=", maybe_sanitize_fs_value(Key, Val)]).
 
@@ -671,11 +685,12 @@ get_fs_key(Key) ->
                           ,kz_term:ne_binary() | kz_term:ne_binaries() | kz_json:object()
                           ,kz_term:ne_binary()
                           ) ->
-                                  {kz_term:ne_binary(), binary()} |
-                                  [{kz_term:ne_binary(), binary()}] |
-                                  'skip'.
+          {kz_term:ne_binary(), binary()} |
+          [{kz_term:ne_binary(), binary()}] |
+          'skip'.
 get_fs_key_and_value(<<"Hold-Media">>=Key, Media, UUID) ->
-    {get_fs_key(Key), media_path(Media, 'extant', UUID, kz_json:new())};
+    MediaPath = moh_media_path(Media, 'extant', UUID, kz_json:new()),
+    {get_fs_key(Key), MediaPath};
 get_fs_key_and_value(<<"Diversions">>=Key, Diversions, _UUID) ->
     K = get_fs_key(Key),
     lager:debug("setting diversions ~p on the channel", [Diversions]),
@@ -720,9 +735,22 @@ maybe_sanitize_fs_value(<<"Export-Variables">>, Val) ->
     kz_binary:join(Val, <<",">>);
 maybe_sanitize_fs_value(Key, Val) when not is_binary(Key) ->
     maybe_sanitize_fs_value(kz_term:to_binary(Key), Val);
+maybe_sanitize_fs_value(<<"Media-Names">>, Val) when not is_binary(Val) ->
+    maybe_sanitize_fs_value(<<"Media-Names">>, checking_list_media_name(Val));
+maybe_sanitize_fs_value(<<"Media-Recordings">>, Val) when not is_binary(Val) ->
+    maybe_sanitize_fs_value(<<"Media-Recordings">>, checking_list_media_name(Val));
 maybe_sanitize_fs_value(Key, Val) when not is_binary(Val) ->
     maybe_sanitize_fs_value(Key, kz_term:to_binary(Val));
 maybe_sanitize_fs_value(_, Val) -> Val.
+
+-spec checking_list_media_name(list()) -> binary().
+checking_list_media_name([])->
+    <<>>;
+checking_list_media_name([MediaName1 | []]) ->
+    <<MediaName1/binary>>;
+checking_list_media_name([MediaName1 | MediaName2])->
+    Next = checking_list_media_name(MediaName2),
+    <<MediaName1/binary, ",", Next/binary>>.
 
 %%------------------------------------------------------------------------------
 %% @doc takes endpoints (/sofia/foo/bar), and optionally a caller id name/num
@@ -1009,8 +1037,8 @@ maybe_collect_worker_channel(Pid, Channels) ->
     end.
 
 -spec build_channel(bridge_endpoint() | kz_json:object()) ->
-                           {'ok', bridge_channel()} |
-                           {'error', 'invalid' | 'number_not_provided'}.
+          {'ok', bridge_channel()} |
+          {'error', 'invalid' | 'number_not_provided'}.
 build_channel(#bridge_endpoint{endpoint_type = <<"freetdm">>}=Endpoint) ->
     build_freetdm_channel(Endpoint);
 build_channel(#bridge_endpoint{endpoint_type = <<"skype">>}=Endpoint) ->
@@ -1021,8 +1049,8 @@ build_channel(EndpointJObj) ->
     build_channel(endpoint_jobj_to_record(EndpointJObj)).
 
 -spec build_freetdm_channel(bridge_endpoint()) ->
-                                   {'ok', bridge_channel()} |
-                                   {'error', 'number_not_provided'}.
+          {'ok', bridge_channel()} |
+          {'error', 'number_not_provided'}.
 build_freetdm_channel(#bridge_endpoint{number='undefined'}) ->
     {'error', 'number_not_provided'};
 build_freetdm_channel(#bridge_endpoint{invite_format = <<"e164">>
@@ -1050,16 +1078,16 @@ build_freetdm_channel(#bridge_endpoint{number=Number
     {'ok', <<"freetdm/", Span/binary, "/", ChannelSelection/binary, "/", Number/binary>>}.
 
 -spec build_skype_channel(bridge_endpoint()) ->
-                                 {'ok', bridge_channel()} |
-                                 {'error', 'number_not_provided'}.
+          {'ok', bridge_channel()} |
+          {'error', 'number_not_provided'}.
 build_skype_channel(#bridge_endpoint{user='undefined'}) ->
     {'error', 'number_not_provided'};
 build_skype_channel(#bridge_endpoint{user=User, interface=IFace}) ->
     {'ok', <<"skypopen/", IFace/binary, "/", User/binary>>}.
 
 -spec build_sip_channel(bridge_endpoint()) ->
-                               {'ok', bridge_channel()} |
-                               {'error', 'invalid'}.
+          {'ok', bridge_channel()} |
+          {'error', 'invalid'}.
 build_sip_channel(#bridge_endpoint{failover=Failover}=Endpoint) ->
     Routines = [fun get_sip_contact/1
                ,fun maybe_clean_contact/2
@@ -1102,8 +1130,8 @@ build_sip_channel_fold(Fun, Endpoint) ->
     end.
 
 -spec maybe_failover(kz_json:object()) ->
-                            {'ok', bridge_channel()} |
-                            {'error', 'invalid'}.
+          {'ok', bridge_channel()} |
+          {'error', 'invalid'}.
 maybe_failover(Endpoint) ->
     case kz_term:is_empty(Endpoint) of
         'true' -> {'error', 'invalid'};
@@ -1424,8 +1452,8 @@ convert_kazoo_app_name(App) ->
 
 -type media_types() :: 'new' | 'extant'.
 -spec lookup_media(kz_term:ne_binary(), media_types(), kz_term:ne_binary(), kz_json:object()) ->
-                          {'ok', kz_term:ne_binary()} |
-                          {'error', any()}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', any()}.
 lookup_media(MediaName, Type, CallId, JObj) ->
     case kz_cache:fetch_local(?ECALLMGR_UTIL_CACHE
                              ,?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName)
@@ -1439,8 +1467,8 @@ lookup_media(MediaName, Type, CallId, JObj) ->
     end.
 
 -spec request_media_url(kz_term:ne_binary(), media_types(), kz_term:ne_binary(), kz_json:object()) ->
-                               {'ok', kz_term:ne_binary()} |
-                               {'error', any()}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', any()}.
 request_media_url(MediaName, Type, CallId, JObj) ->
     MsgProps = props:filter_undefined(
                  [{<<"Media-Name">>, MediaName}
@@ -1468,8 +1496,8 @@ request_media_url(MediaName, Type, CallId, JObj) ->
     end.
 
 -spec maybe_cache_media_response(kz_term:ne_binary(), kz_json:objects()) ->
-                                        {'ok', kz_term:ne_binary()} |
-                                        {'error', 'not_found'}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', 'not_found'}.
 maybe_cache_media_response(MediaName, MediaResp) ->
     case kz_json:find(<<"Stream-URL">>, MediaResp, <<>>) of
         <<>> ->
@@ -1516,7 +1544,7 @@ custom_sip_headers(Props) ->
                ).
 
 -spec maybe_aggregate_headers({kz_term:ne_binary(), kz_term:ne_binary()}, kz_term:proplist()) ->
-                                     kz_term:proplist().
+          kz_term:proplist().
 maybe_aggregate_headers(KV, Acc) ->
     {K, V} = normalize_custom_sip_header_name(KV),
     maybe_aggregate_headers(K, V, Acc).
@@ -1586,4 +1614,18 @@ fix_contact([Contact | Options], Username, Realm) ->
         [#uri{}=Uri] ->
             list_to_binary([kzsip_uri:ruri(Uri)] ++ [<<";", Option/binary>> || Option <- Options]);
         _Else -> 'undefined'
+    end.
+
+-spec moh_media_path(kz_term:api_binary(), media_types(), kz_term:ne_binary(), kz_json:object()) -> kz_term:ne_binary().
+moh_media_path(Media, Types, UUID, JObj) ->
+    case media_path(Media, Types, UUID, JObj) of
+        <<"http_cache", _/binary>> = HttpMedia -> maybe_use_kz_moh(HttpMedia, JObj);
+        Else -> Else
+    end.
+
+-spec maybe_use_kz_moh(kz_term:ne_binary(), kz_json:object()) -> kz_term:ne_binary().
+maybe_use_kz_moh(Media, JObj) ->
+    case kz_json:is_true(?KZ_MOH_KEY, JObj, ?KZ_MOH_DEFAULT) of
+        'true' -> list_to_binary(["kz_moh::", Media]);
+        'false' -> Media
     end.

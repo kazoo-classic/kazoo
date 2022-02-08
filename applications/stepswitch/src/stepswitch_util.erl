@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -15,6 +15,16 @@
 -export([route_by/0]).
 -export([resources_to_endpoints/3]).
 -export([json_to_template_props/1]).
+
+-ifdef(TEST).
+-export([maybe_constrain_shortdial_correction/3
+        ,shortdial_correction_length/3
+        ,maybe_deny_reclassified_number/3
+        ,do_correct_shortdial/3
+        ,should_correct_shortdial/2
+        ,correct_shortdial/4
+        ]).
+-endif.
 
 -include("stepswitch.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
@@ -91,6 +101,10 @@ correct_shortdial(<<"+", Number/binary>>, CIDNum, DeniedCallRestrictions) ->
 correct_shortdial(Number, <<"+", CIDNum/binary>>, DeniedCallRestrictions) ->
     correct_shortdial(Number, CIDNum, DeniedCallRestrictions);
 correct_shortdial(Number, CIDNum, DeniedCallRestrictions) when is_binary(CIDNum) ->
+    correct_shortdial(Number, CIDNum, DeniedCallRestrictions, should_correct_shortdial(Number)).
+
+-spec correct_shortdial(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), {boolean(), pos_integer()}) -> kz_term:api_ne_binary().
+correct_shortdial(Number, CIDNum, DeniedCallRestrictions, {'true', _Length}) ->
     case shortdial_correction_length(Number, CIDNum) of
         0 ->
             lager:debug("unable to correct shortdial ~s via CID ~s"
@@ -98,54 +112,89 @@ correct_shortdial(Number, CIDNum, DeniedCallRestrictions) when is_binary(CIDNum)
                        ),
             'undefined';
         Length ->
-            try_to_correct(Number, CIDNum, DeniedCallRestrictions, Length)
-    end.
+            maybe_deny_reclassified_number(do_correct_shortdial(Number, CIDNum, Length)
+                                          ,CIDNum
+                                          ,DeniedCallRestrictions
+                                          )
+    end;
+correct_shortdial(Number, _CIDNum, _DeniedCallRestrictions, {'false', Length}) ->
+    lager:debug("~s's lenght (~p) doesn't match min_shortdial_destination param's value (~p), skipping"
+               ,[Number, byte_size(Number), Length]
+               ),
+    'undefined'.
 
--spec try_to_correct(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), non_neg_integer()) -> kz_term:api_ne_binary().
-try_to_correct(Number, CIDNum, DeniedCallRestrictions, Length) ->
+-spec should_correct_shortdial(kz_term:ne_binary()) -> {boolean(), pos_integer()}.
+should_correct_shortdial(Number) ->
+    should_correct_shortdial(Number
+                            ,kapps_config:get_integer(?SS_CONFIG_CAT
+                                                     ,<<"min_shortdial_destination">>
+                                                     )
+                            ).
+
+-spec should_correct_shortdial(kz_term:ne_binary(), pos_integer()) -> {boolean(), pos_integer()}.
+should_correct_shortdial(_Number, 'undefined') ->
+    {'true', 0};
+should_correct_shortdial(Number, Length) ->
+    %% The length is also included on the response just to avoid having to read this configuration
+    %% parameter again when printing the debug line. So it is only useful for the `{false, N}' branch.
+    {byte_size(Number) =:= Length, Length}.
+
+-spec do_correct_shortdial(kz_term:ne_binary(), kz_term:ne_binary(), non_neg_integer()) -> kz_term:api_ne_binary().
+do_correct_shortdial(Number, CIDNum, Length) ->
     Correction = kz_binary:truncate_right(CIDNum, Length),
     CorrectedNumber = knm_converters:normalize(<<Correction/binary, Number/binary>>),
-    lager:debug("corrected shortdial ~s via CID ~s to ~s"
-               ,[Number, CIDNum, CorrectedNumber]
-               ),
-    case should_deny_reclassified_number(CorrectedNumber, DeniedCallRestrictions) of
-        'true' ->
-            lager:info("unable to correct shortdial ~s via CID ~s due to a call restriction"
-                      ,[Number, CIDNum]
-                      ),
-            'undefined';
-        'false' ->
-            CorrectedNumber
-    end.
+    lager:debug("corrected shortdial ~s via CID ~s to ~s", [Number, CIDNum, CorrectedNumber]),
+    CorrectedNumber.
 
--spec should_deny_reclassified_number(kz_term:ne_binary(), kz_json:object()) -> boolean().
-should_deny_reclassified_number(CorrectedNumber, DeniedCallRestrictions) ->
+-spec maybe_deny_reclassified_number(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> kz_term:api_ne_binary().
+maybe_deny_reclassified_number(CorrectedNumber, CIDNum, DeniedCallRestrictions) ->
     Classification = knm_converters:classify(CorrectedNumber),
     lager:debug("re-classified corrected number ~s as ~s, testing for call restrictions"
                ,[CorrectedNumber, Classification]
                ),
-    kz_json:get_ne_binary_value([Classification, <<"action">>], DeniedCallRestrictions)
-        =:= <<"deny">>.
+    case kz_json:get_ne_binary_value([Classification, <<"action">>], DeniedCallRestrictions) of
+        <<"deny">> ->
+            lager:info("unable to correct shortdial via CID ~s due to a call restriction", [CIDNum]),
+            'undefined';
+        _ ->
+            CorrectedNumber
+    end.
 
 -spec shortdial_correction_length(kz_term:ne_binary(), kz_term:ne_binary()) -> integer().
 shortdial_correction_length(Number, CIDNum) ->
-    case kapps_config:get_integer(?SS_CONFIG_CAT, <<"fixed_length_shortdial_correction">>) of
-        'undefined' ->
-            Length = byte_size(CIDNum) - byte_size(Number),
-            maybe_constrain_shortdial_correction(Length);
-        FixedLength -> FixedLength
-    end.
+    shortdial_correction_length(Number
+                               ,CIDNum
+                               ,kapps_config:get_integer(?SS_CONFIG_CAT
+                                                        ,<<"fixed_length_shortdial_correction">>
+                                                        )
+                               ).
+
+-spec shortdial_correction_length(kz_term:ne_binary(), kz_term:ne_binary(), integer()) -> integer().
+shortdial_correction_length(Number, CIDNum, 'undefined') ->
+    Length = byte_size(CIDNum) - byte_size(Number),
+    maybe_constrain_shortdial_correction(Length);
+shortdial_correction_length(_Number, _CIDNum, FixedLength) ->
+    FixedLength.
 
 -spec maybe_constrain_shortdial_correction(integer()) -> integer().
 maybe_constrain_shortdial_correction(Length) ->
-    MaxCorrection = kapps_config:get_integer(?SS_CONFIG_CAT, <<"max_shortdial_correction">>, 5),
-    MinCorrection = kapps_config:get_integer(?SS_CONFIG_CAT, <<"min_shortdial_correction">>, 2),
-    case Length =< MaxCorrection
-        andalso Length >= MinCorrection
-    of
-        'true' -> Length;
-        'false' -> 0
-    end.
+    maybe_constrain_shortdial_correction(Length
+                                        ,kapps_config:get_integer(?SS_CONFIG_CAT
+                                                                 ,<<"min_shortdial_correction">>
+                                                                 ,2
+                                                                 )
+                                        ,kapps_config:get_integer(?SS_CONFIG_CAT
+                                                                 ,<<"max_shortdial_correction">>
+                                                                 ,5
+                                                                 )
+                                        ).
+
+-spec maybe_constrain_shortdial_correction(integer(), integer(), integer()) -> integer().
+maybe_constrain_shortdial_correction(Length, Min, Max) when Length >= Min
+                                                            andalso Length =< Max ->
+    Length;
+maybe_constrain_shortdial_correction(_Length, _Min, _Max) ->
+    0.
 
 -spec get_sip_headers(kapi_offnet_resource:req()) -> kz_json:object().
 get_sip_headers(OffnetReq) ->
@@ -165,18 +214,17 @@ get_sip_headers(OffnetReq) ->
 maybe_remove_diversions(JObj) ->
     kz_json:delete_key(<<"Diversions">>, JObj).
 
-
 -spec get_diversions(kz_json:object()) ->
-                            'undefined' |
-                            kz_term:ne_binaries().
+          'undefined' |
+          kz_term:ne_binaries().
 get_diversions(JObj) ->
     Inception = kz_json:get_value(<<"Inception">>, JObj),
     Diversions = kz_json:get_value(<<"Diversions">>, JObj, []),
     get_diversions(Inception, Diversions).
 
 -spec get_diversions(kz_term:api_binary(), kz_term:ne_binaries()) ->
-                            'undefined' |
-                            kz_term:ne_binaries().
+          'undefined' |
+          kz_term:ne_binaries().
 get_diversions('undefined', _Diversion) -> 'undefined';
 get_diversions(_Inception, []) -> 'undefined';
 get_diversions(Inception, Diversions) ->
@@ -213,7 +261,7 @@ build_filter_fun(Name, Number) ->
     end.
 
 -spec format_endpoints(kz_json:objects(), kz_term:api_binary(), kz_term:api_binary(), kapi_offnet_resource:req(), filter_fun()) ->
-                              kz_json:objects().
+          kz_json:objects().
 format_endpoints(Endpoints, Name, Number, OffnetReq, FilterFun) ->
     SIPHeaders = get_sip_headers(OffnetReq),
     AccountId = kapi_offnet_resource:hunt_account_id(OffnetReq
@@ -243,7 +291,7 @@ set_endpoint_caller_id(Endpoint, Name, Number) ->
                          ).
 
 -spec format_endpoint(kz_json:object(), kz_term:api_binary(), filter_fun(), kapi_offnet_resource:req(), kz_json:object(), kz_term:ne_binary()) ->
-                             kz_json:object().
+          kz_json:object().
 format_endpoint(Endpoint, Number, FilterFun, OffnetReq, SIPHeaders, AccountId) ->
     FormattedEndpoint = apply_formatters(Endpoint, SIPHeaders, AccountId),
     FilteredEndpoint = kz_json:filter(FilterFun, FormattedEndpoint),
@@ -283,7 +331,7 @@ maybe_add_sip_headers(Endpoint, SIPHeaders) ->
     end.
 
 -spec maybe_endpoint_format_from(kz_json:object(), kz_term:ne_binary(), kapi_offnet_resource:req()) ->
-                                        kz_json:object().
+          kz_json:object().
 maybe_endpoint_format_from(Endpoint, Number, OffnetReq) ->
     CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, Endpoint, kz_json:new()),
     case kz_json:is_true(<<"Format-From-URI">>, CCVs) of
@@ -301,7 +349,7 @@ maybe_endpoint_format_from(Endpoint, Number, OffnetReq) ->
     end.
 
 -spec endpoint_format_from(kz_json:object(), kz_term:ne_binary(), kapi_offnet_resource:req(), kz_json:object()) ->
-                                  kz_json:object().
+          kz_json:object().
 endpoint_format_from(Endpoint, Number, OffnetReq, CCVs) ->
     FromNumber = kz_json:get_ne_value(?KEY_OUTBOUND_CALLER_ID_NUMBER, Endpoint, Number),
     case get_endpoint_format_from(OffnetReq, CCVs) of
@@ -349,12 +397,12 @@ route_by() ->
     end.
 
 -spec resources_to_endpoints(stepswitch_resources:resources(), kz_term:ne_binary(), kapi_offnet_resource:req()) ->
-                                    kz_json:objects().
+          kz_json:objects().
 resources_to_endpoints(Resources, Number, OffnetJObj) ->
     resources_to_endpoints(Resources, Number, OffnetJObj, []).
 
 -spec resources_to_endpoints(stepswitch_resources:resources(), kz_term:ne_binary(), kapi_offnet_resource:req(), kz_json:objects()) ->
-                                    kz_json:objects().
+          kz_json:objects().
 resources_to_endpoints([], _Number, _OffnetJObj, Endpoints) ->
     lists:reverse(Endpoints);
 resources_to_endpoints([Resource|Resources], Number, OffnetJObj, Endpoints) ->
@@ -362,7 +410,7 @@ resources_to_endpoints([Resource|Resources], Number, OffnetJObj, Endpoints) ->
     resources_to_endpoints(Resources, Number, OffnetJObj, MoreEndpoints).
 
 -spec maybe_resource_to_endpoints(stepswitch_resources:resource(), kz_term:ne_binary(), kapi_offnet_resource:req(), kz_json:objects()) ->
-                                         kz_json:objects().
+          kz_json:objects().
 maybe_resource_to_endpoints(Resource
                            ,Number
                            ,OffnetJObj
@@ -419,7 +467,7 @@ normalize_proplist(Props) ->
     [normalize_proplist_element(Elem) || Elem <- Props].
 
 -spec normalize_proplist_element({kz_term:proplist_key(), kz_term:proplist_value()}) ->
-                                        {kz_term:proplist_key(), kz_term:proplist_value()}.
+          {kz_term:proplist_key(), kz_term:proplist_value()}.
 normalize_proplist_element({K, V}) when is_list(V) ->
     {normalize_value(K), normalize_proplist(V)};
 normalize_proplist_element({K, V}) when is_binary(V) ->

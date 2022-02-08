@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc Runs the compaction.
 %%%
 %%% Task consists of:
@@ -117,13 +117,13 @@ compact_shard(#compactor{shards=[Shard]}=Compactor) ->
 
     case get_db_disk_and_data(compactor_admin(Compactor), Shard) of
         'undefined' ->
-            lager:info("beginning shard compaction"),
+            lager:debug("beginning shard compaction"),
             start_compacting_shard(Compactor);
         'not_found' ->
-            lager:info("disk and data size not found, skip and return ok"),
+            lager:debug("disk and data size not found, skip and return ok"),
             'ok';
         {BeforeDisk, BeforeData} ->
-            lager:info("beginning shard compaction: ~p disk/~p data", [BeforeDisk, BeforeData]),
+            lager:debug("beginning shard compaction: ~p disk/~p data", [BeforeDisk, BeforeData]),
             start_compacting_shard(Compactor)
     end.
 
@@ -184,19 +184,19 @@ compact_design_docs(Compactor, Shard, DDs) ->
                             {'error', any()}.
 
 -spec wait_for_design_compaction(kz_data:connection(), kz_term:ne_binary(), kz_term:ne_binaries()) ->
-                                        'ok'.
+          'ok'.
 wait_for_design_compaction(_, _, []) -> 'ok';
 wait_for_design_compaction(AdminConn, Shard, [DD|DDs]) ->
     wait_for_design_compaction(AdminConn, Shard, DDs, DD, kz_couch_view:design_info(AdminConn, Shard, DD)).
 
 -spec wait_for_design_compaction(kz_data:connection(), kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary(), design_info_resp()) ->
-                                        'ok'.
+          'ok'.
 wait_for_design_compaction(AdminConn, Shard, DDs, DD, {'error', {'conn_failed', {'error', 'timeout'}}}) ->
     lager:warning("timed out, waiting then retrying"),
     'ok' = timer:sleep(?SLEEP_BETWEEN_POLL),
     wait_for_design_compaction(AdminConn, Shard, DDs, DD, kz_couch_view:design_info(AdminConn, Shard, DD));
 wait_for_design_compaction(AdminConn, Shard, DDs, _DD, {'error', 'not_found'}) ->
-    lager:info("compacting shard design docs not found"),
+    lager:debug("compacting shard design docs not found"),
     wait_for_design_compaction(AdminConn, Shard, DDs);
 wait_for_design_compaction(AdminConn, Shard, DDs, _DD, {'error', _E}) ->
     lager:warning("failed design status for '~s/~s': ~p", [Shard, _DD, _E]),
@@ -217,7 +217,7 @@ wait_for_compaction(AdminConn, Shard) ->
 
 -spec wait_for_compaction(kz_data:connection(), kz_term:ne_binary(), db_info_resp()) -> 'ok'.
 wait_for_compaction(_AdminConn, _Shard, {'error', 'db_not_found'}) ->
-    lager:info("shard '~s' wasn't found on this connection: ~p", [_Shard, _AdminConn]);
+    lager:debug("shard '~s' wasn't found on this connection: ~p", [_Shard, _AdminConn]);
 wait_for_compaction(AdminConn, Shard, {'error', 'timeout'}) ->
     lager:warning("timed out querying db status; that seems irregular!"),
     'ok' = timer:sleep(?SLEEP_BETWEEN_POLL * 2),
@@ -252,12 +252,12 @@ should_compact(Compactor, ?HEUR_RATIO) ->
     end.
 
 -spec get_db_disk_and_data(kz_data:connection(), kz_term:ne_binary()) ->
-                                  db_disk_and_data().
+          db_disk_and_data().
 get_db_disk_and_data(Conn, DbName) ->
     get_db_disk_and_data(Conn, DbName, 0).
 
 -spec get_db_disk_and_data(kz_data:connection(), kz_term:ne_binary(), 0..3) ->
-                                  db_disk_and_data().
+          db_disk_and_data().
 get_db_disk_and_data(_Conn, _DbName, 3=_N) ->
     lager:warning("getting db info for ~s failed ~b times", [_DbName, _N]),
     'undefined';
@@ -301,7 +301,8 @@ min_data_met(_Data, _Min) ->
 min_ratio_met(Disk, Data, MinRatio) ->
     case (Disk - Data) / Disk * 100 of
         R when R > MinRatio ->
-            lager:debug("ratio ~.2f% is greater than min ratio: ~p%", [R, MinRatio]),
+            lager:debug("ratio ~.2f% (~p disk/~p data) is greater than min ratio: ~p%",
+                        [R, Disk, Data, MinRatio]),
             'true';
         _R ->
             lager:debug("ratio ~.2f% ((~p-~p) / ~p * 100) is under min threshold ~p%",
@@ -335,7 +336,7 @@ compactor_heuristic(#compactor{heuristic=Heuristic}) -> Heuristic.
 compactor_callid(#compactor{callid=CallId}) -> CallId.
 
 -spec new(kz_term:ne_binary(), heuristic(), kz_data:connection(), kz_data:connection(), kz_term:ne_binary()) ->
-                 compactor().
+          compactor().
 new(Node, Heuristic, APIConn, AdminConn, Database) ->
     #compactor{node=Node
               ,database=kz_http_util:urlencode(Database)

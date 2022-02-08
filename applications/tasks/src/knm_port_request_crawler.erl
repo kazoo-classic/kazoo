@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc
 %%% @author Peter Defebvre
 %%% @end
@@ -42,7 +42,7 @@
 %%------------------------------------------------------------------------------
 -spec start_link() -> kz_types:startlink_ret().
 start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+    gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
 -spec stop() -> 'ok'.
 stop() ->

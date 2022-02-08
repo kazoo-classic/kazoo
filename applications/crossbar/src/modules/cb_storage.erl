@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc storage
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -13,7 +13,7 @@
         ,put/1, put/2
         ,post/1, post/3
         ,patch/1, patch/3
-        ,delete/1, delete/3
+        ,delete/1, delete/3, delete_account/2
         ]).
 
 -ifdef(TEST).
@@ -60,8 +60,9 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.put.storage">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.post.storage">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.patch.storage">>, ?MODULE, 'patch'),
-    _ = crossbar_bindings:bind(<<"*.execute.delete.storage">>, ?MODULE, 'delete').
-
+    _ = crossbar_bindings:bind(<<"*.execute.delete.storage">>, ?MODULE, 'delete'),
+    _ = crossbar_bindings:bind(<<"*.execute.delete.accounts">>, ?MODULE, 'delete_account'),
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc Authorizes the incoming request, returning true if the requestor is
@@ -168,7 +169,6 @@ validate(Context, ?PLANS_TOKEN) ->
 validate(Context, ?PLANS_TOKEN, PlanId) ->
     validate_storage_plan(set_scope(Context), PlanId, cb_context:req_verb(Context)).
 
-
 -spec validate_storage(cb_context:context(), http_method()) -> cb_context:context().
 validate_storage(Context, ?HTTP_GET) ->
     read(Context);
@@ -241,6 +241,41 @@ delete(Context) ->
 -spec delete(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 delete(Context, ?PLANS_TOKEN, _PlanId) ->
     crossbar_doc:delete(Context, 'false').
+
+-spec delete_account(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+delete_account(Context, AccountId) ->
+    lager:debug("account ~s deleted, removing any storage plans", [AccountId]),
+    delete_account_storage(AccountId),
+    Context.
+
+-spec delete_account_storage(kz_term:ne_binary()) -> 'ok'.
+delete_account_storage(AccountId) ->
+    case kz_datamgr:get_result_ids(?KZ_DATA_DB
+                                  ,<<"storage/storage_by_account">>
+                                  ,[{'key', AccountId}]
+                                  )
+    of
+        {'ok', []} -> lager:info("no storage to delete");
+        {'ok', StorageIDs} ->
+            lager:info("removing storage plans ~s", [kz_binary:join(StorageIDs)]),
+            delete_storage_plans(StorageIDs);
+        {'error', _E} -> lager:info("error deleting storage plans: ~p", [_E])
+    end,
+    log_deleted(kz_datamgr:del_doc(?KZ_DATA_DB, AccountId)).
+
+-spec log_deleted({'ok', kz_json:object()} | kz_datamgr:data_error()) -> 'ok'.
+log_deleted({'ok', OK}) ->
+    case kz_json:is_true(<<"ok">>, OK) of
+        'true' -> lager:info("deleted account storage plan");
+        'false' -> lager:info("failed to delete account storage plan: ~p", [OK])
+    end;
+log_deleted(_Else) ->
+    lager:info("failed to delete account storage plan: ~p", [_Else]).
+
+-spec delete_storage_plans(kz_term:ne_binaries()) -> 'ok'.
+delete_storage_plans(StorageIDs) ->
+    _Deleted = kz_datamgr:del_docs(?KZ_DATA_DB, StorageIDs),
+    lager:info("deleted storage docs ~p", [_Deleted]).
 
 %%------------------------------------------------------------------------------
 %% @doc Create a new instance with the data provided, if it is valid
@@ -392,7 +427,7 @@ doc_id({'reseller_plan', PlanId, _AccountId}) -> PlanId;
 doc_id(Context) -> doc_id(scope(Context)).
 
 -spec maybe_check_storage_settings(cb_context:context(), kz_term:ne_binary()) ->
-                                          cb_context:context().
+          cb_context:context().
 maybe_check_storage_settings(Context, ReqVerb) when ReqVerb =:= ?HTTP_PUT
                                                     orelse ReqVerb =:= ?HTTP_POST
                                                     orelse ReqVerb =:= ?HTTP_PATCH ->
@@ -536,7 +571,7 @@ update_attachment_signature(AttId, Att, Context) ->
     cb_context:set_doc(Context, kz_json:set_value([<<"attachments">>, AttId], JObj, cb_context:doc(Context))).
 
 -spec add_datamgr_error(kz_term:ne_binary(), kz_datamgr:data_errors(), cb_context:context()) ->
-                               cb_context:context().
+          cb_context:context().
 add_datamgr_error(AttId, Error, Context) ->
     crossbar_doc:handle_datamgr_errors(Error, AttId, Context).
 
@@ -569,14 +604,14 @@ add_att_settings_validation_error(AttId, {'error', Reason, ExtendedError}, Conte
                                    ).
 
 -spec get_error_response(kz_term:proplist(), Bin) ->
-                                Bin | kz_json:object()
-                                    when Bin :: binary().
+          Bin | kz_json:object()
+              when Bin :: binary().
 get_error_response(ErrorHeaders, ErrorBody) ->
     get_error_response(ErrorHeaders, ErrorBody, props:get_value(<<"content-type">>, ErrorHeaders)).
 
 -spec get_error_response(kz_term:proplist(), Bin, kz_term:api_ne_binary()) ->
-                                Bin | kz_json:object()
-                                    when Bin :: binary().
+          Bin | kz_json:object()
+              when Bin :: binary().
 get_error_response(_Headers, ErrorBody, 'undefined') ->
     lager:debug("no error content-type returned, trying JSON decoding"),
     decode_json(ErrorBody);
@@ -587,7 +622,7 @@ get_error_response(_Headers, ErrorBody, _CT) ->
     ErrorBody.
 
 -spec decode_json(Bin) -> kz_json:object() | Bin
-                              when Bin :: binary().
+              when Bin :: binary().
 decode_json(RespBody) ->
     try kz_json:unsafe_decode(RespBody) of
         DecodedErrorBody -> DecodedErrorBody

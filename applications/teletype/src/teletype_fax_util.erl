@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -101,7 +101,7 @@ to_email_addresses(_DataJObj, TemplateId, _) ->
     lager:debug("can not find email address for the fax notification, maybe using defaults"),
     case teletype_util:template_system_value(TemplateId, <<"default_to">>) of
         'undefined' -> 'undefined';
-        ?NE_BINARY=Email -> [Email];
+        <<Email/binary>> -> [Email];
         Emails when is_list(Emails) -> Emails
     end.
 
@@ -242,4 +242,6 @@ get_file_name(Macros, Ext) ->
         end,
     LocalDateTime = props:get_value([<<"date_called">>, <<"local">>], Macros, <<"0000-00-00_00-00-00">>),
     FName = list_to_binary([CallerID, "_", kz_time:pretty_print_datetime(LocalDateTime), ".", Ext]),
-    re:replace(kz_term:to_lower_binary(FName), <<"\\s+">>, <<"_">>, [{'return', 'binary'}, 'global']).
+    ReOpts = [{'return', 'binary'}, 'global'],
+    NoSpaces = re:replace(kz_term:to_lower_binary(FName), <<"\\s+">>, <<"_">>, ReOpts),
+    re:replace(NoSpaces, <<":">>, <<"-">>, ReOpts).

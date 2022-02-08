@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc
 %%% @author Luis Azedo
 %%% @end
@@ -7,6 +7,9 @@
 -module(pusher_listener).
 
 -behaviour(gen_listener).
+
+-export([push/1
+        ]).
 
 -export([start_link/0
         ,handle_push/2
@@ -59,15 +62,35 @@
 %%------------------------------------------------------------------------------
 -spec handle_push(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_push(JObj, _Props) ->
+    kz_util:put_callid(JObj),
     Token = kz_json:get_value(<<"Token-ID">>, JObj),
-    TokenType = kz_json:get_value(<<"Token-Type">>, JObj),
+    TokenApp = kz_json:get_ne_binary_value(<<"Token-App">>, JObj),
+    TokenType = pm_module(kz_json:get_value(<<"Token-Type">>, JObj)),
     Module = kz_term:to_atom(<<"pm_",TokenType/binary>> , 'true'),
-    lager:debug("pushing for token ~s(~s) to module ~s", [Token, TokenType, Module]),
-    JObj1 = kz_json:insert_value([<<"Payload">>, <<"utc_unix_timestamp_ms">>]
-                                ,kz_term:to_binary(os:system_time(millisecond))
-                                ,JObj
-                                ),
-    gen_server:cast(Module, {'push', JObj1}).
+    AppEnabled = app_enabled(TokenApp, TokenType),
+    lager:info("received push ~s / ~s / ~s", [TokenType, TokenApp, Token]),
+    case lists:member(Module, ?MODULES)
+        andalso whereis(Module)
+    of
+        'false' ->
+            lager:error("module ~s not available for token ~s(~s)", [Module, Token, TokenType]);
+        'undefined' ->
+            lager:error("module ~s not available for token ~s(~s)", [Module, Token, TokenType]);
+        _ when not AppEnabled ->
+            lager:debug("app ~s is disabled", [TokenApp]);
+        Pid ->
+            lager:debug("pushing for token ~s(~s) to module ~s", [Token, TokenType, Module]),
+            gen_server:cast(Pid, {'push', add_timestamp_to_payload(JObj)})
+    end.
+
+pm_module(<<"google">>) -> <<"firebase">>;
+pm_module(<<"android">>) -> <<"firebase">>;
+pm_module(Any) -> Any.
+
+add_timestamp_to_payload(JObj) ->
+    kz_json:insert_value([<<"Payload">>, <<"utc_unix_timestamp_ms">>]
+                        ,kz_term:to_binary(os:system_time(millisecond))
+                        ,JObj).
 
 -spec handle_reg_success(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_reg_success(JObj, _Props) ->
@@ -118,7 +141,7 @@ maybe_update_push_token(AccountId, AuthorizingId, UA, JObj, Params) ->
     end.
 
 -spec build_push(kz_json:object(), kz_json:object(), kz_term:proplist(), kz_json:object()) ->
-                        kz_json:object().
+          kz_json:object().
 build_push(UA, JObj, Params, InitialAcc) ->
     kz_json:foldl(
       fun(K, V, Acc) ->
@@ -131,9 +154,9 @@ build_push_fold(K, V, Acc, JObj, Params) ->
         'undefined' ->
             case kz_json:get_value(V, JObj) of
                 'undefined' -> Acc;
-                V1 -> kz_json:set_value(K, V1, Acc)
+                V1 -> kz_json:set_value(K, kz_http_util:urldecode(V1), Acc)
             end;
-        V2 -> kz_json:set_value(K, V2, Acc)
+        V2 -> kz_json:set_value(K, kz_http_util:urldecode(V2), Acc)
     end.
 
 %%------------------------------------------------------------------------------
@@ -142,12 +165,13 @@ build_push_fold(K, V, Acc, JObj, Params) ->
 %%------------------------------------------------------------------------------
 -spec start_link() -> kz_types:startlink_ret().
 start_link() ->
-    gen_listener:start_link(?SERVER, [{'bindings', ?BINDINGS}
-                                     ,{'responders', ?RESPONDERS}
-                                     ,{'queue_name', ?QUEUE_NAME}       % optional to include
-                                     ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
-                                     ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
-                                     ], []).
+    Options = [{'bindings', ?BINDINGS}
+              ,{'responders', ?RESPONDERS}
+              ,{'queue_name', ?QUEUE_NAME}       % optional to include
+              ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
+              ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
+              ],
+    gen_listener:start_link({local, ?SERVER}, ?MODULE, Options, []).
 
 %%%=============================================================================
 %%% gen_server callbacks
@@ -183,7 +207,7 @@ handle_cast({'gen_listener',{'created_queue',_Queue}}, State) ->
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
 handle_cast({'push', JObj}, State) ->
-    lager:debug("HANDLE_PUSH_push ~p", [JObj]),
+    handle_push(JObj, []),
     {'noreply', State};
 handle_cast({'reg',JObj}, State) ->
     lager:debug("handle_cast_reg ~p",[JObj]),
@@ -234,3 +258,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%%=============================================================================
 %%% Internal functions
 %%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Returns true if the specified app is enabled under the specified token
+%% type.
+%% @end
+%%------------------------------------------------------------------------------
+-spec app_enabled(kz_term:api_ne_binary(), kz_term:api_binary()) -> boolean().
+app_enabled(App, TokenType) ->
+    kapps_config:get_boolean(?CONFIG_CAT, [TokenType, <<"enabled">>], 'true', App).
+
+-spec push(kz_json:object()) -> ok.
+push(JObj) ->
+    gen_listener:cast(?MODULE, {'push', JObj}).

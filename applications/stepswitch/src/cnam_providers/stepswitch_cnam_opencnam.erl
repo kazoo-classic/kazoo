@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc CNAM lookup using OpenCNAM
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -128,7 +128,7 @@ get_config_param(AccountId, Param, Default) ->
     end.
 
 -spec basic_auth(nonempty_string(), nonempty_string()) ->
-                        {nonempty_string(), nonempty_string()}.
+          {nonempty_string(), nonempty_string()}.
 basic_auth(Username, Password) ->
     Encoded = base64:encode_to_string(Username ++ [$: | Password]),
     {"Authorization", lists:flatten(["Basic ", Encoded])}.

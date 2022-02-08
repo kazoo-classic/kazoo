@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -9,7 +9,6 @@
         ,validate_auth_token/1, validate_auth_token/2
         ,authorize_auth_token/1
         ,reset_identity_secret/1
-        ,has_identity_secret/1
         ,log_success_auth/4, log_success_auth/5, log_success_auth/6
         ,log_failed_auth/4, log_failed_auth/5, log_failed_auth/6
         ,get_inherited_config/1
@@ -43,7 +42,7 @@
 -define(SHOULD_LOG_SUCCESS, kapps_config:get_is_true(?AUTH_CONFIG_CAT, <<"log_successful_attempts">>, 'true')).
 
 -spec create_auth_token(cb_context:context(), atom()) ->
-                               cb_context:context().
+          cb_context:context().
 create_auth_token(Context, AuthModule) ->
     JObj = cb_context:doc(Context),
     Method = kz_term:to_binary(AuthModule),
@@ -59,7 +58,7 @@ create_auth_token(Context, AuthModule) ->
     end.
 
 -spec create_auth_token(cb_context:context(), kz_term:ne_binary(), kz_json:object()) ->
-                               cb_context:context().
+          cb_context:context().
 create_auth_token(Context, Method, JObj) ->
     Data = cb_context:req_data(Context),
 
@@ -123,9 +122,9 @@ create_auth_token(Context, Method, JObj) ->
     end.
 
 -spec maybe_create_token(cb_context:context(), kz_term:proplist(), kz_json:object(), kz_term:ne_binary(), boolean()) ->
-                                {'ok', kz_term:ne_binary()} |
-                                {'error', any()} |
-                                {'error', any(), any()}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', any()} |
+          {'error', any(), any()}.
 maybe_create_token(_Context, Claims, _AuthConfig, _Method, 'false') ->
     kz_auth:create_token(Claims);
 maybe_create_token(Context, Claims, AuthConfig, Method, 'true') ->
@@ -156,12 +155,12 @@ maybe_create_token(Context, Claims, AuthConfig, Method, 'true') ->
     end.
 
 -spec validate_auth_token(map() | kz_term:ne_binary()) ->
-                                 {ok, kz_json:object()} | {error, any()}.
+          {ok, kz_json:object()} | {error, any()}.
 validate_auth_token(Token) ->
     validate_auth_token(Token, []).
 
 -spec validate_auth_token(map() | kz_term:ne_binary(), kz_term:proplist()) ->
-                                 {ok, kz_json:object()} | {error, any()}.
+          {ok, kz_json:object()} | {error, any()}.
 validate_auth_token(Token, Options) ->
     case kz_auth:validate_token(Token, Options) of
         {'error', 'no_jwt_signed_token'} -> maybe_db_token(Token);
@@ -184,14 +183,6 @@ maybe_db_token(AuthToken) ->
 reset_identity_secret(Context) ->
     Doc = kz_auth_identity:reset_doc_secret(cb_context:doc(Context)),
     cb_context:set_doc(Context, Doc).
-
-%%------------------------------------------------------------------------------
-%% @doc Check if user has a non-empty `pvt_signature_secret'
-%% @end
-%%------------------------------------------------------------------------------
--spec has_identity_secret(cb_context:context()) -> boolean().
-has_identity_secret(Context) ->
-    kz_auth_identity:has_doc_secret(cb_context:doc(Context)).
 
 %%------------------------------------------------------------------------------
 %% @doc Get merge result of account and its parents, reseller and system

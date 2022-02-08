@@ -10,7 +10,6 @@
 
 main([]) ->
     print_help();
-main([_KazooPLT]) -> 'ok';
 main([KazooPLT | CommandLineArgs]) ->
     {'ok', Options, Args} = parse_args(CommandLineArgs),
     handle(KazooPLT, Options, Args).
@@ -38,8 +37,7 @@ print_help() ->
     getopt:usage(option_spec_list(), "ERL_LIBS=deps/:core/:applications/ " ++ Script ++ " .kazoo.plt [args] [file.beam | path/ebin/ ...]"),
     halt(1).
 
-handle(_KazooPLT, _Options, []) ->
-    print_help();
+handle(_KazooPLT, _Options, []) -> 'ok';
 handle(KazooPLT, Options, Args) ->
     ".plt" = filename:extension(KazooPLT),
 
@@ -91,6 +89,12 @@ is_beam(Path) ->
 is_ebin_dir(Path) ->
     "ebin" == filename:basename(Path).
 
+root_dir("/"++Path) ->
+    filename:join(["/" | lists:takewhile(fun is_not_src/1
+                                        ,string:tokens(Path, "/")
+                                        )
+                  ]
+                 );
 root_dir(Path) ->
     filename:join(lists:takewhile(fun is_not_src/1
                                  ,string:tokens(Path, "/")
@@ -227,8 +231,8 @@ scan_and_print(PLT, Bs) ->
 filter({'warn_contract_supertype',  _, _}) -> 'false';
 filter({'warn_undefined_callbacks', _, _}) -> 'false';
 filter({'warn_contract_types',      _, {'overlapping_contract',_}}) -> 'false';
-filter({'warn_umatched_return',     _, {'unmatched_return', ["'ok' | {'error','lager_not_running' | {'sink_not_configured','lager_event'}}"]}}) -> 'false';
-filter({'warn_unmatched_return',    _, {'unmatched_return', ["'false' | 'ok' | {'error','lager_not_running' | {'sink_not_configured','lager_event'}}"]}}) -> 'false';
+filter({'warn_umatched_return',     _, {'unmatched_return', ["'ok' | {'error','lager_not_running' | {'sink_not_configured'," ++ _]}}) -> 'false';
+filter({'warn_unmatched_return',    _, {'unmatched_return', ["'false' | 'ok' | {'error','lager_not_running' | {'sink_not_configured'," ++ _]}}) -> 'false';
 filter({'warn_umatched_return',     _, {'unmatched_return',["'ok' | {'error','invalid_db_name'}"]}}) -> 'false';
 filter({'warn_return_no_exit',      _, {'no_return',['only_normal','kz_log_md_clear',0]}}) -> 'false';
 filter({'warn_failing_call',        _, {'call',['lager','md',"([])" | _]}}) -> 'false';

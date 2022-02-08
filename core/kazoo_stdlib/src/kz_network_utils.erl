@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Various utilities - a veritable cornucopia.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -16,7 +16,7 @@
         ,is_ipv6/1
         ,is_ip/1
         ,is_protocol_family_supported/1
-        ,is_cidr/1
+        ,is_cidr/1, is_cidr/2
         ]).
 -export([to_cidr/1
         ,to_cidr/2
@@ -118,7 +118,11 @@ is_ip(Address) ->
 
 -spec is_cidr(kz_term:text()) -> boolean().
 is_cidr(Address) ->
-    try inet_cidr:parse(Address) of
+    is_cidr(Address, false).
+
+-spec is_cidr(kz_term:text(), boolean()) -> boolean().
+is_cidr(Address, Adjust) ->
+    try inet_cidr:parse(Address, Adjust) of
         {_Start, _End, _Len} -> 'true'
     catch
         'error':{'badmatch', _} -> 'false';
@@ -168,7 +172,7 @@ get_supported_binding_ip(IP) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_supported_binding_ip(kz_term:text() | 'undefined', kz_term:text() | 'undefined') ->
-                                      inet:ip_address().
+          inet:ip_address().
 get_supported_binding_ip('undefined', 'undefined') ->
     get_supported_binding_ip();
 get_supported_binding_ip('undefined', DefaultIP) ->
@@ -208,7 +212,7 @@ detect_ip_family(IP) ->
         case inet:parse_ipv6strict_address(IP) of
             {'ok', IPv6} -> {'inet6', IPv6};
             {'error', 'einval'} ->
-                case inet:parse_ipv4_address(IP) of
+                case inet:parse_ipv4strict_address(IP) of
                     {'ok', IPv4} -> {'inet', IPv4};
                     {'error', 'einval'}=Error -> Error
                 end
@@ -258,8 +262,8 @@ is_protocol_family_supported(Family) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec detect_ip_is_bindable('inet' | 'inet6' | kz_term:text() | {'inet' | 'inet6', inet:ip_address()} | {'error', 'einval'}) ->
-                                   {'ok', 'inet' | 'inet6', inet:ip_address()} |
-                                   {'error', 'inet' | 'inet6'| 'einval', string()}.
+          {'ok', 'inet' | 'inet6', inet:ip_address()} |
+          {'error', 'inet' | 'inet6'| 'einval', string()}.
 detect_ip_is_bindable(IP) when is_binary(IP) ->
     detect_ip_is_bindable(detect_ip_family(IP));
 detect_ip_is_bindable(IP) when is_list(IP) ->
@@ -514,13 +518,13 @@ pretty_print_bytes(Bytes) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec lookup_dns(kz_term:ne_binary(), atom()) ->
-                        {'ok', [inet_res:dns_data()]}.
+          {'ok', [inet_res:dns_data()]}.
 %% See kernel/src/inet_dns.hrl, the S_* macros for values for Type
 lookup_dns(Hostname, Type) ->
     lookup_dns(Hostname, Type, default_options()).
 
 -spec lookup_dns(kz_term:ne_binary(), atom(), options()) ->
-                        {'ok', [inet_res:dns_data()]}.
+          {'ok', [inet_res:dns_data()]}.
 lookup_dns(Hostname, Type, Options) ->
     {'ok', inet_res:lookup(kz_term:to_list(Hostname), 'in', Type, Options)}.
 
@@ -573,7 +577,7 @@ set_option_usevc(Options, Value) ->
     props:set_value('usevc', Value, Options).
 
 -spec maybe_resolve_nameservers([nameserver() | string()], [nameserver()]) ->
-                                       [nameserver()].
+          [nameserver()].
 maybe_resolve_nameservers([], Nameservers) -> Nameservers;
 maybe_resolve_nameservers([{_, _}=Nameserver|Values], Nameservers) ->
     maybe_resolve_nameservers(Values, [Nameserver|Nameservers]);

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @end
@@ -27,14 +27,14 @@ config_doc_id() ->
 %%------------------------------------------------------------------------------
 
 -spec send(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary()) ->
-                  {'ok', kz_term:ne_binary()} |
-                  {'error', 'no_response'}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', 'no_response'}.
 send(CallId, CtrlQ, Code) ->
     send(CallId, CtrlQ, Code, 'undefined').
 
 -spec send(kz_term:ne_binary() | kapps_call:call(), kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary()) ->
-                  {'ok', kz_term:ne_binary()} |
-                  {'error', 'no_response'}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', 'no_response'}.
 send(<<_/binary>> = CallId, CtrlQ, Code, Cause) ->
     send(CallId, CtrlQ, Code, Cause, 'undefined');
 send(Call, Code, Cause, Media) ->
@@ -43,8 +43,8 @@ send(Call, Code, Cause, Media) ->
     send(CallId, CtrlQ, Code, Cause, Media).
 
 -spec send(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()) ->
-                  {'ok', kz_term:ne_binary()} |
-                  {'error', 'no_response'}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', 'no_response'}.
 send(_, _, 'undefined', 'undefined', 'undefined') ->
     {'error', 'no_response'};
 send(CallId, CtrlQ, Code, Cause, Media) ->
@@ -107,20 +107,20 @@ do_send(CallId, CtrlQ, Commands) ->
               ,{<<"Msg-ID">>, kz_binary:rand_hex(6)}
                | kz_api:default_headers(<<"call">>, <<"command">>, <<"call_response">>, <<"0.1.0">>)
               ],
-    kz_amqp_worker:cast(Command
-                       ,fun(C) ->
-                                {'ok', Payload} = kapi_dialplan:queue(C),
-                                kapi_dialplan:publish_action(CtrlQ, Payload)
-                        end
-                       ).
+    kz_amqp_worker:cast(Command, fun(C) -> publish_queue_command(CtrlQ, C) end).
+
+-spec publish_queue_command(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
+publish_queue_command(CtrlQ, Command) ->
+    {'ok', Payload} = kapi_dialplan:queue(Command),
+    kapi_dialplan:publish_action(CtrlQ, Payload).
 
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
 -spec send_default(kapps_call:call(), kz_term:api_binary()) ->
-                          {'ok', kz_term:ne_binary()} |
-                          {'error', 'no_response'}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', 'no_response'}.
 send_default(_Call, 'undefined') ->
     {'error', 'no_response'};
 send_default(Call, Cause) ->
@@ -134,8 +134,8 @@ send_default(Call, Cause) ->
     end.
 
 -spec send_default_response(kapps_call:call(), kz_json:object()) ->
-                                   {'ok', kz_term:ne_binary()} |
-                                   {'error', 'no_response'}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', 'no_response'}.
 send_default_response(Call, Response) ->
     Media = kz_json:get_ne_binary_value(<<"Media">>, Response),
 

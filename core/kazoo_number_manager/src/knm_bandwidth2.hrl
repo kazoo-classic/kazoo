@@ -32,7 +32,7 @@
        ).
 -endif.
 
--define(BW2_BASE_URL, "https://api.inetwork.com/v1.0").
+-define(BW2_BASE_URL, "https://dashboard.bandwidth.com/api").
 
 -ifdef(TEST).
 -define(ACCOUNT_ID, "eunit_testing_account").

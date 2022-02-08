@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Handle authn_req messages
 %%% @author James Aimonetti
 %%% @author Luis Azedo
@@ -110,11 +110,10 @@ create_ccvs(#auth_user{doc=JObj}=AuthUser) ->
 -spec maybe_get_presence_id(auth_user()) -> kz_term:api_binary().
 maybe_get_presence_id(#auth_user{account_db=AccountDb
                                 ,authorizing_id=DeviceId
-                                ,owner_id=OwnerId
                                 ,account_realm=AccountRealm
                                 }
                      ) ->
-    case get_presence_id(AccountDb, DeviceId, OwnerId) of
+    case get_presence_id(AccountDb, DeviceId) of
         'undefined' -> 'undefined';
         PresenceId ->
             case binary:match(PresenceId, <<"@">>) of
@@ -123,31 +122,18 @@ maybe_get_presence_id(#auth_user{account_db=AccountDb
             end
     end.
 
--spec get_presence_id(kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()) -> kz_term:api_binary().
-get_presence_id('undefined', _, _) -> 'undefined';
-get_presence_id(_, 'undefined', 'undefined') -> 'undefined';
-get_presence_id(AccountDb, DeviceId, 'undefined') ->
-    get_device_presence_id(AccountDb, DeviceId);
-get_presence_id(AccountDb, DeviceId, OwnerId) ->
-    maybe_get_owner_presence_id(AccountDb, DeviceId, OwnerId).
+-spec get_presence_id(kz_term:api_ne_binary(), kz_term:api_ne_binary()) -> kz_term:api_ne_binary().
+get_presence_id('undefined', _) -> 'undefined';
+get_presence_id(_, 'undefined') -> 'undefined';
+get_presence_id(AccountDb, DeviceId) ->
+    get_device_presence_id(AccountDb, DeviceId).
 
--spec maybe_get_owner_presence_id(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_binary().
-maybe_get_owner_presence_id(AccountDb, DeviceId, OwnerId) ->
-    case kz_datamgr:open_cache_doc(AccountDb, OwnerId) of
-        {'error', _} -> 'undefined';
-        {'ok', UserJObj} ->
-            case kzd_user:presence_id(UserJObj) of
-                'undefined' -> get_device_presence_id(AccountDb, DeviceId);
-                PresenceId -> PresenceId
-            end
-    end.
-
--spec get_device_presence_id(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_binary().
+-spec get_device_presence_id(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_ne_binary().
 get_device_presence_id(AccountDb, DeviceId) ->
     case kz_datamgr:open_cache_doc(AccountDb, DeviceId) of
         {'error', _} -> 'undefined';
-        {'ok', JObj} ->
-            case kzd_devices:presence_id(JObj) of
+        {'ok', DeviceJObj} ->
+            case kzd_devices:calculate_presence_id(DeviceJObj) of
                 'undefined' -> 'undefined';
                 PresenceId -> PresenceId
             end
@@ -194,8 +180,8 @@ get_tel_uri(Number) -> <<"<tel:", Number/binary,">">>.
 %% @end
 %%------------------------------------------------------------------------------
 -spec lookup_auth_user(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
-                              {'ok', auth_user()} |
-                              {'error', any()}.
+          {'ok', auth_user()} |
+          {'error', any()}.
 lookup_auth_user(Username, Realm, Req) ->
     case get_auth_user(Username, Realm) of
         {'error', _}=E -> E;
@@ -203,8 +189,8 @@ lookup_auth_user(Username, Realm, Req) ->
     end.
 
 -spec get_auth_user(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                           {'ok', kz_json:object()} |
-                           {'error', 'not_found'}.
+          {'ok', kz_json:object()} |
+          {'error', 'not_found'}.
 get_auth_user(Username, Realm) ->
     case kapps_util:get_account_by_realm(Realm) of
         {'error', E} ->
@@ -221,8 +207,8 @@ get_auth_user(Username, Realm) ->
     end.
 
 -spec get_auth_user_in_agg(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                  {'ok', kz_json:object()} |
-                                  {'error', 'not_found'}.
+          {'ok', kz_json:object()} |
+          {'error', 'not_found'}.
 get_auth_user_in_agg(Username, Realm) ->
     ViewOptions = [{'key', [Realm, Username]}
                   ,'include_docs'
@@ -245,8 +231,8 @@ get_auth_user_in_agg(Username, Realm) ->
     end.
 
 -spec get_auth_user_in_account(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                      {'ok', kz_json:object()} |
-                                      {'error', 'not_found'}.
+          {'ok', kz_json:object()} |
+          {'error', 'not_found'}.
 get_auth_user_in_account(Username, Realm, AccountDB) ->
     ViewOptions = [{'key', Username}
                   ,'include_docs'
@@ -268,8 +254,8 @@ get_auth_user_in_account(Username, Realm, AccountDB) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec check_auth_user(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
-                             {'ok', auth_user()} |
-                             {'error', 'disabled'}.
+          {'ok', auth_user()} |
+          {'error', 'disabled'}.
 check_auth_user(JObj, Username, Realm, Req) ->
     Things = [{<<"account">>, get_account_id(JObj)}
              ,{kz_json:get_value([<<"doc">>, <<"pvt_type">>], JObj), kz_doc:id(JObj)}
@@ -283,8 +269,8 @@ check_auth_user(JObj, Username, Realm, Req) ->
     end.
 
 -spec jobj_to_auth_user(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
-                               {'ok', auth_user()} |
-                               {'error', any()}.
+          {'ok', auth_user()} |
+          {'error', any()}.
 jobj_to_auth_user(JObj, Username, Realm, Req) ->
     AuthValue = get_auth_value(JObj),
     AuthDoc = kz_json:get_value(<<"doc">>, JObj),
@@ -344,8 +330,8 @@ get_auth_method(JObj) ->
                              ).
 
 -spec maybe_auth_method(auth_user(), kz_json:object(), kz_json:object(), kz_term:ne_binary()) ->
-                               {'ok', auth_user()} |
-                               {'error', any()}.
+          {'ok', auth_user()} |
+          {'error', any()}.
 maybe_auth_method(AuthUser, JObj, Req, ?GSM_ANY_METHOD)->
     GsmDoc = kz_json:get_value(<<"gsm">>, JObj),
     CachedNonce = kz_json:get_value(<<"nonce">>, GsmDoc, kz_binary:rand_hex(16)),

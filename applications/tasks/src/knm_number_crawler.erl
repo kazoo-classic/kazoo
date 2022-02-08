@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc
 %%% @author Peter Defebvre
 %%% @end
@@ -10,6 +10,7 @@
 -export([start_link/0
         ,stop/0
         ,crawl_numbers/0
+        ,crawl_number_db/1
         ]).
 
 -export([init/1
@@ -54,7 +55,7 @@
 %%------------------------------------------------------------------------------
 -spec start_link() -> kz_types:startlink_ret().
 start_link() ->
-    gen_server:start_link(?SERVER, [], []).
+    gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
 -spec stop() -> 'ok'.
 stop() ->
@@ -62,9 +63,14 @@ stop() ->
 
 -spec crawl_numbers() -> 'ok'.
 crawl_numbers() ->
-    kz_util:put_callid(?SERVER),
+    kz_util:put_callid(?MODULE),
     lager:debug("beginning a number crawl"),
-    lists:foreach(fun crawl_number_db/1, knm_util:get_all_number_dbs()),
+    lists:foreach(fun(Num) ->
+                          crawl_number_db(Num),
+                          timer:sleep(10 * ?MILLISECONDS_IN_SECOND)
+                  end
+                 ,knm_util:get_all_number_dbs()
+                 ),
     lager:debug("finished the number crawl"),
     lager:info("number crawler completed a full crawl").
 
@@ -78,8 +84,8 @@ crawl_numbers() ->
 %%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
-    kz_util:put_callid(?SERVER),
-    lager:debug("started ~s", [?SERVER]),
+    kz_util:put_callid(?MODULE),
+    lager:debug("started ~s", [?MODULE]),
     {'ok', #state{cleanup_ref = cleanup_timer()}}.
 
 %%------------------------------------------------------------------------------
@@ -123,7 +129,7 @@ handle_info(_Msg, State) ->
 %%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
-    lager:debug("~s terminating: ~p", [?SERVER, _Reason]).
+    lager:debug("~s terminating: ~p", [?MODULE, _Reason]).
 
 %%------------------------------------------------------------------------------
 %% @doc Convert process state when code is changed.
@@ -145,54 +151,60 @@ code_change(_OldVsn, State, _Extra) ->
 cleanup_timer() ->
     erlang:start_timer(?TIME_BETWEEN_CRAWLS, self(), 'ok').
 
--spec crawl_number_db(kz_term:ne_binary()) -> ok.
+-spec crawl_number_db(kz_term:ne_binary()) -> 'ok'.
 crawl_number_db(Db) ->
-    case kz_datamgr:all_docs(Db, [include_docs]) of
-        {error, _E} ->
+    case kz_datamgr:all_docs(Db, ['include_docs']) of
+        {'error', _E} ->
             lager:debug("failed to crawl number db ~s: ~p", [Db, _E]);
-        {ok, JObjs} ->
+        {'ok', JObjs} ->
             lager:debug("starting to crawl '~s'", [Db]),
             _ = knm_numbers:pipe(knm_numbers:from_jobjs(JObjs)
                                 ,[fun maybe_edit/1
                                  ,fun knm_phone_number:save/1
                                  ]),
-            lager:debug("finished crawling '~s'", [Db]),
-            timer:sleep(10 * ?MILLISECONDS_IN_SECOND)
+            lager:debug("finished crawling '~s'", [Db])
     end.
 
+-spec maybe_edit(knm_numbers:collection()) -> knm_numbers:collection().
 maybe_edit(T0=#{todo := PNs}) ->
-    lists:foldl(fun maybe_edit_fold/2, T0, PNs).
+    {ToRemove, ToSave} = lists:foldl(fun maybe_edit_fold/2, {[], []}, PNs),
+    _ = knm_phone_number:delete(knm_numbers:set_todo(T0, ToRemove)),
+    knm_numbers:ok(ToSave, T0).
 
-maybe_edit_fold(PN, T) ->
+-spec maybe_edit_fold(knm_phone_number:phone_number(), {knm_phone_number:phone_numbers(), knm_phone_number:phone_numbers()}) ->
+          {knm_phone_number:phone_numbers(), knm_phone_number:phone_numbers()}.
+maybe_edit_fold(PN, {ToRemove, ToSave}=To) ->
     case knm_phone_number:state(PN) of
-        ?NUMBER_STATE_DELETED -> remove(PN, T);
-        ?NUMBER_STATE_DISCOVERY -> maybe_remove(PN, T, ?DISCOVERY_EXPIRY);
-        ?NUMBER_STATE_AGING -> maybe_transition_aging(PN, T, ?AGING_EXPIRY);
-        _ -> T
+        ?NUMBER_STATE_DELETED ->
+            {[PN|ToRemove], ToSave};
+        ?NUMBER_STATE_DISCOVERY ->
+            {maybe_remove(PN, ToRemove, ?DISCOVERY_EXPIRY), ToSave};
+        ?NUMBER_STATE_AGING ->
+            {ToRemove, maybe_transition_aging(PN, ToSave, ?AGING_EXPIRY)};
+        _ -> To
     end.
 
-remove(PN, T) ->
-    lager:debug("purging '~s'", [knm_phone_number:number(PN)]),
-    NewPN = knm_phone_number:delete(PN),
-    knm_numbers:ok(NewPN, T).
-
-maybe_remove(PN, T, Expiry) ->
+-spec maybe_remove(knm_phone_number:phone_number(), knm_phone_number:phone_numbers(), integer()) ->
+          knm_phone_number:phone_numbers().
+maybe_remove(PN, ToRemove, Expiry) ->
     case is_old_enough(PN, Expiry) of
-        false -> T;
-        true -> remove(PN, T)
+        'false' -> ToRemove;
+        'true' -> [PN|ToRemove]
     end.
 
-maybe_transition_aging(PN, T, Expiry) ->
+-spec maybe_transition_aging(knm_phone_number:phone_number(), knm_phone_number:phone_numbers(), integer()) ->
+          knm_phone_number:phone_numbers().
+maybe_transition_aging(PN, ToSave, Expiry) ->
     case is_old_enough(PN, Expiry) of
-        false -> T;
-        true ->
+        'false' -> ToSave;
+        'true' ->
             lager:debug("transitioning number '~s' from ~s to ~s"
                        ,[knm_phone_number:number(PN)
                         ,?NUMBER_STATE_AGING
                         ,?NUMBER_STATE_AVAILABLE
                         ]),
             NewPN = knm_phone_number:set_state(PN, ?NUMBER_STATE_AVAILABLE),
-            knm_numbers:ok(NewPN, T)
+            [NewPN|ToSave]
     end.
 
 -spec is_old_enough(knm_phone_number:knm_phone_number(), pos_integer()) -> boolean().

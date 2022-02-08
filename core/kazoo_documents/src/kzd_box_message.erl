@@ -1,12 +1,12 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Mailbox message document manipulation
 %%% @author Hesaam Farhang
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kzd_box_message).
 
--export([new/2, build_metadata_object/6
+-export([new/2, build_metadata_object/6, build_metadata_object/7
         ,count_folder/2
         ,create_message_name/3
         ,type/0
@@ -21,6 +21,7 @@
 
         ,change_message_name/2, change_to_sip_field/3
 
+        ,length/1
         ,media_id/1, set_media_id/2, update_media_id/2
         ,metadata/1, metadata/2, set_metadata/2
         ,source_id/1, set_source_id/2
@@ -50,6 +51,7 @@
 -define(KEY_VOICEMAIL, <<"voicemail">>).
 
 -define(KEY_METADATA, <<"metadata">>).
+-define(KEY_TRANSCRIPTION, <<"transcription">>).
 -define(KEY_META_CALL_ID, <<"call_id">>).
 -define(KEY_META_CID_NAME, <<"caller_id_name">>).
 -define(KEY_META_CID_NUMBER, <<"caller_id_number">>).
@@ -159,9 +161,10 @@ create_message_name(BoxNum, Timezone, UtcSeconds) ->
 -spec message_name(kz_term:ne_binary(), kz_time:datetime(), string()) -> kz_term:ne_binary().
 message_name(BoxNum, {{Y,M,D},{H,I,S}}, TZ) ->
     list_to_binary(["mailbox ", BoxNum, " message "
-                   ,kz_term:to_binary(M), "-"
-                   ,kz_term:to_binary(D), "-"
-                   ,kz_term:to_binary(Y), " "
+                   ,kz_term:to_binary(Y), "-"
+                   ,kz_date:pad_month(M), "-"
+                   ,kz_date:pad_day(D), " "
+
                    ,kz_term:to_binary(H), ":"
                    ,kz_term:to_binary(I), ":"
                    ,kz_term:to_binary(S), TZ
@@ -172,8 +175,13 @@ message_name(BoxNum, {{Y,M,D},{H,I,S}}, TZ) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec build_metadata_object(pos_integer(), kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_time:gregorian_seconds()) ->
-                                   doc().
+          doc().
 build_metadata_object(Length, Call, MediaId, CIDNumber, CIDName, Timestamp) ->
+    build_metadata_object(Length, Call, MediaId, CIDNumber, CIDName, Timestamp, ?VM_FOLDER_NEW).
+
+-spec build_metadata_object(pos_integer(), kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_time:gregorian_seconds(), kz_term:ne_binary()) ->
+          doc().
+build_metadata_object(Length, Call, MediaId, CIDNumber, CIDName, Timestamp, Folder) ->
     kz_json:from_list(
       [{?KEY_MEDIA_ID, MediaId}
       ,{?KEY_META_CALL_ID, kapps_call:call_id(Call)}
@@ -192,7 +200,7 @@ build_metadata_object(Length, Call, MediaId, CIDNumber, CIDName, Timestamp) ->
       ,{?KEY_META_TO_USER, kapps_call:to_user(Call)}
       ,{?KEY_META_TO_REALM, kapps_call:to_realm(Call)}
 
-      ,{?VM_KEY_FOLDER, ?VM_FOLDER_NEW}
+      ,{?VM_KEY_FOLDER, Folder}
       ]).
 
 -spec get_msg_id(kz_json:object()) -> kz_term:api_ne_binary().
@@ -263,6 +271,10 @@ message_history(JObj) ->
 add_message_history(History, JObj) ->
     kz_json:set_value(?KEY_HISTORY, message_history(JObj) ++ [History], JObj).
 
+-spec length(doc()) -> integer().
+length(JObj) ->
+    kz_json:get_value([?KEY_METADATA, ?KEY_META_LENGTH], JObj).
+
 -spec message_name(doc()) -> kz_term:api_binary().
 message_name(JObj) ->
     message_name(JObj, 'undefined').
@@ -288,13 +300,22 @@ update_media_id(MediaId, JObj) ->
     Metadata = set_media_id(MediaId, metadata(JObj)),
     set_metadata(Metadata, JObj).
 
--spec metadata(doc()) -> doc() | 'undefined'.
+-spec metadata(doc()) -> kz_json:api_object().
 metadata(JObj) ->
     metadata(JObj, 'undefined').
 
--spec metadata(doc(), Default) -> doc() | Default.
+-spec metadata(doc(), Default) -> kz_json:object() | Default.
 metadata(JObj, Default) ->
-    kz_json:get_value(?KEY_METADATA, JObj, Default).
+    Metadata = kz_json:get_json_value(?KEY_METADATA, JObj, Default),
+    maybe_add_transcription(Metadata, JObj).
+
+-spec maybe_add_transcription(kz_term:api_object(), doc()) -> kz_term:api_object().
+maybe_add_transcription('undefined', _JObj) -> 'undefined';
+maybe_add_transcription(Metadata, JObj) ->
+    case kz_json:get_json_value(?KEY_TRANSCRIPTION, JObj) of
+        'undefined' -> Metadata;
+        Transcription -> kz_json:insert_value(?KEY_TRANSCRIPTION, Transcription, Metadata)
+    end.
 
 -spec set_metadata(kz_json:object(), doc()) -> doc().
 set_metadata(Metadata, JObj) ->

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
@@ -256,48 +256,61 @@ get_account_external_cid(Call) ->
 -spec maybe_get_account_cid(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> cid().
 maybe_get_account_cid(Number, Name, Call) ->
     case kzd_accounts:fetch(kapps_call:account_id(Call)) of
-        {'error', _} -> maybe_get_assigned_number(Number, Name, Call);
-        {'ok', JObj} -> maybe_get_account_external_number(Number, Name, JObj, Call)
+        {'error', _E} ->
+            ?LOG_INFO("failed to open ~s: ~p", [kapps_call:account_id(Call), _E]),
+            maybe_get_assigned_number(Number, Name, Call);
+        {'ok', AccountDoc} -> maybe_get_account_external_cid(Number, Name, Call, AccountDoc)
     end.
 
--spec maybe_get_account_external_number(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kapps_call:call()) -> cid().
-maybe_get_account_external_number(Number, Name, Account, Call) ->
-    External = kz_json:get_ne_value([<<"caller_id">>, <<"external">>, <<"number">>], Account),
-    case is_valid_caller_id(External, Call) of
+-spec maybe_get_account_external_cid(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call(), kzd_accounts:doc()) -> cid().
+maybe_get_account_external_cid(Number, Name, Call, AccountDoc) ->
+    ExternalNumber = kz_json:get_ne_value([<<"caller_id">>, <<"external">>, <<"number">>], AccountDoc),
+    ExternalName = kz_json:get_ne_value([<<"caller_id">>, <<"external">>, <<"name">>], AccountDoc, Name),
+
+    case is_valid_caller_id(ExternalNumber, Call) of
         'true' ->
-            lager:info("determined valid account external caller id is <~s> ~s", [Name, External]),
-            {External, Name};
+            ?LOG_INFO("determined valid account external caller id is <~s> ~s", [ExternalName, ExternalNumber]),
+            {ExternalNumber, ExternalName};
         'false' ->
-            maybe_get_account_default_number(Number, Name, Account, Call)
+            ?LOG_DEBUG("external number ~s not valid, trying default", [ExternalNumber]),
+            maybe_get_account_default_number(Number, ExternalName, Call, AccountDoc)
     end.
 
--spec maybe_get_account_default_number(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kapps_call:call()) -> cid().
-maybe_get_account_default_number(Number, Name, Account, Call) ->
-    Default = kz_json:get_ne_value([<<"caller_id">>, <<"default">>, <<"number">>], Account),
-    case is_valid_caller_id(Default, Call) of
+-spec maybe_get_account_default_number(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call(), kzd_accounts:doc()) -> cid().
+maybe_get_account_default_number(Number, Name, Call, AccountDoc) ->
+    DefaultNumber = kz_json:get_ne_value([<<"caller_id">>, <<"default">>, <<"number">>], AccountDoc),
+    DefaultName = kz_json:get_ne_value([<<"caller_id">>, <<"default">>, <<"name">>], AccountDoc, Name),
+
+    case is_valid_caller_id(DefaultNumber, Call) of
         'true' ->
-            lager:info("determined valid account default caller id is <~s> ~s", [Name, Default]),
-            {Default, Name};
+            ?LOG_INFO("determined valid account default caller id is <~s> ~s", [DefaultName, DefaultNumber]),
+            {DefaultNumber, DefaultName};
         'false' ->
+            ?LOG_DEBUG("default number ~s not valid, trying assigned numbers", [DefaultNumber]),
             maybe_get_assigned_number(Number, Name, Call)
     end.
 
 -spec maybe_get_assigned_number(kz_term:api_ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()|kapps_call:call()) -> cid().
 maybe_get_assigned_number(CandidateNumber, Name, ?MATCH_ACCOUNT_ENCODED(_)=AccountDb) ->
-    AccountId = kz_util:format_account_id(AccountDb),
     case knm_numbers:account_listing(AccountDb) of
         [_|_] = NumbersList ->
             Numbers = [Num
-                       || {Num,JObj} <- NumbersList,
-                          kz_json:get_value(<<"state">>, JObj) =:= ?NUMBER_STATE_IN_SERVICE
+                       || {Num, JObj} <- NumbersList,
+                          kz_json:get_ne_binary_value(<<"state">>, JObj) =:= ?NUMBER_STATE_IN_SERVICE
                       ],
             case lists:member(CandidateNumber, Numbers) of
-                'true' -> {CandidateNumber, Name};
-                'false' -> maybe_get_assigned_numbers(AccountId, Numbers, Name)
+                'true' ->
+                    ?LOG_DEBUG("using assigned number <~s> ~s", [Name, CandidateNumber]),
+                    {CandidateNumber, Name};
+                'false' ->
+                    AccountId = kz_util:format_account_id(AccountDb),
+                    maybe_get_assigned_numbers(AccountId, Numbers, Name)
             end;
-        _ ->
+        _Else ->
+            ?LOG_DEBUG("failed to list account numbers: ~p", [_Else]),
+            AccountId = kz_util:format_account_id(AccountDb),
             Number = default_cid_number(AccountId),
-            lager:warning("no numbers available, proceed with <~s> ~s", [Name, Number]),
+            ?LOG_WARNING("no numbers available, proceed with <~s> ~s", [Name, Number]),
             {Number, Name}
     end;
 maybe_get_assigned_number(CandidateNumber, Name, Call) ->
@@ -307,12 +320,12 @@ maybe_get_assigned_number(CandidateNumber, Name, Call) ->
 -spec maybe_get_assigned_numbers(kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary()) -> cid().
 maybe_get_assigned_numbers(AccountId, [], Name) ->
     Number = default_cid_number(AccountId),
-    lager:info("failed to find any in-service numbers, using default <~s> ~s", [Name, Number]),
+    ?LOG_INFO("failed to find any in-service numbers, using default <~s> ~s", [Name, Number]),
     {Number, Name};
 maybe_get_assigned_numbers(_AccountId, [Number|_], Name) ->
     %% This could optionally cycle all found numbers and ensure they valid
     %% but that could be a lot of wasted db lookups...
-    lager:info("using first assigned number caller id <~s> ~s", [Name, Number]),
+    ?LOG_INFO("using first assigned number caller id <~s> ~s", [Name, Number]),
     {Number, Name}.
 
 -spec is_valid_caller_id(kz_term:api_binary(), kapps_call:call()) -> boolean().
@@ -321,7 +334,9 @@ is_valid_caller_id(Number, Call) ->
     AccountId = kapps_call:account_id(Call),
     case knm_number:lookup_account(Number) of
         {'ok', AccountId, _} -> 'true';
-        _Else -> 'false'
+        _Else ->
+            ?LOG_DEBUG("failed to find ~s in account ~s: ~p", [Number, AccountId, _Else]),
+            'false'
     end.
 
 -spec maybe_get_presence_number(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
@@ -474,25 +489,8 @@ presence_id(Endpoint, Call) ->
     presence_id(Endpoint, Call, Username).
 
 -spec presence_id(kz_json:object(), kapps_call:call(), Default) -> kz_term:ne_binary() | Default.
-presence_id(Endpoint, Call, Default) ->
-    PresenceId = kzd_devices:presence_id(Endpoint, Default),
-    case kz_term:is_empty(PresenceId) of
-        'true' -> maybe_fix_presence_id_realm(Default, Endpoint, Call);
-        'false' -> maybe_fix_presence_id_realm(PresenceId, Endpoint, Call)
-    end.
-
--spec maybe_fix_presence_id_realm(kz_term:ne_binary(), kz_json:object(), kapps_call:call()) -> kz_term:api_ne_binary().
-maybe_fix_presence_id_realm('undefined', _Endpoint, _Call) -> 'undefined';
-maybe_fix_presence_id_realm(PresenceId, Endpoint, Call) ->
-    case binary:match(PresenceId, <<"@">>) of
-        'nomatch' ->
-            Realm = kz_endpoint:get_sip_realm(Endpoint
-                                             ,kapps_call:account_id(Call)
-                                             ,kapps_call:request_realm(Call)
-                                             ),
-            <<PresenceId/binary, $@, Realm/binary>>;
-        _Else -> PresenceId
-    end.
+presence_id(Endpoint, _Call, Default) ->
+    kzd_devices:calculate_presence_id(Endpoint, Default).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -578,7 +576,7 @@ get_flags(ApplicationName, Call) ->
     sets:to_list(sets:from_list(Flags)).
 
 -spec maybe_get_endpoint_static_flags(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binaries()) ->
-                                             kz_term:ne_binaries().
+          kz_term:ne_binaries().
 maybe_get_endpoint_static_flags(_, Call, Flags) ->
     case kz_endpoint:get(Call) of
         {'error', _R} -> Flags;
@@ -587,12 +585,12 @@ maybe_get_endpoint_static_flags(_, Call, Flags) ->
     end.
 
 -spec get_endpoint_static_flags(kz_term:ne_binaries(), kz_json:object()) ->
-                                       kz_term:ne_binaries().
+          kz_term:ne_binaries().
 get_endpoint_static_flags(Flags, Endpoint) ->
     kzd_devices:outbound_static_flags(Endpoint) ++ Flags.
 
 -spec get_account_static_flags(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binaries()) ->
-                                      kz_term:ne_binaries().
+          kz_term:ne_binaries().
 get_account_static_flags(_, Call, Flags) ->
     AccountId = kapps_call:account_id(Call),
     case kzd_accounts:fetch(AccountId) of
@@ -603,7 +601,7 @@ get_account_static_flags(_, Call, Flags) ->
     end.
 
 -spec get_config_static_flags(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binaries()) ->
-                                     kz_term:ne_binaries().
+          kz_term:ne_binaries().
 get_config_static_flags(ApplicationName, Call, Flags) ->
     kapps_account_config:get_ne_binaries(kapps_call:account_id(Call)
                                         ,ApplicationName
@@ -613,7 +611,7 @@ get_config_static_flags(ApplicationName, Call, Flags) ->
         ++ Flags.
 
 -spec maybe_get_endpoint_dynamic_flags(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binaries()) ->
-                                              kz_term:ne_binaries().
+          kz_term:ne_binaries().
 maybe_get_endpoint_dynamic_flags(_, Call, Flags) ->
     case kz_endpoint:get(Call) of
         {'error', _} -> Flags;
@@ -621,7 +619,7 @@ maybe_get_endpoint_dynamic_flags(_, Call, Flags) ->
     end.
 
 -spec get_endpoint_dynamic_flags(kapps_call:call(), kz_term:ne_binaries(), kz_json:object()) ->
-                                        kz_term:ne_binaries().
+          kz_term:ne_binaries().
 get_endpoint_dynamic_flags(Call, Flags, Endpoint) ->
     case kzd_devices:outbound_dynamic_flags(Endpoint) of
         [] -> Flags;
@@ -629,7 +627,7 @@ get_endpoint_dynamic_flags(Call, Flags, Endpoint) ->
     end.
 
 -spec get_account_dynamic_flags(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binaries()) ->
-                                       kz_term:ne_binaries().
+          kz_term:ne_binaries().
 get_account_dynamic_flags(_, Call, Flags) ->
     AccountId = kapps_call:account_id(Call),
     case kzd_accounts:fetch(AccountId) of
@@ -641,7 +639,7 @@ get_account_dynamic_flags(_, Call, Flags) ->
     end.
 
 -spec get_config_dynamic_flags(kz_types:ne_binary(), kapps_call:call(), kz_term:ne_binaries()) ->
-                                      kz_term:ne_binaries().
+          kz_term:ne_binaries().
 get_config_dynamic_flags(ApplicationName, Call, Flags) ->
     DynamicFlags = kapps_account_config:get_ne_binaries(kapps_call:account_id(Call)
                                                        ,ApplicationName
@@ -659,7 +657,7 @@ process_dynamic_flags(DynamicFlags, Call) ->
     process_dynamic_flags(DynamicFlags, [], Call).
 
 -spec process_dynamic_flags(kz_term:ne_binaries(), kz_term:ne_binaries(), kapps_call:call()) ->
-                                   kz_term:ne_binaries().
+          kz_term:ne_binaries().
 process_dynamic_flags([], Flags, _) -> Flags;
 process_dynamic_flags([<<"zone">>|DynamicFlags], Flags, Call) ->
     Zone = kz_term:to_binary(kz_nodes:local_zone()),

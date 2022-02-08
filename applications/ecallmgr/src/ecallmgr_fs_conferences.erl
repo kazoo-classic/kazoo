@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc Track FreeSWITCH conference information and provide accessors
 %%% @author James Aimonetti
 %%% @end
@@ -127,8 +127,8 @@ destroy(UUID) ->
     gen_server:call(?SERVER, {'conference_destroy', UUID}).
 
 -spec node(kz_term:ne_binary()) ->
-                  {'ok', atom()} |
-                  {'error', 'not_found'}.
+          {'ok', atom()} |
+          {'error', 'not_found'}.
 node(Name) ->
     case ets:match_object(?CONFERENCES_TBL, #conference{name=Name, _ = '_'}) of
         %% TODO: this ignores conferences on multiple nodes until big-conferences
@@ -223,6 +223,7 @@ handle_search_conference(JObj, _Props, Name) ->
                    ,{<<"Switch-External-IP">>, ExternalIP}
                    ,{<<"Participant-Count">>, length(Participants)}
                    ,{<<"Participants">>, participants_to_json(Participants)}
+                   ,{<<"Zone">>, kz_config:zone('binary')}
                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
             kapi_conference:publish_search_resp(kz_api:server_id(JObj), Resp);
@@ -386,6 +387,8 @@ handle_cast({'gen_listener',{'created_queue',_QueueName}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
+handle_cast({'gen_listener', {'federators_consuming', _IsConsuming}}, State) ->
+    {'noreply', State};
 handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
     {'noreply', State}.
@@ -442,7 +445,7 @@ conference_from_props(Props, Node) ->
 
 -spec conference_from_props(kz_term:proplist(), atom(), conference()) -> conference().
 conference_from_props(Props, Node, Conference) ->
-    CtrlNode = kz_term:to_atom(kzd_freeswitch:ccv(Props, <<"Ecallmgr-Node">>), 'true'),
+    CtrlNode = conference_control_node(Node, Props),
     AccountId = find_account_id(Props),
 
     Conference#conference{node = Node
@@ -458,6 +461,19 @@ conference_from_props(Props, Node, Conference) ->
                          ,origin_node = CtrlNode
                          ,control_node = CtrlNode
                          }.
+
+conference_control_node(Node, Props) ->
+    CtrlNode = kz_term:to_atom(kzd_freeswitch:ccv(Props, <<"Ecallmgr-Node">>), 'true'),
+    conference_control_node(Node, Props, CtrlNode).
+
+conference_control_node(Node, Props, undefined) ->
+    UUID = kzd_freeswitch:call_id(Props),
+    CtrlNode = kz_nodes:whapp_oldest_node(ecallmgr),
+    ToSet = [{<<"Ecallmgr-Node">>, kz_term:to_binary(CtrlNode)}],
+    _ = ecallmgr_fs_command:bg_set(Node, UUID, ToSet),
+    CtrlNode;
+conference_control_node(_Node, _Props, Value) ->
+    Value.
 
 -spec find_account_id(kzd_freeswitch:doc()) -> kz_term:api_ne_binary().
 find_account_id(Props) ->
@@ -622,7 +638,7 @@ xml_to_conference(#xmlElement{name='conference'
                                               }).
 
 -spec xml_attrs_to_conference(kz_types:xml_attribs(), conference()) ->
-                                     conference().
+          conference().
 xml_attrs_to_conference([], Conference) -> Conference;
 xml_attrs_to_conference([#xmlAttribute{name=Name, value=Value}
                          |Attrs
@@ -631,7 +647,7 @@ xml_attrs_to_conference([#xmlAttribute{name=Name, value=Value}
     xml_attrs_to_conference(Attrs, C).
 
 -spec xml_attr_to_conference(conference(), kz_types:xml_attrib_name(), kz_types:xml_attrib_value()) ->
-                                    conference().
+          conference().
 xml_attr_to_conference(Conference, 'name', Value) ->
     Conference#conference{name=kz_term:to_binary(Value)};
 xml_attr_to_conference(Conference, 'member-count', Value) ->

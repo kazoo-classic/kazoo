@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Handler for route requests, responds if Callflows match.
 %%% @author Karl Anderson
 %%% @end
@@ -59,6 +59,17 @@ handle_req(RouteReq, Props) ->
                            ,boolean()
                            ) -> 'ok'.
 maybe_prepend_preflow(RouteReq, Props, Call, Callflow, NoMatch) ->
+    CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, RouteReq),
+    TransferVars = [<<"Referred-By">>, <<"Redirected-By">>],
+    IsTransfer = kz_json:get_first_defined(TransferVars, CCVs) =/= 'undefined',
+
+    maybe_prepend_preflow(RouteReq, Props, Call, Callflow, NoMatch, IsTransfer).
+
+
+maybe_prepend_preflow(RouteReq, Props, Call, Callflow, NoMatch, 'true') ->
+    lager:info("request is the result of a transfer, skipping preflow"),
+    maybe_reply_to_req(RouteReq, Props, Call, Callflow, NoMatch);
+maybe_prepend_preflow(RouteReq, Props, Call, Callflow, NoMatch, 'false') ->
     AccountId = kapps_call:account_id(Call),
     case kzd_accounts:fetch(AccountId) of
         {'error', _E} ->
@@ -164,6 +175,7 @@ callflow_should_respond(Call) ->
 send_route_response(Flow, RouteReq, Call) ->
     lager:info("callflows knows how to route the call! sending park response"),
     AccountId = kapps_call:account_id(Call),
+    CCVs = response_ccvs(Call),
     Resp = props:filter_undefined(
              [{?KEY_MSG_ID, kz_api:msg_id(RouteReq)}
              ,{?KEY_MSG_REPLY_ID, kapps_call:call_id_direct(Call)}
@@ -173,7 +185,7 @@ send_route_response(Flow, RouteReq, Call) ->
              ,{<<"Ringback-Media">>, get_ringback_media(Flow, RouteReq)}
              ,{<<"Pre-Park">>, pre_park_action(Call)}
              ,{<<"From-Realm">>, kzd_accounts:fetch_realm(AccountId)}
-             ,{<<"Custom-Channel-Vars">>, kapps_call:custom_channel_vars(Call)}
+             ,{<<"Custom-Channel-Vars">>, CCVs}
              ,{<<"Custom-Application-Vars">>, kapps_call:custom_application_vars(Call)}
              ,{<<"Context">>, kapps_call:context(Call)}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -193,6 +205,26 @@ send_route_response(Flow, RouteReq, Call) ->
         {'error', _E} ->
             lager:info("callflow didn't received a route win, exiting : ~p", [_E])
     end.
+
+response_ccvs(Call) ->
+    response_ccvs(Call, kapps_call:authorizing_id(Call), kapps_call:authorizing_type(Call)).
+
+response_ccvs(Call, DeviceId, <<"device">>) ->
+    response_ccvs_from_device(Call, kzd_devices:fetch(kapps_call:account_db(Call), DeviceId));
+response_ccvs(Call, _Id, _Type) ->
+    lager:debug("ignoring authz type: ~s id: ~s", [_Type, _Id]),
+    default_response_ccvs(Call).
+
+response_ccvs_from_device(Call, {'ok', DeviceJObj}) ->
+    kz_json:set_values([{<<"Presence-ID">>, kzd_devices:calculate_presence_id(DeviceJObj)}]
+                      ,default_response_ccvs(Call)
+                      );
+response_ccvs_from_device(Call, _E) ->
+    default_response_ccvs(Call).
+
+default_response_ccvs(Call) ->
+    kapps_call:custom_channel_vars(Call).
+
 
 -spec wait_for_running(kapps_call:call(), 0..5) -> 'ok'.
 wait_for_running(_Call, 5) ->
@@ -249,9 +281,10 @@ pre_park_action(Call) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec update_call(kz_json:object(), boolean(), kz_term:ne_binary(), kapps_call:call()) ->
-                         kapps_call:call().
+          kapps_call:call().
 update_call(Flow, NoMatch, ControllerQ, Call) ->
-    Props = [{'cf_flow_id', kz_doc:id(Flow)}
+    FlowId = kz_doc:id(Flow),
+    Props = [{'cf_flow_id', FlowId}
             ,{'cf_flow_name', kz_json:get_ne_binary_value(<<"name">>, Flow, kapps_call:request_user(Call))}
             ,{'cf_flow', kz_json:get_value(<<"flow">>, Flow)}
             ,{'cf_capture_group', kz_json:get_ne_value(<<"capture_group">>, Flow)}
@@ -264,7 +297,7 @@ update_call(Flow, NoMatch, ControllerQ, Call) ->
                ,{fun kapps_call:set_controller_queue/2, ControllerQ}
                ,{fun kapps_call:set_application_name/2, ?APP_NAME}
                ,{fun kapps_call:set_application_version/2, ?APP_VERSION}
-               ,{fun kapps_call:insert_custom_channel_var/3, <<"CallFlow-ID">>, kz_doc:id(Flow)}
+               ,{fun kapps_call:insert_custom_channel_var/3, <<"CallFlow-ID">>, FlowId}
                ],
     kapps_call:exec(Updaters, Call).
 

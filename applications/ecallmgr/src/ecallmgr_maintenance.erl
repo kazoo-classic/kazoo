@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -191,7 +191,7 @@ allow_carrier(Name, IP, 'false') ->
     allow_carrier(Name, IP, get_acls(), fun kapps_config:set_node/4).
 
 -spec allow_carrier(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), config_fun()) ->
-                           'no_return'.
+          'no_return'.
 allow_carrier(Name, IP, ACLs, SetterFun) ->
     modify_acls(Name, IP, ACLs, fun carrier_acl/1, SetterFun).
 
@@ -210,7 +210,7 @@ deny_carrier(Name, IP, 'false') ->
     deny_carrier(Name, IP, get_acls(), fun kapps_config:set_node/4).
 
 -spec deny_carrier(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), config_fun()) ->
-                          'no_return'.
+          'no_return'.
 deny_carrier(Name, IP, ACLs, SetterFun) ->
     modify_acls(Name, IP, ACLs, fun(_) -> carrier_acl(IP, <<"deny">>) end, SetterFun).
 
@@ -339,8 +339,7 @@ has_acl(Name, Action, ACLs) ->
 -spec reload_acls() -> 'no_return'.
 reload_acls() ->
     _ = [begin
-             io:format("issued reload ACLs to ~s~n", [Node]),
-             lager:info("issued reload ACLs to ~s", [Node]),
+             print_and_log("issued reload ACLs to ~s", [Node]),
              freeswitch:bgapi(Node, 'reloadacl', "")
          end
          || Node <- ecallmgr_fs_nodes:connected()
@@ -520,8 +519,8 @@ check_sync(Username, Realm) ->
                              ).
 
 -spec add_fs_node(kz_term:text(), kz_term:ne_binaries(), config_fun()) ->
-                         'ok' |
-                         {'error', any()}.
+          'ok' |
+          {'error', any()}.
 add_fs_node(FSNode, FSNodes, ConfigFun) when not is_binary(FSNode) ->
     add_fs_node(kz_term:to_binary(FSNode), FSNodes, ConfigFun);
 add_fs_node(FSNode, FSNodes, ConfigFun) ->
@@ -556,7 +555,7 @@ get_fs_nodes(Node) ->
     end.
 
 -spec modify_acls(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), acl_fun(), config_fun()) ->
-                         'no_return'.
+          'no_return'.
 modify_acls(Name, IP0, ACLS, ACLFun, ConfigFun) ->
     case kz_network_utils:resolve(IP0) of
         [] ->
@@ -568,25 +567,22 @@ modify_acls(Name, IP0, ACLS, ACLFun, ConfigFun) ->
             'no_return';
         [IP | _] ->
             ACL = ACLFun(IP),
-            io:format("updating ~s ACLs ~s(~s) to ~s traffic~n"
-                     ,[kz_json:get_value(<<"network-list-name">>, ACL)
-                      ,Name
-                      ,kz_json:get_value(<<"cidr">>, ACL)
-                      ,kz_json:get_value(<<"type">>, ACL)
-                      ]),
-            lager:info("updating ~s ACLs ~s(~s) to ~s traffic~n"
-                      ,[kz_json:get_value(<<"network-list-name">>, ACL)
-                       ,Name
-                       ,kz_json:get_value(<<"cidr">>, ACL)
-                       ,kz_json:get_value(<<"type">>, ACL)
-                       ]),
-            run_config_fun(ConfigFun, <<"acls">>, kz_json:set_value(Name, ACL, filter_acls(ACLS))),
+            print_and_log("updating ~s ACLs ~s(~s) to ~s traffic"
+                         ,[kz_json:get_value(<<"network-list-name">>, ACL)
+                          ,Name
+                          ,kz_json:get_value(<<"cidr">>, ACL)
+                          ,kz_json:get_value(<<"type">>, ACL)
+                          ]),
+            _ = run_config_fun(ConfigFun
+                              ,<<"acls">>
+                              ,kz_json:set_value(Name, ACL, filter_acls(ACLS))
+                              ),
             maybe_reload_acls(Name, 'modify', 4)
     end.
 
 -spec run_config_fun(config_fun(), kz_json:key(), kz_json:json_term()) ->
-                            {'ok', kz_json:object()} |
-                            {'error', kz_datamgr:data_error()}.
+          {'ok', kz_json:object()} |
+          {'error', kz_datamgr:data_error()}.
 run_config_fun(ConfigFun, Key, Value) when is_function(ConfigFun, 3) ->
     ConfigFun(?APP_NAME, Key, Value);
 run_config_fun(ConfigFun, Key, Value) when is_function(ConfigFun, 4) ->
@@ -596,7 +592,10 @@ run_config_fun(ConfigFun, Key, Value) when is_function(ConfigFun, 4) ->
 remove_acl(Name, ACLs, ConfigFun) ->
     FilteredACLs = filter_acls(ACLs),
     _ = case kz_json:get_value(Name, FilteredACLs) of
-            'undefined' -> io:format("no ACL named ~s found~n", [Name]);
+            'undefined' ->
+                not_system_config_acl(Name
+                                     ,kz_json:get_value([Name, <<"authorizing_type">>], ACLs)
+                                     );
             ACL ->
                 io:format("removing ~s ACLs ~s(~s) from ecallmgr system config~n"
                          ,[kz_json:get_value(<<"network-list-name">>, ACL)
@@ -724,3 +723,15 @@ hangup_long_running_channels(MaxAge) ->
     io:format("hanging up channels older than ~p seconds~n", [MaxAge]),
     N = ecallmgr_fs_channels:cleanup_old_channels(kz_term:to_integer(MaxAge)),
     io:format("hungup ~p channels~n", [N]).
+
+-spec not_system_config_acl(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+not_system_config_acl(Name, 'undefined') ->
+    io:format("no ACL named ~s found~n", [Name]);
+not_system_config_acl(Name, AuthType) ->
+    io:format("~s is not managed by ecallmgr. It is of type ~s; please use the APIs to manage it.~n"
+             ,[Name, AuthType]
+             ).
+
+-spec print_and_log(string(), [any()]) -> 'ok'.
+print_and_log(FormatStr, Args) ->
+    ?SUP_LOG_INFO(FormatStr, Args).

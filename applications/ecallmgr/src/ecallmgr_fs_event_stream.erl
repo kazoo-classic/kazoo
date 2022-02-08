@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -20,10 +20,12 @@
 -define(SERVER, ?MODULE).
 
 -type bindings() :: atom() | [atom(),...] | kz_term:ne_binary() | kz_term:ne_binaries().
+-type event_packet_type() :: 1 | 2 | 4.
+
+-export_type([event_packet_type/0]).
 
 -record(state, {node :: atom()
                ,bindings :: bindings()
-               ,subclasses :: bindings()
                ,ip :: inet:ip_address() | 'undefined'
                ,port :: inet:port_number() | 'undefined'
                ,socket :: inet:socket() | 'undefined'
@@ -31,6 +33,7 @@
                ,switch_url :: kz_term:api_ne_binary()
                ,switch_uri :: kz_term:api_ne_binary()
                ,switch_info = 'false' :: boolean()
+               ,packet :: event_packet_type()
                }).
 -type state() :: #state{}.
 
@@ -42,9 +45,9 @@
 %% @doc Starts the server.
 %% @end
 %%------------------------------------------------------------------------------
--spec start_link(atom(), bindings(), bindings()) -> kz_types:startlink_ret().
-start_link(Node, Bindings, Subclasses) ->
-    gen_server:start_link(?SERVER, [Node, Bindings, Subclasses], []).
+-spec start_link(atom(), bindings(), event_packet_type()) -> kz_types:startlink_ret().
+start_link(Node, Bindings, Packet) ->
+    gen_server:start_link(?SERVER, [Node, Bindings, Packet], []).
 
 %%%=============================================================================
 %%% gen_server callbacks
@@ -54,13 +57,13 @@ start_link(Node, Bindings, Subclasses) ->
 %% @doc Initializes the server.
 %% @end
 %%------------------------------------------------------------------------------
--spec init([atom() | bindings()]) -> {'ok', state()} | {'stop', any()}.
-init([Node, Bindings, Subclasses]) ->
+-spec init([atom() | bindings() | event_packet_type()]) -> {'ok', state()} | {'stop', any()}.
+init([Node, Bindings, Packet]) ->
     process_flag('trap_exit', 'true'),
     kz_util:put_callid(list_to_binary([kz_term:to_binary(Node), <<"-eventstream">>])),
     request_event_stream(#state{node=Node
                                ,bindings=Bindings
-                               ,subclasses=Subclasses
+                               ,packet=Packet
                                ,idle_alert=idle_alert_timeout()
                                }).
 
@@ -77,10 +80,10 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
-handle_cast('connect', #state{ip=IP, port=Port, idle_alert=Timeout}=State) ->
-    PacketType = kapps_config:get_integer(?APP_NAME, <<"tcp_packet_type">>, 2),
+handle_cast('connect', #state{ip=IP, port=Port, packet=Packet, idle_alert=Timeout}=State) ->
     case gen_tcp:connect(IP, Port, [{'mode', 'binary'}
-                                   ,{'packet', PacketType}
+                                   ,{'packet', Packet}
+                                   ,{'keepalive', 'true'}
                                    ])
     of
         {'ok', Socket} ->
@@ -88,7 +91,7 @@ handle_cast('connect', #state{ip=IP, port=Port, idle_alert=Timeout}=State) ->
                        ,[IP, Port, get_event_bindings(State)]),
             {'noreply', State#state{socket=Socket}, Timeout};
         {'error', Reason} ->
-            {'stop', Reason, State}
+            {'stop', {'shutdown', Reason}, State}
     end;
 handle_cast(_Msg, #state{socket='undefined'}=State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
@@ -102,10 +105,12 @@ handle_cast(_Msg, #state{idle_alert=Timeout}=State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
-handle_info({'tcp', Socket, Data}, #state{socket=Socket
-                                         ,node=Node
-                                         ,switch_info='false'
-                                         }=State) ->
+handle_info({'tcp', Socket, Data}
+           ,#state{socket=Socket
+                  ,node=Node
+                  ,switch_info='false'
+                  }=State
+           ) ->
     try ecallmgr_fs_node:sip_url(Node) of
         'undefined' ->
             lager:debug("no sip url available yet for ~s", [Node]),
@@ -122,12 +127,14 @@ handle_info({'tcp', Socket, Data}, #state{socket=Socket
             lager:warning("failed to include switch_url/uri for node ~s : ~p : ~p", [Node, _E, _R]),
             {'noreply', State, 'hibernate'}
     end;
-handle_info({'tcp', Socket, Data}, #state{socket=Socket
-                                         ,node=Node
-                                         ,idle_alert=Timeout
-                                         ,switch_uri=SwitchURI
-                                         ,switch_url=SwitchURL
-                                         }=State) ->
+handle_info({'tcp', Socket, Data}
+           ,#state{socket=Socket
+                  ,node=Node
+                  ,idle_alert=Timeout
+                  ,switch_uri=SwitchURI
+                  ,switch_url=SwitchURL
+                  }=State
+           ) ->
     try binary_to_term(Data) of
         {'event', [UUID | Props]} when is_binary(UUID)
                                        orelse UUID =:= 'undefined' ->
@@ -139,29 +146,34 @@ handle_info({'tcp', Socket, Data}, #state{socket=Socket
     catch
         'error':'badarg' ->
             lager:warning("failed to decode packet from ~s (~p b) for ~p: ~p"
-                         ,[Node, byte_size(Data), get_event_bindings(State), Data]),
-            {'stop', 'decode_error', State}
+                         ,[Node, byte_size(Data), get_event_bindings(State), Data]
+                         ),
+            {'stop', {'shutdown', 'decode_error'}, State}
     end;
-handle_info({'tcp_closed', Socket}, #state{socket=Socket, node=Node}=State) ->
+handle_info({'tcp_closed', Socket}
+           ,#state{socket=Socket, node=Node}=State
+           ) ->
     lager:info("event stream for ~p on node ~p closed"
               ,[get_event_bindings(State), Node]
               ),
-    timer:sleep(3 * ?MILLISECONDS_IN_SECOND),
-    {'stop', 'tcp_close', State#state{socket='undefined'}};
+    %% timer:sleep(3 * ?MILLISECONDS_IN_SECOND),
+    {'stop', {'shutdown', 'tcp_close'}, State#state{socket='undefined'}};
 handle_info({'tcp_error', Socket, _Reason}, #state{socket=Socket}=State) ->
     lager:warning("event stream tcp error: ~p", [_Reason]),
     gen_tcp:close(Socket),
-    timer:sleep(3 * ?MILLISECONDS_IN_SECOND),
-    {'stop', 'tcp_error', State#state{socket='undefined'}};
-handle_info('timeout', #state{node=Node, idle_alert=Timeout}=State) ->
-    lager:warning("event stream for ~p on node ~p is unexpectedly idle",
-                  [get_event_bindings(State), Node]
+    %% timer:sleep(3 * ?MILLISECONDS_IN_SECOND),
+    {'stop', {'shutdown', 'tcp_error'}, State#state{socket='undefined'}};
+handle_info('timeout'
+           ,#state{node=Node, idle_alert=Timeout}=State
+           ) ->
+    lager:warning("event stream for ~p on node ~p is unexpectedly idle"
+                 ,[get_event_bindings(State), Node]
                  ),
     {'noreply', State, Timeout};
 handle_info({'EXIT', _, 'noconnection'}, State) ->
-    {stop, {'shutdown', 'noconnection'}, State};
+    {'stop', {'shutdown', 'noconnection'}, State};
 handle_info({'EXIT', _, Reason}, State) ->
-    {stop, Reason, State};
+    {'stop', {'shutdown', Reason}, State};
 handle_info(_Msg, #state{socket='undefined'}=State) ->
     lager:debug("unhandled message: ~p", [_Msg]),
     {'noreply', State};
@@ -223,10 +235,13 @@ request_event_stream(#state{node=Node}=State) ->
         {'ok', {IP, Port}} ->
             {'ok', IPAddress} = inet_parse:address(IP),
             gen_server:cast(self(), 'connect'),
-            kz_util:put_callid(list_to_binary([kz_term:to_binary(Node)
-                                              ,$-, kz_term:to_binary(IP)
-                                              ,$:, kz_term:to_binary(Port)
-                                              ])),
+            kz_util:put_callid(
+              list_to_binary([kz_term:to_binary(Node)
+                             ,$-, kz_term:to_binary(IP)
+                             ,$:, kz_term:to_binary(Port)
+                             ]
+                            )
+             ),
             {'ok', State#state{ip=IPAddress, port=kz_term:to_integer(Port)}};
         {'EXIT', ExitReason} ->
             {'stop', {'shutdown', ExitReason}};
@@ -236,55 +251,30 @@ request_event_stream(#state{node=Node}=State) ->
     end.
 
 -spec get_event_bindings(state()) -> kz_term:atoms().
-get_event_bindings(State) ->
-    get_event_bindings(State, []).
+get_event_bindings(#state{bindings=Bindings})
+  when is_list(Bindings) ->
+    [kz_term:to_atom(Binding, 'true') || Binding <- Bindings];
 
--spec get_event_bindings(state(), kz_term:atoms()) -> kz_term:atoms().
-get_event_bindings(#state{bindings='undefined'
-                         ,subclasses='undefined'
-                         ,idle_alert='infinity'
-                         }, Acc) ->
-    Acc;
-get_event_bindings(#state{bindings='undefined'
-                         ,subclasses='undefined'
-                         }, Acc) ->
-    ['HEARTBEAT' | Acc];
-get_event_bindings(#state{subclasses=Subclasses}=State, Acc) when is_list(Subclasses) ->
-    get_event_bindings(State#state{subclasses='undefined'}
-                      ,[kz_term:to_atom(Subclass, 'true') || Subclass <- Subclasses] ++ Acc
-                      );
-get_event_bindings(#state{subclasses=Subclass}=State, Acc)
-  when is_atom(Subclass),
-       Subclass =/= 'undefined' ->
-    get_event_bindings(State#state{subclasses='undefined'}, [Subclass | Acc]);
-get_event_bindings(#state{subclasses=Subclass}=State, Acc) when is_binary(Subclass) ->
-    get_event_bindings(State#state{subclasses='undefined'}
-                      ,[kz_term:to_atom(Subclass, 'true') | Acc]
-                      );
-get_event_bindings(#state{bindings=Bindings}=State, Acc) when is_list(Bindings) ->
-    get_event_bindings(State#state{bindings='undefined'}
-                      ,[kz_term:to_atom(Binding, 'true') || Binding <- Bindings] ++ Acc
-                      );
-get_event_bindings(#state{bindings=Binding}=State, Acc)
+get_event_bindings(#state{bindings=Binding})
   when is_atom(Binding),
        Binding =/= 'undefined' ->
-    get_event_bindings(State#state{bindings='undefined'}, [Binding | Acc]);
-get_event_bindings(#state{bindings=Binding}=State, Acc) when is_binary(Binding) ->
-    get_event_bindings(State#state{bindings='undefined'}
-                      ,[kz_term:to_atom(Binding, 'true') | Acc]
-                      ).
+    [Binding];
+
+get_event_bindings(#state{bindings=Binding})
+  when is_binary(Binding) ->
+    [kz_term:to_atom(Binding, 'true')].
 
 -spec maybe_bind(atom(), kz_term:atoms()) ->
-                        {'ok', {kz_term:text(), inet:port_number()}} |
-                        {'error', any()} |
-                        {'EXIT', any()}.
+          {'ok', {kz_term:text(), inet:port_number()}} |
+          {'error', any()} |
+          {'EXIT', any()}.
 maybe_bind(Node, Bindings) ->
     maybe_bind(Node, Bindings, 0).
 
 -spec maybe_bind(atom(), kz_term:atoms(), non_neg_integer()) ->
-                        {'ok', {kz_term:text(), inet:port_number()}} |
-                        {'error', any()} |
-                        {'EXIT', any()}.
+          {'ok', {kz_term:text(), inet:port_number()}} |
+          {'error', any()} |
+          {'EXIT', any()}.
 maybe_bind(Node, Bindings, 2) ->
     case catch gen_server:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
         {'ok', {_IP, _Port}}=OK -> OK;

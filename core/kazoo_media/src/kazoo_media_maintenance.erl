@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -82,7 +82,7 @@ import_files(Path, Lang, Files) ->
     end.
 
 -spec import_prompts_from_files([file:filename_all()], kz_term:ne_binary()) ->
-                                       [{file:filename_all(), {'error', _}}].
+          [{file:filename_all(), {'error', _}}].
 import_prompts_from_files(Files, Lang) ->
     [{File, Err}
      || File <- Files,
@@ -137,7 +137,7 @@ import_prompt(Path0, Lang0, Contents) ->
     end.
 
 -spec media_meta_doc(file:filename_all(), kz_term:ne_binary(), pos_integer()) ->
-                            kz_json:object().
+          kz_json:object().
 media_meta_doc(Path, Lang, ContentLength) ->
     MediaDoc = base_media_doc(Path, Lang, ContentLength),
     kz_doc:update_pvt_parameters(MediaDoc
@@ -148,7 +148,7 @@ media_meta_doc(Path, Lang, ContentLength) ->
                                 ).
 
 -spec base_media_doc(file:filename_all(), kz_term:ne_binary(), pos_integer()) ->
-                            kz_json:object().
+          kz_json:object().
 base_media_doc(Path, Lang, ContentLength) ->
     PromptName = prompt_name_from_path(Path),
     ContentType = content_type_from_path(Path),
@@ -184,14 +184,14 @@ media_description(PromptName, Lang) ->
     <<"System prompt in ", Lang/binary, " for ", PromptName/binary>>.
 
 -spec upload_prompt(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) ->
-                           'ok' |
-                           {'error', any()}.
+          'ok' |
+          {'error', any()}.
 upload_prompt(ID, AttachmentName, Contents, Options) ->
     upload_prompt(ID, AttachmentName, Contents, Options, 3).
 
 -spec upload_prompt(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), non_neg_integer()) ->
-                           'ok' |
-                           {'error', any()}.
+          'ok' |
+          {'error', any()}.
 upload_prompt(_ID, _AttachmentName, _Contents, _Options, 0) ->
     io:format("  retries exceeded for uploading ~s to ~s~n", [_AttachmentName, _ID]),
     {'error', 'retries_exceeded'};
@@ -220,8 +220,8 @@ maybe_cleanup_metadoc(ID, E) ->
     end.
 
 -spec maybe_retry_upload(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), non_neg_integer()) ->
-                                'ok' |
-                                {'error', any()}.
+          'ok' |
+          {'error', any()}.
 maybe_retry_upload(ID, AttachmentName, Contents, Options, Retries) ->
     case kz_datamgr:open_doc(?KZ_MEDIA_DB, ID) of
         {'ok', JObj} ->
@@ -263,7 +263,7 @@ maybe_migrate_system_config(ConfigId, DeleteAfter) ->
         {'error', 'not_found'} ->
             io:format("  failed to find ~s, not migrating~n", [ConfigId]);
         {'ok', JObj} ->
-            migrate_system_config(kz_doc:public_fields(JObj)),
+            migrate_system_config(kz_doc:public_fields(JObj), DeleteAfter),
             maybe_delete_system_config(ConfigId, DeleteAfter)
     end.
 
@@ -273,24 +273,42 @@ maybe_delete_system_config(ConfigId, 'true') ->
     {'ok', _} = kz_datamgr:del_doc(?KZ_CONFIG_DB, ConfigId),
     io:format("deleted ~s from ~s", [ConfigId, ?KZ_CONFIG_DB]).
 
--spec migrate_system_config(kz_json:object()) -> 'ok'.
-migrate_system_config(ConfigJObj) ->
+-spec migrate_system_config(kz_json:object(), boolean()) -> 'ok'.
+migrate_system_config(ConfigJObj, DeleteAfter) ->
     {'ok', MediaJObj} = get_media_config_doc(),
 
     {Updates, _} = kz_json:foldl(fun migrate_system_config_fold/3
                                 ,{[], MediaJObj}
                                 ,ConfigJObj
                                 ),
-    maybe_update_media_config(Updates, MediaJObj).
+    maybe_update_media_config(Updates, MediaJObj),
+    delete_original_config(ConfigJObj, Updates, DeleteAfter).
 
 maybe_update_media_config([], _) ->
     io:format("no changes for that need saving~n");
 maybe_update_media_config(Updates, MediaJObj) ->
     io:format("saving updated media config with:~n~p~n", [Updates]),
+    ensure_save_config_db(Updates, MediaJObj).
+
+%%------------------------------------------------------------------------------
+%% @doc Only delete original attributes when the original doc is NOT deleted.
+%% @end
+%%------------------------------------------------------------------------------
+-spec delete_original_config(kz_json:object(), list(), boolean()) -> 'ok'.
+delete_original_config(_OriginalJObj, _Updates, 'true') -> 'ok';
+delete_original_config(OrigJObj, Updates, 'false') ->
+    Removed = lists:foldl(fun({X, _V}, L) -> [{X, 'null'} | L] end, [], Updates),
+    ensure_save_config_db(Removed, OrigJObj).
+
+-spec ensure_save_config_db(kz_json:flat_proplist(), kz_json:object()) -> 'ok'.
+ensure_save_config_db(Updates, JObj) ->
+    Id = kz_doc:id(JObj),
+    PvtUpdates = [{<<"pvt_modified">>, kz_time:now_s()}],
     Update = [{'update', Updates}
+             ,{'extra_update', PvtUpdates}
              ,{'ensure_saved', 'true'}
              ],
-    {'ok', _} = kz_datamgr:update_doc(?KZ_CONFIG_DB, kz_doc:id(MediaJObj), Update),
+    {'ok', _} = kz_datamgr:update_doc(?KZ_CONFIG_DB, Id, Update),
     'ok'.
 
 -spec get_media_config_doc() -> {'ok', kz_json:object()}.
@@ -303,7 +321,7 @@ get_media_config_doc() ->
 
 -type migrate_fold_acc() :: {kz_term:proplist(), kzd_system_configs:doc()}.
 -spec migrate_system_config_fold(kz_term:ne_binary(), kz_json:json_term(), migrate_fold_acc()) ->
-                                        migrate_fold_acc().
+          migrate_fold_acc().
 migrate_system_config_fold(<<"default">> = Node, Settings, Updates) ->
     io:format("migrating node '~s' settings~n", [Node]),
     migrate_node_config(Node, Settings, Updates, ?CONFIG_KVS);
@@ -318,7 +336,7 @@ migrate_system_config_fold(Node, Settings, Updates) ->
     end.
 
 -spec migrate_node_config(kz_term:ne_binary(), kz_json:object(), migrate_fold_acc(), kz_term:proplist()) ->
-                                 migrate_fold_acc().
+          migrate_fold_acc().
 migrate_node_config(_Node, _Settings, Updates, []) -> Updates;
 migrate_node_config(Node, Settings, Updates, [{K, V} | KVs]) ->
     case kz_json:get_value(K, Settings) of
@@ -332,14 +350,14 @@ migrate_node_config(Node, Settings, Updates, [{K, V} | KVs]) ->
     end.
 
 -spec set_node_value(kz_term:ne_binary(), kz_json:path(), kz_term:ne_binary(), migrate_fold_acc()) ->
-                            migrate_fold_acc().
+          migrate_fold_acc().
 set_node_value(Node, <<_/binary>> = K, V, Updates) ->
     set_node_value(Node, [K], V, Updates);
 set_node_value(Node, K, V, {Updates, MediaJObj}) ->
     {[{[Node | K], V} | Updates], MediaJObj}.
 
 -spec maybe_update_media_config(kz_term:ne_binary(), kz_json:path(), kz_term:api_binary(), migrate_fold_acc()) ->
-                                       migrate_fold_acc().
+          migrate_fold_acc().
 maybe_update_media_config(_Node, _K, 'undefined', Updates) ->
     io:format("    no value to set for ~p~n", [_K]),
     Updates;

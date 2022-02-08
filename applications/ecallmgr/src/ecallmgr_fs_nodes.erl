@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc When connecting to a FreeSWITCH node, we create three processes: one to
 %%% handle authentication (directory) requests; one to handle route (dialplan)
 %%% requests, and one to monitor the node and various stats about the node.
@@ -261,12 +261,12 @@ remove_capability(Node, Name) ->
     ets:select_delete(?CAPABILITY_TBL, MatchSpec).
 
 -spec get_capability(atom(), kz_term:ne_binary()) ->
-                            capability() | kz_term:api_object().
+          capability() | kz_term:api_object().
 get_capability(Node, Capability) ->
     get_capability(Node, Capability, 'json').
 
 -spec get_capability(atom(), kz_term:ne_binary(), 'json' | 'record') ->
-                            capability() | kz_term:api_object().
+          capability() | kz_term:api_object().
 get_capability(Node, Capability, Format) ->
     MatchSpec = [{#capability{node='$1'
                              ,name='$2'
@@ -280,12 +280,12 @@ get_capability(Node, Capability, Format) ->
     format_capability(Format, ets:select(?CAPABILITY_TBL, MatchSpec)).
 
 -spec get_capabilities(atom()) ->
-                              kz_json:objects() | capabilities().
+          kz_json:objects() | capabilities().
 get_capabilities(Node) ->
     get_capabilities(Node, 'json').
 
 -spec get_capabilities(atom(), 'json' | 'record') ->
-                              kz_json:objects() | capabilities().
+          kz_json:objects() | capabilities().
 get_capabilities(Node, Format) ->
     MatchSpec = [{#capability{node='$1'
                              ,_='_'
@@ -446,6 +446,8 @@ handle_cast({'remove_capabilities', NodeName}, State) ->
 handle_cast({'rm_fs_node', NodeName}, State) ->
     _ = kz_util:spawn(fun maybe_rm_fs_node/2, [NodeName, State]),
     {'noreply', State};
+handle_cast({'gen_listener', {'federators_consuming', _IsConsuming}}, State) ->
+    {'noreply', State};
 handle_cast(_Cast, State) ->
     lager:debug("unhandled cast: ~p", [_Cast]),
     {'noreply', State, 'hibernate'}.
@@ -551,7 +553,7 @@ maybe_handle_nodedown(NodeName, #state{nodes=Nodes}=State) ->
     end.
 
 -spec maybe_add_node(kz_term:text(), kz_term:text(), kz_term:proplist(), state()) ->
-                            'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 maybe_add_node(NodeName, Cookie, Options, #state{self=Srv, nodes=Nodes}) ->
     case dict:find(NodeName, Nodes) of
         {'ok', #node{}} -> {'error', 'node_exists'};

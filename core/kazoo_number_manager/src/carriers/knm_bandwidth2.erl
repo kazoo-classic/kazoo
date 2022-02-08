@@ -356,13 +356,13 @@ api_get(Url, Options) ->
     Response = kz_http:get(Url, [], HTTPOptions),
     handle_response(Response).
 -else.
-api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/availableNumbers?areaCode="++_, _Options) ->
+api_get("https://dashboard.bandiwdth.com/v1.0/accounts/eunit_testing_account/availableNumbers?areaCode="++_, _Options) ->
     Resp = knm_util:fixture("bandwidth2_find_by_npa_no_detail.xml"),
     handle_response({'ok', 200, [], Resp});
-api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/availableNumbers?tollFreeWildCardPattern="++_, _Options) ->
+api_get("https://dashboard.bandiwdth.com/v1.0/accounts/eunit_testing_account/availableNumbers?tollFreeWildCardPattern="++_, _Options) ->
     Resp = knm_util:fixture("bandwidth2_find_tollfree.xml"),
     handle_response({'ok', 200, [], Resp});
-api_get("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders/" ++ _, _Options) ->
+api_get("https://dashboard.bandiwdth.com/v1.0/accounts/eunit_testing_account/orders/" ++ _, _Options) ->
     Resp = knm_util:fixture("bandwidth2_check_order.xml"),
     handle_response({'ok', 200, [], Resp}).
 -endif.
@@ -386,7 +386,7 @@ api_post(Url, Body, Options) ->
     Response = kz_http:post(Url, Headers, UnicodeBody, HTTPOptions),
     handle_response(Response).
 -else.
-api_post("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders", Body, _Options) ->
+api_post("https://dashboard.bandiwdth.com/v1.0/accounts/eunit_testing_account/orders", Body, _Options) ->
     _UnicodeBody = unicode:characters_to_binary(Body),
     Resp = knm_util:fixture("bandwidth2_buy_a_number.xml"),
     handle_response({'ok', 200, [], Resp}).

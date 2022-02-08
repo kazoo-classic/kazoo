@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -121,8 +121,8 @@ find_and_remove_hook(JObj, Srv) ->
     gen_listener:cast(Srv, {'remove_hook', webhooks_util:hook_id(JObj)}).
 
 -spec find_hook(kz_json:object()) ->
-                       {'ok', kz_json:object()} |
-                       {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 find_hook(JObj) ->
     kz_datamgr:open_cache_doc(?KZ_WEBHOOKS_DB
                              ,kapi_conf:get_id(JObj)
@@ -172,6 +172,8 @@ handle_cast({'gen_listener', {'created_queue', _Q}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
     lager:debug("starting to consume: ~s", [_IsConsuming]),
+    {'noreply', State};
+handle_cast({'gen_listener', {'federators_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),

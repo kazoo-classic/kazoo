@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -84,6 +84,8 @@ handle_call(_Req, _From, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
+handle_cast({'gen_listener', {'federators_consuming', _IsConsuming}}, State) ->
+    {'noreply', State};
 handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
     {'noreply', State}.
@@ -159,7 +161,7 @@ maybe_exec_dial(ConferenceNode, ConferenceId, JObj, Endpoints, Loopbacks) ->
 -type exec_response() :: {kz_term:ne_binary(), {'ok' | 'error', kz_term:proplist()}}.
 -type exec_responses() :: [exec_response()].
 -spec exec_endpoints(atom(), kz_term:ne_binary(), kapi_conference:doc(), kz_json:objects()) ->
-                            exec_responses().
+          exec_responses().
 exec_endpoints(_ConferenceNode, _ConferenceId, _JObj, []) ->
     lager:debug("no endpoints to dial out to"),
     [];
@@ -213,7 +215,7 @@ exec_endpoint(Endpoint, {ConferenceNode, ConferenceId, JObj, Resps}) ->
     end.
 
 -spec exec_loopbacks(atom(), kz_term:ne_binary(), kapi_conference:doc(), kz_json:objects()) ->
-                            exec_responses().
+          exec_responses().
 exec_loopbacks(_ConferenceNode, _ConferenceId, _JObj, []) ->
     lager:debug("no loopbacks to dial out to"),
     [];
@@ -284,7 +286,7 @@ handle_response(ConferenceNode, JObj, {LoopbackCallId, {'ok', Resp}}) ->
 -type outbound_dial() :: #outbound_dial{}.
 
 -spec handle_call_startup(atom(), kapi_conference:doc(), kz_term:ne_binary(), kz_term:proplist()) ->
-                                 kz_term:proplist().
+          kz_term:proplist().
 handle_call_startup(ConferenceNode, JObj, LoopbackCallId, Resp) ->
     case wait_for_bowout(#outbound_dial{loopback_a=LoopbackCallId}
                         ,kz_json:get_integer_value(<<"Timeout">>, JObj) * ?MILLISECONDS_IN_SECOND
@@ -341,7 +343,7 @@ wait_for_bowout(#outbound_dial{loopback_a=LoopbackALeg
     end.
 
 -spec handle_call_event(outbound_dial(), pos_integer(), pos_integer(), kz_term:proplist()) ->
-                               bowout_return().
+          bowout_return().
 handle_call_event(#outbound_dial{loopback_a=LoopbackALeg
                                 ,loopback_b=LoopbackBLeg
                                 }=OutboundDial
@@ -362,7 +364,7 @@ handle_call_event(#outbound_dial{loopback_a=LoopbackALeg
     end.
 
 -spec handle_create(outbound_dial(), pos_integer(), pos_integer(), kz_term:proplist()) ->
-                           bowout_return().
+          bowout_return().
 handle_create(#outbound_dial{loopback_a = <<?LB_ALEG_PREFIX, _/binary>>
                             ,channel_props=ChannelProps
                             }=OutboundDial
@@ -464,7 +466,6 @@ start_call_handlers(Node, JObj, #outbound_dial{loopback_b=LoopbackB, b_leg=CallI
 
     get_control_queue(CtlPid).
 
-maybe_update_ecallmgr_node('undefined') -> 'ok';
 maybe_update_ecallmgr_node(Leg) ->
     case ecallmgr_fs_channel:fetch(Leg, 'record') of
         {'ok', #channel{node=Node}} ->
@@ -596,7 +597,7 @@ find_media_server_from_statuses(TargetCallId, IssuerNode, [Status|Statuses]) ->
     end.
 
 -spec query_cluster_for_call(kz_term:ne_binary()) -> {'ok', kz_json:objects()} |
-                                                     {'error', any()}.
+          {'error', any()}.
 query_cluster_for_call(CallId) ->
     Req = [{<<"Call-ID">>, CallId}
           ,{<<"Fields">>, <<"all">>}

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc Common functions for the provisioner modules
 %%% @author Karl Anderson
 %%% @end
@@ -27,7 +27,8 @@
           [{"host", kapps_config:get_string(?MOD_CONFIG_CAT, <<"provisioning_host">>)}
           ,{"referer", kapps_config:get_string(?MOD_CONFIG_CAT, <<"provisioning_referer">>)}
           ,{"user-agent", kz_term:to_list(erlang:node())}
-          ])).
+          ])
+       ).
 -define(JSON_HEADERS, [{"content-type", "application/json"} | ?BASE_HEADERS]).
 -define(FORM_HEADERS, [{"content-type", "application/x-www-form-urlencoded"} | ?BASE_HEADERS]).
 
@@ -455,13 +456,13 @@ do_awesome_provision(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_merged_device(kz_term:ne_binary(), cb_context:context()) ->
-                               {'ok', cb_context:context()}.
+          {'ok', cb_context:context()}.
 get_merged_device(MACAddress, Context) ->
     {'ok', Data} = merge_device(MACAddress, Context),
     {'ok', cb_context:set_doc(Context, Data)}.
 
 -spec merge_device(kz_term:ne_binary(), cb_context:context()) ->
-                          {'ok', kz_json:object()}.
+          {'ok', kz_json:object()}.
 merge_device(MACAddress, Context) ->
     JObj = cb_context:doc(Context),
     AccountId = cb_context:account_id(Context),
@@ -523,8 +524,8 @@ send_provisioning_template(JObj, Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_template(cb_context:context()) ->
-                          {'ok', kz_json:object()} |
-                          {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 get_template(Context) ->
     DocId = kz_json:get_value([<<"provision">>, <<"id">>], cb_context:doc(Context)),
     case is_binary(DocId)
@@ -545,7 +546,7 @@ get_template(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_account_id(cb_context:context()) ->
-                            [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_account_id(Context) ->
     AccountId = cb_context:auth_account_id(Context),
     [fun(J) -> kz_json:set_value(<<"account_id">>, AccountId, J) end].
@@ -556,7 +557,7 @@ set_account_id(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_account_line_defaults(cb_context:context()) ->
-                                       [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_account_line_defaults(Context) ->
     Account = case kzd_accounts:fetch(cb_context:account_id(Context)) of
                   {'ok', JObj} -> JObj;
@@ -582,7 +583,7 @@ set_account_line_defaults(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_device_line_defaults(cb_context:context()) ->
-                                      [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_device_line_defaults(Context) ->
     Device = cb_context:doc(Context),
     [fun(J) ->
@@ -622,7 +623,7 @@ set_device_line_defaults(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_global_overrides(cb_context:context()) ->
-                                  [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_global_overrides(_) ->
     GlobalDefaults = case kz_datamgr:open_cache_doc(?KZ_PROVISIONER_DB, <<"base_properties">>) of
                          {'ok', JObj} -> JObj;
@@ -641,7 +642,7 @@ set_global_overrides(_) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_account_overrides(cb_context:context()) ->
-                                   [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_account_overrides(Context) ->
     Account = case kzd_accounts:fetch(cb_context:account_id(Context)) of
                   {'ok', JObj} -> JObj;
@@ -660,7 +661,7 @@ set_account_overrides(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_user_overrides(cb_context:context()) ->
-                                [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_user_overrides(Context) ->
     OwnerId = kz_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context)),
     User = case is_binary(OwnerId)
@@ -682,7 +683,7 @@ set_user_overrides(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_device_overrides(cb_context:context()) ->
-                                  [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_device_overrides(Context) ->
     Device = cb_context:doc(Context),
     [fun(J) ->
@@ -731,7 +732,7 @@ get_provisioning_type() ->
 
 -spec maybe_sync_sip_data(cb_context:context(), 'user' | 'device') -> 'ok'.
 maybe_sync_sip_data(Context, Type) ->
-    ShouldSync = cb_context:fetch(Context, 'sync'),
+    ShouldSync = cb_context:fetch(Context, 'sync', 'false'),
     maybe_sync_sip_data(Context, Type, ShouldSync).
 
 -spec maybe_sync_sip_data(cb_context:context(), 'user' | 'device', boolean() | 'force') -> 'ok'.
@@ -748,12 +749,14 @@ maybe_sync_sip_data(Context, 'device', 'true') ->
             lager:debug("nothing has changed on device; no check-sync needed");
         'true' ->
             Realm = kzd_accounts:fetch_realm(cb_context:account_id(Context)),
-            send_check_sync(OldUsername, Realm, cb_context:req_id(Context))
+            ShouldReboot = cb_context:req_value(Context, <<"reboot">>),
+            send_check_sync(NewDevice, ShouldReboot, OldUsername, Realm, cb_context:req_id(Context))
     end;
 maybe_sync_sip_data(Context, 'device', 'force') ->
     Username = kzd_devices:sip_username(cb_context:doc(Context)),
     Realm = kzd_accounts:fetch_realm(cb_context:account_id(Context)),
-    send_check_sync(Username, Realm, cb_context:req_id(Context));
+    ShouldReboot = cb_context:req_value(Context, <<"reboot">>),
+    send_check_sync(cb_context:doc(Context), ShouldReboot, Username, Realm, cb_context:req_id(Context));
 maybe_sync_sip_data(Context, 'user', 'true') ->
     Realm = kzd_accounts:fetch_realm(cb_context:account_id(Context)),
     Req = [{<<"Realm">>, Realm}
@@ -765,11 +768,12 @@ maybe_sync_sip_data(Context, 'user', 'true') ->
                                  ),
     case ReqResp of
         {'error', _E} -> lager:debug("no devices to send check sync to for realm ~s", [Realm]);
-        {'timeout', _} -> lager:debug("timed out query for fetching devices for ~s", [Realm]);
+        {'timeout', _} -> lager:warning("timed out query for fetching devices for ~s", [Realm]);
         {'ok', JObj} ->
+            ShouldReboot = cb_context:req_value(Context, <<"reboot">>),
             lists:foreach(fun(J) ->
                                   Username = kz_json:get_value(<<"Username">>, J),
-                                  send_check_sync(Username, Realm, 'undefined')
+                                  send_check_sync('undefined', ShouldReboot, Username, Realm, 'undefined')
                           end
                          ,kz_json:get_value(<<"Fields">>, JObj)
                          )
@@ -781,25 +785,53 @@ maybe_sync_sip_data(Context, 'user', 'force') ->
         {'ok', []} ->
             lager:debug("no user devices to sync");
         {'ok', DeviceDocs} ->
+            ShouldReboot = cb_context:req_value(Context, <<"reboot">>),
             Realm = kzd_accounts:fetch_realm(cb_context:account_id(Context)),
-            _ = [send_check_sync(kzd_devices:presence_id(DeviceDoc), Realm, cb_context:req_id(Context))
+            _ = [send_check_sync(DeviceDoc, ShouldReboot, kzd_devices:presence_id(DeviceDoc), Realm, cb_context:req_id(Context))
                  || DeviceDoc <- DeviceDocs
                 ],
             'ok'
     end.
 
--spec send_check_sync(kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()) -> 'ok'.
-send_check_sync('undefined', _Realm, _MsgId) ->
+-spec send_check_sync(kz_term:api_object(), kz_term:api_boolean(), kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()) -> 'ok'.
+send_check_sync(_Device, _ShouldReboot, 'undefined', _Realm, _MsgId) ->
     lager:warning("did not send check sync: username is undefined");
-send_check_sync(_Username, 'undefined', _MsgId) ->
+send_check_sync(_Device, _ShouldReboot, _Username, 'undefined', _MsgId) ->
     lager:warning("did not send check sync: realm is undefined");
-send_check_sync(Username, Realm, MsgId) ->
-    lager:debug("sending check sync for ~s @ ~s", [Username, Realm]),
-    publish_check_sync(MsgId, [{<<"Event">>, <<"check-sync">>}
+send_check_sync(Device, ShouldReboot, Username, Realm, MsgId) ->
+    CheckSyncEvent = check_sync_event(Device, ShouldReboot),
+    lager:debug("sending ~s for ~s @ ~s", [CheckSyncEvent, Username, Realm]),
+    publish_check_sync(MsgId, [{<<"Event">>, CheckSyncEvent}
                               ,{<<"Realm">>, Realm}
                               ,{<<"Username">>, Username}
                                | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                               ]).
+
+-spec check_sync_event(kzd_devices:doc() | 'undefined', kz_term:api_boolean()) -> kz_term:ne_binary().
+check_sync_event('undefined', ShouldReboot) ->
+    lager:debug("using system-configured check sync event"),
+    CheckSync = kapps_config:get_ne_binary(?MOD_CONFIG_CAT, <<"check_sync_event">>, <<"check-sync">>),
+    should_reboot('undefined', CheckSync, ShouldReboot);
+check_sync_event(Device, ShouldReboot) ->
+    case kzd_devices:provision_check_sync_event(Device) of
+        'undefined' -> check_sync_event('undefined', ShouldReboot);
+        CheckSyncEvent -> should_reboot(Device, CheckSyncEvent, ShouldReboot)
+    end.
+
+-spec should_reboot(kzd_devices:doc() | 'undefined', kz_term:ne_binary(), kz_term:api_boolean()) -> kz_term:ne_binary().
+should_reboot('undefined', CheckSyncEvent, _ShouldReboot) ->
+    CheckSyncEvent;
+should_reboot(_DeviceDoc, CheckSyncEvent, 'undefined') ->
+    CheckSyncEvent;
+should_reboot(DeviceDoc, CheckSyncEvent, ShouldReboot) ->
+    case kz_term:is_true(ShouldReboot) of
+        'true' ->
+            Reboot = kzd_devices:provision_check_sync_reboot(DeviceDoc),
+            <<CheckSyncEvent/binary, ";", Reboot/binary>>;
+        'false' ->
+            Reload = kzd_devices:provision_check_sync_reload(DeviceDoc),
+            <<CheckSyncEvent/binary, ";", Reload/binary>>
+    end.
 
 -spec publish_check_sync(kz_term:api_binary(), kz_term:proplist()) -> 'ok'.
 publish_check_sync('undefined', Req) ->

@@ -3,6 +3,12 @@
     "_id": "vmboxes",
     "description": "Schema for a voicemail box",
     "properties": {
+        "announcement_only": {
+            "default": false,
+            "description": "Determine if the mailbox should only play announcements",
+            "support_level": "unsupported",
+            "type": "boolean"
+        },
         "check_if_owner": {
             "default": true,
             "description": "Determines if when the user calls their own voicemail they should be prompted to sign in",
@@ -23,10 +29,27 @@
             "support_level": "supported",
             "type": "array"
         },
+        "include_message_on_notify": {
+            "default": true,
+            "description": "Whether or not to include the attachment when sending a new voicemail to email notification",
+            "support_level": "supported",
+            "type": "boolean"
+        },
+        "include_transcription_on_notify": {
+            "default": true,
+            "description": "Whether or not to include the transcription when sending a new voicemail to email notification",
+            "support_level": "supported",
+            "type": "boolean"
+        },
         "is_setup": {
             "default": false,
             "description": "Determines if the user has completed the initial configuration",
             "support_level": "supported",
+            "type": "boolean"
+        },
+        "is_voicemail_ff_rw_enabled": {
+            "default": false,
+            "description": "callflow allow fastforward and rewind during voicemail message playback",
             "type": "boolean"
         },
         "mailbox": {
@@ -126,6 +149,12 @@
             "support_level": "supported",
             "type": "boolean"
         },
+        "seek_duration_ms": {
+            "default": 10000,
+            "description": "callflow fastforward and rewind seek duration",
+            "minimum": 0,
+            "type": "integer"
+        },
         "skip_envelope": {
             "default": false,
             "description": "Determines if the envelope should be skipped",
@@ -150,6 +179,12 @@
             "minLength": 5,
             "support_level": "supported",
             "type": "string"
+        },
+        "transcribe": {
+            "default": false,
+            "description": "Transcribe voicemail using ASR engine",
+            "support_level": "supported",
+            "type": "boolean"
         }
     },
     "required": [

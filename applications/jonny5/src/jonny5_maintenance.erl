@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc Handlers for various AMQP payloads
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -54,7 +54,7 @@ authz_summary([AccountId|AccountIds]) ->
               ]),
     io:format("+----------------------------------+-------+----------------+------------+----------------+-----------------+------------+~n"),
     authz_summary(AccountIds);
-authz_summary(<<_/binary>> = AccountId) ->
+authz_summary(<<AccountId/binary>>) ->
     print_authz_summary_header(),
     authz_summary([AccountId]).
 

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -95,20 +95,20 @@ is_number_eligible_for_flat_rate(Request) ->
        ).
 
 -spec maybe_get_resource_flat_rate(j5_request:request()) ->
-                                          {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 maybe_get_resource_flat_rate(Request) ->
     maybe_get_resource_flat_rate(Request, ?SHOULD_LOOKUP_FLAT_RATE).
 
 -spec maybe_get_resource_flat_rate(j5_request:request(), boolean()) ->
-                                          {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 maybe_get_resource_flat_rate(_Request, 'false') ->
     {?WHITELIST, ?BLACKLIST};
 maybe_get_resource_flat_rate(Request, 'true') ->
     ResourceId = j5_request:resource_id(Request),
     case kz_datamgr:open_cache_doc(?KZ_OFFNET_DB, ResourceId) of
         {'ok', JObj} ->
-            {kzd_resource:flat_rate_whitelist(JObj, ?WHITELIST)
-            ,kzd_resource:flat_rate_blacklist(JObj, ?BLACKLIST)
+            {kzd_resources:flat_rate_whitelist(JObj, ?WHITELIST)
+            ,kzd_resources:flat_rate_blacklist(JObj, ?BLACKLIST)
             };
         {'error', _E} ->
             {?WHITELIST, ?BLACKLIST}
@@ -199,9 +199,9 @@ consume_limit(Limit, 0, Type) ->
 consume_limit(Limit, Used, Type) ->
     case Used - Limit of
         Remaining when Remaining > 0 ->
-            lager:debug("all ~p ~s trunks consumed leaving ~p channels unaccounted for"
-                       ,[Limit, Type, Remaining]
-                       ),
+            lager:info("all ~p ~s trunks consumed leaving ~p channels unaccounted for"
+                      ,[Limit, Type, Remaining]
+                      ),
             Remaining;
         _Else ->
             lager:debug("account is consuming ~p/~p ~s trunks"

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc Common functions for the provisioner modules
 %%% @author Peter Defebvre
 %%% @end
@@ -59,9 +59,9 @@ maybe_set_line_defaults(LineJObj) ->
     kz_json:expand(
       kz_json:from_list(
         [case KV of
-             {[<<"advanced">>, <<"expire">>], undefined} -> {Path, 360};
-             {[<<"advanced">>, <<"srtp">>], undefined} -> {Path, false};
-             {[<<"basic">>, <<"enabled">>], undefined} -> {Path, true};
+             {[<<"advanced">>, <<"expire">>], 'undefined'} -> {Path, 360};
+             {[<<"advanced">>, <<"srtp">>], 'undefined'} -> {Path, 'false'};
+             {[<<"basic">>, <<"enabled">>], 'undefined'} -> {Path, 'true'};
              _ -> KV
          end
          || {Path,_}=KV <- kz_json:to_proplist(kz_json:flatten(LineJObj))
@@ -167,7 +167,7 @@ save_user(AccountId, JObj, AuthToken) ->
                  ).
 
 -spec maybe_save_device(kz_json:object(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                               'ok' | {'EXIT', _}.
+          'ok' | {'EXIT', _}.
 maybe_save_device(Device, Settings, AccountId, AuthToken) ->
     Request = kz_json:from_list(
                 [{<<"brand">>, get_brand(Device)}
@@ -220,8 +220,8 @@ set_owner(JObj) ->
     end.
 
 -spec get_owner(kz_term:api_binary(), kz_term:ne_binary()) ->
-                       {'ok', kz_json:object()} |
-                       {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 get_owner('undefined', _) -> {'error', 'undefined'};
 get_owner(OwnerId, AccountId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
@@ -286,7 +286,7 @@ settings_basic(DeviceDoc) ->
     settings_basic(DeviceDoc, UserDoc, AccountDoc).
 
 -spec settings_basic(kzd_devices:doc(), kzd_users:doc(), kzd_accounts:doc()) ->
-                            kz_json:object().
+          kz_json:object().
 settings_basic(DeviceDoc, UserDoc, AccountDoc) ->
     IsEnabled = is_device_enabled(DeviceDoc, UserDoc, AccountDoc),
     DisplayName = device_display_name(DeviceDoc, UserDoc, AccountDoc),
@@ -297,7 +297,7 @@ settings_basic(DeviceDoc, UserDoc, AccountDoc) ->
     kz_json:from_list(Props).
 
 -spec device_display_name(kzd_devices:doc(), kzd_users:doc(), kzd_accounts:doc()) ->
-                                 kz_term:api_ne_binary().
+          kz_term:api_ne_binary().
 device_display_name(DeviceDoc, UserDoc, AccountDoc) ->
     case [DN || DN <- [kzd_devices:name(DeviceDoc)
                       ,kzd_users:name(UserDoc)
@@ -317,7 +317,7 @@ is_empty_display_name('undefined') -> 'true';
 is_empty_display_name(_DN) -> 'false'.
 
 -spec is_device_enabled(kzd_devices:doc(), kzd_users:doc(), kzd_accounts:doc()) ->
-                               boolean().
+          boolean().
 is_device_enabled(DeviceDoc, UserDoc, AccountDoc) ->
     lists:all(fun kz_term:is_true/1
              ,[kzd_devices:enabled(DeviceDoc)
@@ -326,20 +326,20 @@ is_device_enabled(DeviceDoc, UserDoc, AccountDoc) ->
               ]).
 
 -spec fetch_account_from_device(kzd_devices:doc()) ->
-                                       {'ok', kzd_accounts:doc()} |
-                                       kz_datamgr:data_error().
+          {'ok', kzd_accounts:doc()} |
+          kz_datamgr:data_error().
 fetch_account_from_device(DeviceDoc) ->
     kzd_accounts:fetch(kz_doc:account_id(DeviceDoc)).
 
 -spec fetch_user_from_device(kzd_devices:doc()) ->
-                                    {'ok', kzd_users:doc()} |
-                                    kz_datamgr:data_error().
+          {'ok', kzd_users:doc()} |
+          kz_datamgr:data_error().
 fetch_user_from_device(DeviceDoc) ->
     fetch_user_from_device(DeviceDoc, kzd_devices:owner_id(DeviceDoc)).
 
 -spec fetch_user_from_device(kzd_devices:doc(), kz_term:api_ne_binary()) ->
-                                    {'ok', kzd_users:doc()} |
-                                    kz_datamgr:data_error().
+          {'ok', kzd_users:doc()} |
+          kz_datamgr:data_error().
 fetch_user_from_device(_DeviceDoc, 'undefined') ->
     {'ok', kzd_users:new()};
 fetch_user_from_device(DeviceDoc, OwnerId) ->
@@ -374,8 +374,8 @@ settings_advanced(JObj) ->
 -spec settings_datetime(kz_json:object()) -> kz_json:object().
 settings_datetime(JObj) ->
     kz_json:from_list(
-      [{<<"time">>, settings_time(JObj)}
-      ]).
+      [{<<"time">>, settings_time(JObj)}]
+     ).
 
 -spec settings_feature_keys(kz_json:object()) -> kz_json:object().
 settings_feature_keys(JObj) ->
@@ -392,9 +392,9 @@ settings_keys(Assoc, KeyKind, JObj) ->
     Family = get_family(JObj),
     AccountId = kz_doc:account_id(JObj),
 
-    Fun = fun(Key, null, Acc) ->
+    Fun = fun(Key, 'null', Acc) ->
                   %% workaround since `kz_json:set_value/3' is removing key if the value is `null'.
-                  kz_json:from_list([{Key, null} | kz_json:to_proplist(Acc)]);
+                  kz_json:from_list([{Key, 'null'} | kz_json:to_proplist(Acc)]);
              (Key, Value, Acc) ->
                   Type = kz_json:get_binary_value(<<"type">>, Value),
                   V = kz_json:get_value(<<"value">>, Value),
@@ -409,7 +409,7 @@ settings_keys(Assoc, KeyKind, JObj) ->
         LineKey -> kz_json:set_value(<<"account">>, LineKey, Keys)
     end.
 
--spec get_label(kz_json:object()) -> binary()|'undefined'.
+-spec get_label(kz_json:object()) -> binary() | 'undefined'.
 get_label(Doc) ->
     case {kz_json:get_ne_binary_value(<<"first_name">>, Doc)
          ,kz_json:get_ne_binary_value(<<"last_name">>, Doc)
@@ -497,8 +497,8 @@ get_feature_key_type(Assoc, Type, Brand, Family) ->
                              ).
 
 -spec get_user(kz_term:ne_binary(), kz_term:ne_binary(), binary()) ->
-                      {kz_term:ne_binary(), kz_term:api_ne_binary()} |
-                      'undefined'.
+          {kz_term:ne_binary(), kz_term:api_ne_binary()} |
+          'undefined'.
 get_user(AccountId, ?NE_BINARY = UserId, PrefixLabel) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     {'ok', UserJObj} = kz_datamgr:open_cache_doc(AccountDb, UserId),
@@ -524,8 +524,8 @@ get_user(AccountId, JObj, PrefixLabel) ->
     end.
 
 -spec get_user(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), binary()) ->
-                      {kz_term:ne_binary(), kz_term:api_ne_binary()} |
-                      'undefined'.
+          {kz_term:ne_binary(), kz_term:api_ne_binary()} |
+          'undefined'.
 get_user(_AccountId, _CustomLabel, 'undefined', _PrefixLabel) ->
     'undefined';
 get_user(AccountId, CustomLabel, UserId, PrefixLabel) ->
@@ -542,8 +542,8 @@ get_user(AccountId, CustomLabel, UserId, PrefixLabel) ->
     end.
 
 -spec get_label_value(kz_term:ne_binary() | kz_json:object() | pos_integer(), binary()) ->
-                             {kz_term:ne_binary(), kz_term:ne_binary()} |
-                             'undefined'.
+          {kz_term:ne_binary(), kz_term:ne_binary()} |
+          'undefined'.
 get_label_value(Value, PrefixLabel) when is_integer(Value) ->
     get_label_value(kz_term:to_binary(Value), PrefixLabel);
 get_label_value(?NE_BINARY = Value, PrefixLabel) ->
@@ -725,4 +725,3 @@ req_headers(Token) ->
       ,{"X-Kazoo-Cluster-ID", kzd_cluster:id()}
       ,{"User-Agent", kz_term:to_list(erlang:node())}
       ]).
-

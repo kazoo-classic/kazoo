@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Manage a FreeSWITCH node and its resources
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -20,6 +20,9 @@
 -export([sip_external_ip/1, sip_external_ip/2]).
 -export([fs_node/1]).
 -export([hostname/1]).
+-export([sessions/1]).
+-export([version/1]).
+-export([status_to_json/1]).
 -export([interface/1, interface/2]).
 -export([interfaces/1]).
 -export([instance_uuid/1]).
@@ -90,10 +93,6 @@
                               ,kz_json:from_list([{<<"module">>, <<"mod_skinny">>}
                                                  ,{<<"is_loaded">>, 'false'}
                                                  ,{<<"capability">>, <<"skinny">>}
-                                                 ])
-                              ,kz_json:from_list([{<<"module">>, <<"mod_sms">>}
-                                                 ,{<<"is_loaded">>, 'false'}
-                                                 ,{<<"capability">>, <<"sms">>}
                                                  ])
                               ]).
 
@@ -321,6 +320,14 @@ handle_call('instance_uuid', _, #state{instance_uuid='undefined', node=Node}=Sta
     {'reply', UUID, State#state{instance_uuid=UUID}};
 handle_call('instance_uuid', _, #state{instance_uuid=UUID}=State) ->
     {'reply', UUID, State};
+handle_call('sessions', _, #state{node=Node}=State) ->
+    Info = status_to_json(Node),
+    Resp = kz_json:get_json_value([<<"Runtime-Info">>, <<"Sessions">>], Info),
+    {'reply', Resp, State};
+handle_call('version', _, #state{node=Node}=State) ->
+    Info = status_to_json(Node),
+    Resp = kz_json:get_ne_binary_value([<<"Runtime-Info">>, <<"Version">>], Info),
+    {'reply', Resp, State};
 handle_call('node', _, #state{node=Node}=State) ->
     {'reply', Node, State}.
 
@@ -343,6 +350,8 @@ handle_cast('sync_channels', #state{node=Node}=State) ->
                 || J <- channels_as_json(Node)
                ],
     _ = ecallmgr_fs_channels:sync(Node, Channels),
+    {'noreply', State};
+handle_cast({'gen_listener', {'federators_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
 handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
@@ -512,7 +521,7 @@ process_cmd(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat) ->
     execute_command(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat).
 
 -spec execute_command(atom(), kz_term:proplist(), kz_term:ne_binary(), kz_json:json_term(), cmd_results(), 'list'|'binary') ->
-                             cmd_results().
+          cmd_results().
 execute_command(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat) ->
     ApiCmd = kz_term:to_atom(ApiCmd0, ?FS_CMD_SAFELIST),
     lager:debug("exec ~s on ~s", [ApiCmd, Node]),
@@ -636,3 +645,64 @@ interface(Node, Profile) ->
 -spec instance_uuid(atom() | binary()) -> kz_term:api_ne_binary().
 instance_uuid(Node) ->
     gen_server:call(find_srv(Node), 'instance_uuid').
+
+-spec sessions(fs_node()) -> kz_term:api_binary().
+sessions(Srv) ->
+    gen_server:call(find_srv(Srv), 'sessions').
+
+-spec version(fs_node()) -> kz_term:api_binary().
+version(Srv) ->
+    gen_server:call(find_srv(Srv), 'version').
+
+-spec status_to_json(fs_node()) -> kz_json:object().
+status_to_json(Node) ->
+    {'ok', RawStatus} = mod_kazoo:api(Node, 'status'),
+    parse_status(RawStatus).
+
+-spec parse_status(kz_term:binary()) -> kz_json:object().
+parse_status(Status) ->
+    Lines = binary:split(Status, <<"\n">>, ['global']),
+    RuntimeInfo = lists:foldl(fun parse_status_line/2, kz_json:new(), Lines),
+    kz_json:from_list([{<<"Runtime-Info">>, RuntimeInfo}]).
+
+-spec parse_status_line(kz_term:binary(), kz_json:object()) -> kz_json:object().
+parse_status_line(<<"Current ",_Rest/binary>>, Acc) -> Acc;
+parse_status_line(<<"UP ",_Rest/binary>>, Acc) -> Acc;
+parse_status_line(<<"FreeSWITCH ",Rest/binary>>, Acc) ->
+    {Start, _} = binary:match(Rest, <<"(">>),
+    {End, _} = binary:match(Rest, <<")">>),
+    Version = binary:part(Rest, Start+9, End-(Start+9)),
+    kz_json:set_value(<<"Version">>, Version, Acc);
+parse_status_line(Line, Acc) ->
+    Split = binary:split(Line, <<" ">>),
+    parse_session_data(Split, Acc).
+
+-spec parse_session_data(kz_term:binaries(), kz_json:object()) -> kz_json:object().
+parse_session_data([Count, <<"session(s) since startup">>], Acc) ->
+    kz_json:set_value([<<"Sessions">>, <<"count">>, <<"total">>], Count, Acc);
+parse_session_data([Count, <<"session(s) max">>], Acc) ->
+    kz_json:set_value([<<"Sessions">>, <<"count">>, <<"limit">>], Count, Acc);
+parse_session_data([Count, <<"session(s) - ",Rest/binary>>], Acc) ->
+    Other = parse_session_kvs(Rest),
+    Stats = kz_json:merge(kz_json:set_value(<<"active">>, kz_term:to_integer(Count), kz_json:new())
+                         ,Other),
+    kz_json:set_value([<<"Sessions">>, <<"count">>], Stats, Acc);
+parse_session_data([Count, <<"session(s) per Sec out of ",Rest/binary>>], Acc) ->
+    Other = parse_session_kvs(Rest),
+    Stats = kz_json:merge(kz_json:set_value(<<"current">>, kz_term:to_integer(Count), kz_json:new())
+                         ,Other),
+    kz_json:set_value([<<"Sessions">>, <<"rate">>], Stats, Acc);
+parse_session_data(_, Acc) -> Acc.
+
+-spec parse_session_kvs(kz_term:binary()) -> kz_json:object().
+parse_session_kvs(Rest) when is_binary(Rest) ->
+    Stats = binary:split(Rest, <<", ">>, ['global']),
+    lists:foldl(fun append_kv_pair/2, kz_json:new(), Stats).
+
+-spec append_kv_pair(kz_term:binary() | kz_term:binaries(), kz_json:object()) -> kz_json:object().
+append_kv_pair(Stat, Acc) when is_binary(Stat) ->
+    append_kv_pair(binary:split(Stat, <<" ">>, ['global']), Acc);
+append_kv_pair([A, B], Acc) ->
+    kz_json:set_value(A, B, Acc);
+append_kv_pair([_, _, C, _], Acc) ->
+    kz_json:set_value(<<"peak5Min">>, C, Acc).

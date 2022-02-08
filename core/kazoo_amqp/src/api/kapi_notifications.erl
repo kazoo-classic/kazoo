@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Notification messages, like voicemail left.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -65,6 +65,7 @@
         ,voicemail_full/1, voicemail_full_v/1
         ,voicemail_new/1, voicemail_new_v/1
         ,voicemail_saved/1, voicemail_saved_v/1
+        ,voicemail_deleted/1, voicemail_deleted_v/1
 
          %% Webhook notifications
         ,webhook/1, webhook_v/1
@@ -75,6 +76,9 @@
 
          %% skeleton notification
         ,skel/1, skel_v/1
+
+         %% number_feature_manual_action
+        ,number_feature_manual_action/1, number_feature_manual_action_v/1
         ]).
 
 -export([%% Account notifications
@@ -106,6 +110,7 @@
 
          %% Register notifications
         ,publish_denied_emergency_bridge/1, publish_denied_emergency_bridge/2
+        ,emergency_bridge/1, emergency_bridge_v/1, publish_emergency_bridge/1, publish_emergency_bridge/2
 
          %% SIP notifications
         ,publish_deregister/1, publish_deregister/2
@@ -125,6 +130,7 @@
         ,publish_voicemail_full/1, publish_voicemail_full/2
         ,publish_voicemail_new/1, publish_voicemail_new/2
         ,publish_voicemail_saved/1, publish_voicemail_saved/2
+        ,publish_voicemail_deleted/1, publish_voicemail_deleted/2
 
          %% Webhook notifications
         ,publish_webhook/1, publish_webhook/2
@@ -135,6 +141,9 @@
 
          %% skeleton notification
         ,publish_skel/1, publish_skel/2
+
+         %% number_feature_manual_action
+        ,publish_number_feature_manual_action/1, publish_number_feature_manual_action/2
         ]).
 
 -include_lib("kz_amqp_util.hrl").
@@ -821,6 +830,47 @@ denied_emergency_bridge_definition() ->
                     ,types = []
                     }.
 
+-spec emergency_bridge_definition() -> kapi_definition:api().
+emergency_bridge_definition() ->
+    EventName = <<"emergency_bridge">>,
+    #kapi_definition{name = EventName
+                    ,friendly_name = <<"Emergency Call Placed">>
+                    ,description = <<"This event is triggered when a call to an number classified as emergency is placed">>
+                    ,build_fun = fun emergency_bridge/1
+                    ,validate_fun = fun emergency_bridge_v/1
+                    ,publish_fun = fun publish_emergency_bridge/1
+                    ,binding = ?BINDING_STRING(<<"registration">>, <<"emergency_bridge">>)
+                    ,restrict_to = 'emergency_bridge'
+                    ,required_headers = [<<"Account-ID">>
+                                        ,<<"Call-ID">>
+                                        ]
+                    ,optional_headers = [<<"Account-Name">>
+                                        ,<<"Authorizing-ID">>
+                                        ,<<"Device-Name">>
+                                        ,<<"Emergency-To-DID">>
+                                        ,<<"Emergency-Test-Call">>
+                                        ,<<"Emergency-Caller-ID-Name">>
+                                        ,<<"Emergency-Caller-ID-Number">>
+                                        ,<<"Emergency-Address-Street-1">>
+                                        ,<<"Emergency-Address-Street-2">>
+                                        ,<<"Emergency-Address-City">>
+                                        ,<<"Emergency-Address-Region">>
+                                        ,<<"Emergency-Address-Postal-Code">>
+                                        ,<<"Emergency-Address-Latitude">>
+                                        ,<<"Emergency-Address-Longitude">>
+                                        ,<<"Emergency-Notfication-Contact-Emails">>
+                                        ,<<"Outbound-Caller-ID-Name">>
+                                        ,<<"Outbound-Caller-ID-Number">>
+                                        ,<<"Owner-ID">>
+                                        ,<<"User-First-Name">>
+                                        ,<<"User-Last-Name">>
+                                        ,<<"User-Email">>
+                                             | ?DEFAULT_OPTIONAL_HEADERS
+                                        ]
+                    ,values = ?NOTIFY_VALUES(EventName)
+                    ,types = []
+                    }.
+
 
 %%%=============================================================================
 %%% SIP Notifications Definitions
@@ -1124,6 +1174,23 @@ voicemail_full_definition() ->
                                         ,<<"Voicemail-Transcription">>
                                              | ?DEFAULT_OPTIONAL_HEADERS
                                         ]).
+-define(VOICEMAIL_DELETED_HEADERS, [<<"Account-ID">>
+                                   ,<<"From-Realm">>
+                                   ,<<"From-User">>
+                                   ,<<"To-Realm">>
+                                   ,<<"To-User">>
+                                   ,<<"Reason">>
+                                   ,<<"Voicemail-Box">>
+                                   ,<<"Voicemail-ID">>
+                                   ,<<"Voicemail-Timestamp">>
+                                   ]).
+-define(OPTIONAL_VOICEMAIL_DELETED_HEADERS, [<<"Call-ID">>
+                                            ,<<"Caller-ID-Name">>
+                                            ,<<"Caller-ID-Number">>
+                                            ,<<"Voicemail-Length">>
+                                            ,<<"Voicemail-Transcription">>
+                                                 | ?DEFAULT_OPTIONAL_HEADERS
+                                            ]).
 %%------------------------------------------------------------------------------
 %% @doc Get Voicemail New Notification API definition.
 %% @end
@@ -1163,6 +1230,25 @@ voicemail_saved_definition() ->
                     ,types = []
                     }.
 
+%%------------------------------------------------------------------------------
+%% @doc Get Voicemail Deleted Notification API definition.
+%% @end
+%%------------------------------------------------------------------------------
+-spec voicemail_deleted_definition() -> kapi_definition:api().
+voicemail_deleted_definition() ->
+    #kapi_definition{name = <<"voicemail_deleted">>
+                    ,friendly_name = <<"Voicemail Message Deleted">>
+                    ,description = <<"This event is triggered any time a voicemail message is deleted in the voicemail box">>
+                    ,build_fun = fun voicemail_deleted/1
+                    ,validate_fun = fun voicemail_deleted_v/1
+                    ,publish_fun = fun publish_voicemail_deleted/1
+                    ,binding = ?BINDING_STRING(<<"voicemail">>, <<"deleted">>)
+                    ,restrict_to = 'voicemail_deleted'
+                    ,required_headers = ?VOICEMAIL_DELETED_HEADERS
+                    ,optional_headers = ?OPTIONAL_VOICEMAIL_DELETED_HEADERS
+                    ,values = ?NOTIFY_VALUES(<<"voicemail_deleted">>)
+                    ,types = []
+                    }.
 
 %%%=============================================================================
 %%% Webhook Notifications Definitions
@@ -1214,6 +1300,38 @@ webhook_disabled_definition() ->
                     }.
 
 %%%=============================================================================
+%%% Phone Service Required Action Notifications Definitions
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Get Phone Service Required Action API definition.
+%% @end
+%%------------------------------------------------------------------------------
+-spec number_feature_manual_action_definition() -> kapi_definition:api().
+number_feature_manual_action_definition() ->
+    EventName = <<"number_feature_manual_action">>,
+    Category = <<"account">>,
+    #kapi_definition{name = EventName
+                    ,friendly_name = <<"Number Feature Manual Action Required">>
+                    ,description = <<"This event is triggered when a number feature is activate/deactivated and a manual action is required">>
+                    ,build_fun = fun number_feature_manual_action/1
+                    ,validate_fun = fun number_feature_manual_action_v/1
+                    ,publish_fun = fun publish_number_feature_manual_action/1
+                    ,binding = ?BINDING_STRING(Category, EventName)
+                    ,restrict_to = 'number_feature_manual_action_required'
+                    ,required_headers = [<<"Account-ID">>
+                                        ,<<"Number">>
+                                        ,<<"Feature">>
+                                        ]
+                    ,optional_headers = ?DEFAULT_OPTIONAL_HEADERS
+                    ,values = ?NOTIFY_VALUES(EventName)
+                    ,types = [{<<"Account-ID">>, fun kz_term:is_ne_binary/1}
+                             ,{<<"Number">>, fun kz_term:is_ne_binary/1}
+                             ,{<<"Feature">>, fun kz_json:is_json_object/1}
+                             ]
+                    }.
+
+%%%=============================================================================
 %%% API
 %%%=============================================================================
 
@@ -1247,6 +1365,7 @@ api_definitions() ->
     ,port_unconfirmed_definition()
     ,ported_definition()
     ,denied_emergency_bridge_definition()
+    ,emergency_bridge_definition()
     ,deregister_definition()
     ,first_occurrence_definition()
     ,missed_call_definition()
@@ -1260,6 +1379,7 @@ api_definitions() ->
     ,voicemail_saved_definition()
     ,webhook_definition()
     ,webhook_disabled_definition()
+    ,number_feature_manual_action_definition()
     ].
 
 %%------------------------------------------------------------------------------
@@ -1320,6 +1440,8 @@ api_definition(<<"ported">>) ->
     ported_definition();
 api_definition(<<"denied_emergency_bridge">>) ->
     denied_emergency_bridge_definition();
+api_definition(<<"emergency_bridge">>) ->
+    emergency_bridge_definition();
 api_definition(<<"deregister">>) ->
     deregister_definition();
 api_definition(<<"first_occurrence">>) ->
@@ -1336,6 +1458,8 @@ api_definition(<<"new_user">>) ->
     new_user_definition();
 api_definition(<<"password_recovery">>) ->
     password_recovery_definition();
+api_definition(<<"voicemail_deleted">>) ->
+    voicemail_deleted_definition();
 api_definition(<<"voicemail_full">>) ->
     voicemail_full_definition();
 api_definition(<<"voicemail_new">>) ->
@@ -1345,7 +1469,9 @@ api_definition(<<"voicemail_saved">>) ->
 api_definition(<<"webhook">>) ->
     webhook_definition();
 api_definition(<<"webhook_disabled">>) ->
-    webhook_disabled_definition().
+    webhook_disabled_definition();
+api_definition(<<"number_feature_manual_action">>) ->
+    number_feature_manual_action_definition().
 
 %%------------------------------------------------------------------------------
 %% @doc Bind to a queue to this API exchange and events.
@@ -2159,6 +2285,31 @@ publish_denied_emergency_bridge(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, Values, fun denied_emergency_bridge/1),
     kz_amqp_util:notifications_publish(Binding, Payload, ContentType).
 
+%%------------------------------------------------------------------------------
+%% @doc Takes proplist, creates JSON string and publish it on AMQP.
+%% @end
+%%------------------------------------------------------------------------------
+-spec emergency_bridge(kz_term:api_terms()) -> api_formatter_return().
+emergency_bridge(Prop) ->
+    build_message(Prop, emergency_bridge_definition()).
+
+-spec emergency_bridge_v(kz_term:api_terms()) -> boolean().
+emergency_bridge_v(Prop) ->
+    validate(Prop, emergency_bridge_definition()).
+
+-spec publish_emergency_bridge(kz_term:api_terms()) -> 'ok'.
+publish_emergency_bridge(JObj) ->
+    publish_emergency_bridge(JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_emergency_bridge(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
+publish_emergency_bridge(API, ContentType) ->
+    Definition = emergency_bridge_definition(),
+    {'ok', Payload} = kz_api:prepare_api_payload(API
+                                                ,kapi_definition:values(Definition)
+                                                ,kapi_definition:build_fun(Definition)
+                                                ),
+    kz_amqp_util:notifications_publish(kapi_definition:binding(Definition), Payload, ContentType).
+
 
 %%%=============================================================================
 %%% Register Notifications Functions
@@ -2447,6 +2598,29 @@ publish_voicemail_saved(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, Values, fun voicemail_saved/1),
     kz_amqp_util:notifications_publish(Binding, Payload, ContentType).
 
+%%------------------------------------------------------------------------------
+%% @doc Takes prop-list, creates JSON string and publish it on AMQP.
+%% @end
+%%------------------------------------------------------------------------------
+-spec voicemail_deleted(kz_term:api_terms()) -> api_formatter_return().
+voicemail_deleted(Prop) ->
+    build_message(Prop, voicemail_deleted_definition()).
+
+-spec voicemail_deleted_v(kz_term:api_terms()) -> boolean().
+voicemail_deleted_v(Prop) ->
+    validate(Prop, voicemail_deleted_definition()).
+
+-spec publish_voicemail_deleted(kz_term:api_terms()) -> 'ok'.
+publish_voicemail_deleted(JObj) ->
+    publish_voicemail_deleted(JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_voicemail_deleted(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
+publish_voicemail_deleted(API, ContentType) ->
+    #kapi_definition{binding = Binding
+                    ,values = Values
+                    } = voicemail_deleted_definition(),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, Values, fun voicemail_deleted/1),
+    kz_amqp_util:notifications_publish(Binding, Payload, ContentType).
 
 %%%=============================================================================
 %%% Webhook Notifications Functions
@@ -2499,4 +2673,32 @@ publish_webhook_disabled(API, ContentType) ->
                     ,values = Values
                     } = webhook_disabled_definition(),
     {'ok', Payload} = kz_api:prepare_api_payload(API, Values, fun webhook_disabled/1),
+    kz_amqp_util:notifications_publish(Binding, Payload, ContentType).
+
+%%%=============================================================================
+%%% Phone Service Action Required Functions
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Takes proplist, creates JSON string and publish it on AMQP.
+%% @end
+%%------------------------------------------------------------------------------
+-spec number_feature_manual_action(kz_term:api_terms()) -> api_formatter_return().
+number_feature_manual_action(Prop) ->
+    build_message(Prop, number_feature_manual_action_definition()).
+
+-spec number_feature_manual_action_v(kz_term:api_terms()) -> boolean().
+number_feature_manual_action_v(Prop) ->
+    validate(Prop, number_feature_manual_action_definition()).
+
+-spec publish_number_feature_manual_action(kz_term:api_terms()) -> 'ok'.
+publish_number_feature_manual_action(JObj) ->
+    publish_number_feature_manual_action(JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_number_feature_manual_action(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
+publish_number_feature_manual_action(API, ContentType) ->
+    #kapi_definition{binding = Binding
+                    ,values = Values
+                    } = number_feature_manual_action_definition(),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, Values, fun number_feature_manual_action/1),
     kz_amqp_util:notifications_publish(Binding, Payload, ContentType).

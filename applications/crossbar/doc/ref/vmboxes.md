@@ -10,11 +10,15 @@ Schema for a voicemail box
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
+`announcement_only` | Determine if the mailbox should only play announcements | `boolean()` | `false` | `false` | `unsupported`
 `check_if_owner` | Determines if when the user calls their own voicemail they should be prompted to sign in | `boolean()` | `true` | `false` | `supported`
 `delete_after_notify` | Move the voicemail to delete folder after the notification has been sent | `boolean()` | `false` | `false` | `supported`
 `flags.[]` |   | `string()` |   | `false` | `supported`
 `flags` | Flags set by external applications | `array(string())` |   | `false` | `supported`
+`include_message_on_notify` | Whether or not to include the attachment when sending a new voicemail to email notification | `boolean()` | `true` | `false` | `supported`
+`include_transcription_on_notify` | Whether or not to include the transcription when sending a new voicemail to email notification | `boolean()` | `true` | `false` | `supported`
 `is_setup` | Determines if the user has completed the initial configuration | `boolean()` | `false` | `false` | `supported`
+`is_voicemail_ff_rw_enabled` | callflow allow fastforward and rewind during voicemail message playback | `boolean()` | `false` | `false` |  
 `mailbox` | The voicemail box number | `string(1..30)` |   | `true` | `supported`
 `media.unavailable` | The ID of a media object that should be used as the unavailable greeting | `string(32)` |   | `false` | `supported`
 `media` | The media (prompt) parameters | `object()` | `{}` | `false` | `supported`
@@ -30,10 +34,12 @@ Key | Description | Type | Default | Required | Support Level
 `pin` | The pin number for the voicemail box | `string(4..6)` |   | `false` | `supported`
 `require_pin` | Determines if a pin is required to check the voicemail from the users devices | `boolean()` | `false` | `false` | `supported`
 `save_after_notify` | Move the voicemail to save folder after the notification has been sent (This setting will override delete_after_notify) | `boolean()` | `false` | `false` | `supported`
+`seek_duration_ms` | callflow fastforward and rewind seek duration | `integer()` | `10000` | `false` |  
 `skip_envelope` | Determines if the envelope should be skipped | `boolean()` | `false` | `false` | `beta`
 `skip_greeting` | Determines if the greeting should be skipped | `boolean()` | `false` | `false` | `supported`
 `skip_instructions` | Determines if the instructions after the greeting and prior to composing a message should be played | `boolean()` | `false` | `false` | `supported`
 `timezone` | The default timezone | `string(5..32)` |   | `false` | `supported`
+`transcribe` | Transcribe voicemail using ASR engine | `boolean()` | `false` | `false` | `supported`
 
 ### notify.callback
 

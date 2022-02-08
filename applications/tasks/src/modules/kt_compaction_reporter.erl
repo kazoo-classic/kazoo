@@ -1,6 +1,12 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2019-, 2600Hz
-%%% @doc
+%%% @copyright (C) 2021-2022, 2600Hz
+%%% @doc Collect and save/store compaction job's information for jobs started via sup commands,
+%%% CSV JOBS app, or auto compaction trigger.
+%%%
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%%
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kt_compaction_reporter).
@@ -70,12 +76,7 @@
 %%------------------------------------------------------------------------------
 -spec start_link() -> kz_types:startlink_ret().
 start_link() ->
-    case gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []) of
-        {'error', {'already_started', Pid}} ->
-            'true' = link(Pid),
-            {'ok', Pid};
-        Other -> Other
-    end.
+    gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
 %%------------------------------------------------------------------------------
 %% @doc Start tracking a compaction job
@@ -175,7 +176,7 @@ history() ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec history(kz_time:year(), kz_time:month()) -> {'ok', kz_json:json_terms()} |
-                                                  {'error', atom()}.
+          {'error', atom()}.
 history(Year, Month) when is_integer(Year)
                           andalso is_integer(Month) ->
     {'ok', AccountId} = kapps_util:get_master_account_id(),
@@ -230,6 +231,7 @@ job_info(<<JobId/binary>>) ->
 %%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
+    lager:info("started ~s", [?MODULE]),
     {'ok', #{}}.
 
 %%------------------------------------------------------------------------------
@@ -251,6 +253,7 @@ handle_call(_Request, _From, State) ->
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'new_job', Pid, Node, CallId, DbsAndSizes}, State) ->
+    lager:info("start collecting data for compaction job ~p", [CallId]),
     TotalDbs = length(DbsAndSizes),
     Stats = #{'id' => CallId
              ,'found_dbs' => TotalDbs
@@ -407,7 +410,7 @@ handle_info(_Info, State) ->
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("~s terminating with reason: ~p~n when state was: ~p"
-               ,[?MODULE, _Reason, _State]
+               ,[?SERVER, _Reason, _State]
                ).
 
 %%------------------------------------------------------------------------------
@@ -427,21 +430,19 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec stats_to_status_fold(kz_term:ne_binary(), compaction_stats(), [kz_term:proplist()]) ->
-                                  [kz_term:proplist()].
-stats_to_status_fold(_CallId, Stats = #{'queued_dbs' := QueuedDBs}, Acc) ->
+          [kz_term:proplist()].
+stats_to_status_fold(_CallId, Stats = #{'found_dbs' := FoundDBs}, Acc) ->
     Keys = ['id', 'found_dbs', 'compacted_dbs', 'queued_dbs', 'skipped_dbs', 'current_db',
             'found_shards', 'compacted_shards', 'recovered_disk', 'pid', 'node', 'started'],
-    ToBin = fun(Something) -> kz_term:to_binary(Something) end,
-    StatsProp = [{ToBin(Key), ToBin(maps:get(Key, Stats))} || Key <- Keys],
-    case QueuedDBs =:= 0 of
-        'true' ->
-            %% This happens when it finishes compacting on the first node so now
-            %% `found_dbs = compacted_dbs + skipped_dbs' which means `queued_dbs = 0' and
-            %% also it means it is still compacting on other nodes otherwise this status
-            %% were not being build.
-            MsgProp = [{<<"msg">>, <<"Still compacting on other nodes">>}],
+    StatsProp = [{kz_term:to_binary(Key), kz_term:to_binary(maps:get(Key, Stats))} || Key <- Keys],
+    case FoundDBs of
+        0 ->
+            %% If compaction is running and `found_dbs=0' means it let this module know a new
+            %% compaction job is running but it is missing to report the dbs to be compacted.
+            %% Which means it is still loading dbs (sorting).
+            MsgProp = [{<<"NOTE">>, <<"Still listing/sorting databases.">>}],
             [StatsProp ++ MsgProp | Acc];
-        'false' ->
+        _ ->
             [StatsProp | Acc]
     end.
 
@@ -495,7 +496,7 @@ save_compaction_stats(#{'id' := Id
     lager:debug("saving stats after compaction job completion: ~p", [Stats]),
     {'ok', AccountId} = kapps_util:get_master_account_id(),
     {'ok', Doc} = kazoo_modb:save_doc(AccountId, kz_json:from_map(Map)),
-    lager:debug("created doc after compaction job completion: ~p", [Doc]),
+    lager:info("created doc after compaction job completion: ~p", [Doc]),
     'ok'.
 
 -spec normalize_db(kz_term:ne_binary()) -> kz_term:ne_binary().

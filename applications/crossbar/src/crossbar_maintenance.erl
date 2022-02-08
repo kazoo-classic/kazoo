@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @end
@@ -19,6 +19,7 @@
         ,register_views/0
         ,flush/0
         ]).
+
 -export([find_account_by_number/1]).
 -export([find_account_by_name/1]).
 -export([find_account_by_realm/1]).
@@ -26,7 +27,7 @@
 -export([enable_account/1, disable_account/1]).
 -export([promote_account/1, demote_account/1]).
 -export([allow_account_number_additions/1, disallow_account_number_additions/1]).
--export([create_account/4]).
+-export([create_account/4, create_account/5, create_account/6]).
 -export([create_account/1]).
 -export([move_account/2]).
 -export([descendants_count/0, descendants_count/1]).
@@ -52,6 +53,8 @@
 -export([update_schemas/0]).
 
 -export([db_init/0]).
+
+-export([auth_token/0, auth_token/1]).
 
 -include("crossbar.hrl").
 -include_lib("kazoo/include/kz_system_config.hrl").
@@ -214,7 +217,7 @@ running_modules() -> crossbar_bindings:modules_loaded().
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_account_by_number(input_term()) -> {'ok', kz_term:ne_binary()} |
-                                              {'error', any()}.
+          {'error', any()}.
 find_account_by_number(Number) when not is_binary(Number) ->
     find_account_by_number(kz_term:to_binary(Number));
 find_account_by_number(Number) ->
@@ -238,9 +241,9 @@ find_account_by_number(Number) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_account_by_name(input_term()) ->
-                                  {'ok', kz_term:ne_binary()} |
-                                  {'multiples', [kz_term:ne_binary(),...]} |
-                                  {'error', any()}.
+          {'ok', kz_term:ne_binary()} |
+          {'multiples', [kz_term:ne_binary(),...]} |
+          {'error', any()}.
 find_account_by_name(Name) when not is_binary(Name) ->
     find_account_by_name(kz_term:to_binary(Name));
 find_account_by_name(Name) ->
@@ -264,9 +267,9 @@ find_account_by_name(Name) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_account_by_realm(input_term()) ->
-                                   {'ok', kz_term:ne_binary()} |
-                                   {'multiples', [kz_term:ne_binary(),...]} |
-                                   {'error', any()}.
+          {'ok', kz_term:ne_binary()} |
+          {'multiples', [kz_term:ne_binary(),...]} |
+          {'error', any()}.
 find_account_by_realm(Realm) when not is_binary(Realm) ->
     find_account_by_realm(kz_term:to_binary(Realm));
 find_account_by_realm(Realm) ->
@@ -290,8 +293,8 @@ find_account_by_realm(Realm) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_account_by_id(input_term()) ->
-                                {'ok', kz_term:ne_binary()} |
-                                {'error', any()}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', any()}.
 find_account_by_id(Id) when is_binary(Id) ->
     print_account_info(kz_util:format_account_id(Id, 'encoded'));
 find_account_by_id(Id) ->
@@ -384,19 +387,29 @@ demote_account(AccountId) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec create_account(input_term(), input_term(), input_term(), input_term()) -> 'ok' | 'failed'.
-create_account(AccountName, Realm, Username, Password)
+create_account(AccountName, Realm, Username, Password) ->
+    create_account(AccountName, Realm, Username, Password, kz_datamgr:get_uuid()).
+
+-spec create_account(input_term(), input_term(), input_term(), input_term(), input_term()) -> 'ok' | 'failed'.
+create_account(AccountName, Realm, Username, Password, AccountId) ->
+    create_account(AccountName, Realm, Username, Password, AccountId, kz_datamgr:get_uuid()).
+
+-spec create_account(input_term(), input_term(), input_term(), input_term(), input_term(), input_term()) -> 'ok' | 'failed'.
+create_account(AccountName, Realm, Username, Password, AccountId, UserId)
   when is_binary(AccountName),
        is_binary(Realm),
        is_binary(Username),
-       is_binary(Password) ->
-    Account = kz_json:set_values([{<<"_id">>, kz_datamgr:get_uuid()}
+       is_binary(Password),
+       is_binary(AccountId),
+       is_binary(UserId) ->
+    Account = kz_json:set_values([{<<"_id">>, AccountId}
                                  ,{<<"name">>, AccountName}
                                  ,{<<"realm">>, Realm}
                                  ]
                                 ,kzd_accounts:new()
                                 ),
 
-    User = kz_json:set_values([{<<"_id">>, kz_datamgr:get_uuid()}
+    User = kz_json:set_values([{<<"_id">>, UserId}
                               ,{<<"username">>, Username}
                               ,{<<"password">>, Password}
                               ,{<<"first_name">>, <<"Account">>}
@@ -421,11 +434,13 @@ create_account(AccountName, Realm, Username, Password)
             io:format("failed to create '~s': ~p~n", [AccountName, _R]),
             'failed'
     end;
-create_account(AccountName, Realm, Username, Password) ->
+create_account(AccountName, Realm, Username, Password, AccountId, UserId) ->
     create_account(kz_term:to_binary(AccountName)
                   ,kz_term:to_binary(Realm)
                   ,kz_term:to_binary(Username)
                   ,kz_term:to_binary(Password)
+                  ,kz_term:to_binary(AccountId)
+                  ,kz_term:to_binary(UserId)
                   ).
 
 -spec maybe_promote_account(cb_context:context()) -> {'ok', cb_context:context()}.
@@ -448,7 +463,7 @@ maybe_promote_account(Context) ->
     end.
 
 -spec create_account_and_user(kz_json:object(), kz_json:object()) ->
-                                     {'ok', cb_context:context()}.
+          {'ok', cb_context:context()}.
 create_account_and_user(Account, User) ->
     Funs = [fun prechecks/1
            ,{fun validate_account/2, Account}
@@ -463,7 +478,7 @@ create_account_and_user(Account, User) ->
                ).
 
 -spec create_fold(fun() | {fun(), kz_json:object()}, {'ok', cb_context:context()}) ->
-                         {'ok', cb_context:context()}.
+          {'ok', cb_context:context()}.
 create_fold({F, V}, {'ok', C}) -> F(V, C);
 create_fold(F, {'ok', C}) -> F(C).
 
@@ -777,7 +792,7 @@ get_migrateable_ring_group_callflows(AccountDb, JObjs) ->
                ).
 
 -spec get_migrateable_ring_group_callflow(kz_json:object(), kz_json:objects(), kz_term:ne_binary()) ->
-                                                 kz_json:objects().
+          kz_json:objects().
 get_migrateable_ring_group_callflow(JObj, Acc, AccountDb) ->
     case {kz_json:get_ne_binary_value([<<"value">>, <<"group_id">>], JObj)
          ,kz_json:get_ne_binary_value([<<"value">>, <<"type">>], JObj)
@@ -1155,7 +1170,7 @@ add_image(AppId, MasterAccountDb, ImageId, ImageData) ->
     end.
 
 -spec read_images(image_paths()) ->
-                         {'ok', [{file:filename_all(), binary()}]}.
+          {'ok', [{file:filename_all(), binary()}]}.
 read_images(Images) ->
     {'ok', [{Image, read_image(ImagePath)}
             || {Image, ImagePath} <- Images
@@ -1167,8 +1182,8 @@ read_image(File) ->
     ImageData.
 
 -spec find_metadata(file:filename_all()) ->
-                           {'ok', kz_json:object()} |
-                           {'invalid_data', kz_term:proplist()}.
+          {'ok', kz_json:object()} |
+          {'invalid_data', kz_term:proplist()}.
 find_metadata(AppPath) ->
     {'ok', Bin} = file:read_file(filename:join([AppPath, <<"metadata">>, <<"app.json">>])),
     JSON = kz_json:decode(Bin),
@@ -1200,9 +1215,9 @@ app(AppNameOrId) ->
     end.
 
 -spec find_app(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                      {'ok', kz_json:object()} |
-                      kz_datamgr:data_error() |
-                      {'error', 'multiple_results'}.
+          {'ok', kz_json:object()} |
+          kz_datamgr:data_error() |
+          {'error', 'multiple_results'}.
 find_app(Db, Name) ->
     ViewOptions = [{'key', Name}
                   ,'include_docs'
@@ -1349,3 +1364,20 @@ db_init() ->
 -spec register_views() -> 'ok'.
 register_views() ->
     kz_datamgr:register_views_from_folder('crossbar').
+
+-spec auth_token() -> kz_term:ne_binary().
+auth_token() ->
+    {'ok', AccountId} = kapps_util:get_master_account_id(),
+    auth_token(AccountId).
+
+-spec auth_token(kz_term:ne_binary()) -> kz_term:ne_binary().
+auth_token(<<AccountId/binary>>) ->
+    {'ok', _Account} = kzd_accounts:fetch(AccountId),
+    Context = cb_context:setters(cb_context:new()
+                                ,[{fun cb_context:set_resp_status/2, 'success'}
+                                 ,{fun cb_context:set_doc/2, kz_json:from_list([{<<"account_id">>, AccountId}])}
+                                 ,{fun cb_context:store/3, 'auth_type', <<"account_api_token">>}
+                                 ]
+                                ),
+    Context1 = crossbar_auth:create_auth_token(Context, 'cb_api_auth'),
+    cb_context:auth_token(Context1).

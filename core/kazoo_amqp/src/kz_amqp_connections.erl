@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -25,12 +25,14 @@
 -export([available/1]).
 -export([unavailable/1]).
 -export([is_available/0]).
--export([wait_for_available/0]).
+-export([wait_for_available/0, wait_for_available/1]).
 -export([wait_for_available_tag/1]).
 
 -export([brokers_for_zone/1, brokers_for_zone/2, broker_for_zone/1]).
 -export([brokers_with_tag/1, brokers_with_tag/2, broker_with_tag/1]).
 -export([is_zone_available/1, is_tag_available/1, is_hidden_broker/1]).
+
+-export([configured_brokers/0]).
 
 -export([start_link/0]).
 
@@ -51,7 +53,17 @@
 -record(state, {watchers = sets:new() :: sets:set(pid())}).
 -type state() :: #state{}.
 
--export_type([kz_amqp_connections/0]).
+
+-type broker_config() :: {'name', atom()} |
+                         {'zone', atom()} |
+                         {'uri', list()} |
+                         {'amqp_uri', list()}.
+-type configured_broker() :: {atom(), [broker_config()]}.
+-type configured_brokers() :: [configured_broker()].
+
+-export_type([kz_amqp_connections/0
+             ,configured_brokers/0
+             ]).
 
 %%%=============================================================================
 %%% API
@@ -66,14 +78,14 @@ start_link() ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
 -spec new(kz_amqp_connection() | kz_term:text()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
+          kz_amqp_connection() |
+          {'error', any()}.
 new(Broker) -> new(Broker, 'local').
 
 -spec new(kz_amqp_connection() | kz_term:text(), kz_term:text()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
-new(<<_/binary>> = Broker, Zone) ->
+          kz_amqp_connection() |
+          {'error', any()}.
+new(<<Broker/binary>>, Zone) ->
     case broker_connections(Broker) =:= 0 of
         'false' -> {'error', 'exists'};
         'true' -> add(Broker, Zone)
@@ -82,13 +94,13 @@ new(Broker, Zone) ->
     new(kz_term:to_binary(Broker), Zone).
 
 -spec add(kz_amqp_connection() | kz_term:text()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
+          kz_amqp_connection() |
+          {'error', any()}.
 add(Broker) -> add(Broker, 'local').
 
 -spec add(kz_amqp_connection() | kz_term:text(), kz_term:text()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
+          kz_amqp_connection() |
+          {'error', any()}.
 add(#kz_amqp_connection{broker=Broker, tags=Tags}=Connection, Zone) ->
     case kz_amqp_connection_sup:add(Connection) of
         {'ok', Pid} ->
@@ -108,8 +120,8 @@ add(Broker, Zone) ->
     add(Broker, Zone, []).
 
 -spec add(kz_amqp_connection() | kz_term:text(), kz_term:text(), list()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
+          kz_amqp_connection() |
+          {'error', any()}.
 add(Broker, Zone, Tags) ->
     case catch amqp_uri:parse(kz_term:to_list(Broker)) of
         {'EXIT', _R} ->
@@ -243,7 +255,8 @@ federated_brokers() ->
                                       },
                   [{'andalso',
                     {'=/=', '$1', 'local'},
-                    {'=:=', '$3', 'false'}}
+                    {'=:=', '$3', 'false'}
+                   }
                   ],
                   ['$2']
                  }
@@ -269,7 +282,12 @@ broker_zone(Broker) ->
 is_available() -> primary_broker() =/= 'undefined'.
 
 -spec wait_for_available() -> 'ok'.
-wait_for_available() -> wait_for_available(fun is_available/0, 'infinity').
+wait_for_available() ->
+    wait_for_available('infinity').
+
+-spec wait_for_available(timeout()) -> 'ok'.
+wait_for_available(Timeout) ->
+    wait_for_available(fun is_available/0, Timeout).
 
 -spec wait_for_available_tag(binary()) -> 'ok'.
 wait_for_available_tag(Tag) -> wait_for_available(fun() -> is_tag_available(Tag) end, 'infinity').
@@ -422,8 +440,8 @@ notify_watcher(Watcher) ->
     'ok'.
 
 -spec wait_for_notification(timeout()) ->
-                                   'ok' |
-                                   {'error', 'timeout'}.
+          'ok' |
+          {'error', 'timeout'}.
 wait_for_notification(Timeout) ->
     receive
         {?MODULE, 'connection_available'} -> 'ok'
@@ -501,3 +519,10 @@ is_tag_available(Tag) -> broker_with_tag(Tag) =/= 'undefined'.
 
 -spec is_hidden_broker(list()) -> boolean().
 is_hidden_broker(Tags) -> lists:member(?AMQP_HIDDEN_TAG, Tags).
+
+-spec configured_brokers() -> configured_brokers().
+configured_brokers() ->
+    case kz_config:get_section('zone') of
+        [] -> kz_config:get_section('amqp');
+        Zones -> Zones
+    end.

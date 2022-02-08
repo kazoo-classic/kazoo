@@ -27,7 +27,8 @@
 %% `{ContentType, Content}'
 -type rendered_templates() :: [rendered_template()].
 
--type email_map() :: [{kz_term:ne_binary(), kz_term:api_ne_binaries()}].
+-type email_item() :: {kz_term:ne_binary(), kz_term:api_ne_binaries()}.
+-type email_map() :: [email_item()].
 %% `{"to"/"cc"/etc, [Address,...]}'
 
 -type init_param() :: {'macros', kz_json:object()} |
@@ -206,12 +207,15 @@
         ,?MACRO_VALUE(<<"fax.remote_station_id">>, <<"fax_remote_station_id">>, <<"Fax Remote Station ID">>, <<"Fax Remote Station ID">>)
         ]).
 
+-define(FAX_OUTBOUND_MACROS
+       ,[?MACRO_VALUE(<<"fax.subject">>, <<"subject">>, <<"Fax Subject">>, <<"Fax Subject">>)
+        ]).
+
 -define(FAX_ERROR_MACROS
        ,[?MACRO_VALUE(<<"fax.info">>, <<"fax_info">>, <<"Fax Info">>, <<"Fax Info">>)
         ,?MACRO_VALUE(<<"error.call_info">>, <<"error_call_info">>, <<"Fax Call Error">>, <<"Fax Call Error">>)
         ,?MACRO_VALUE(<<"error.fax_info">>, <<"error_fax_info">>, <<"Fax Processor Error">>, <<"Fax Processor Error">>)
         ]).
-
 
 -define(DEFAULT_CALL_MACROS
        ,[?MACRO_VALUE(<<"call_id">>, <<"call_id">>, <<"Call ID">>, <<"Call ID of the caller">>)

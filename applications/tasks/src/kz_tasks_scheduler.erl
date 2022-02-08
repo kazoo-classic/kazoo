@@ -1,6 +1,6 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2016-2019, 2600Hz
-%%% @doc Schedule one-off tasks only once per cluster
+%%% @copyright (C) 2016-2022, 2600Hz
+%%% @doc Schedule one-off tasks
 %%% @author Pierre Fenoll
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -41,7 +41,7 @@
 -include_lib("kazoo_tasks/include/task_fields.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
--define(SERVER, {'via', 'kz_globals', ?MODULE}).
+-define(SERVER, ?MODULE).
 
 -define(WAIT_AFTER_ROW
        ,kapps_config:get_non_neg_integer(?CONFIG_CAT, <<"wait_after_row_ms">>, 500)
@@ -80,19 +80,14 @@
 %%------------------------------------------------------------------------------
 -spec start_link() -> kz_types:startlink_ret().
 start_link() ->
-    case gen_server:start_link(?SERVER, ?MODULE, [], []) of
-        {'error', {'already_started', Pid}} ->
-            'true' = link(Pid),
-            {'ok', Pid};
-        Other -> Other
-    end.
+    gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
 -spec start(kz_tasks:id()) -> {'ok', kz_json:object()} |
-                              {'error', 'not_found' | 'already_started' | any()}.
+          {'error', 'not_found' | 'already_started' | any()}.
 start(TaskId=?NE_BINARY) ->
     gen_server:call(?SERVER, {'start_task', TaskId}).
 
@@ -101,18 +96,18 @@ start(TaskId=?NE_BINARY) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec stop(kz_tasks:id()) -> {'ok', kz_json:object()} |
-                             {'error', 'not_found' | 'not_running'}.
+          {'error', 'not_found' | 'not_running'}.
 stop(TaskId=?NE_BINARY) ->
     gen_server:call(?SERVER, {'stop_task', TaskId}).
 
 
 %% Not for public use
 -spec restart(kz_tasks:id()) -> {'ok', kz_json:object()} |
-                                {'error'
-                                ,'not_found' |
-                                 'already_started' |
-                                 any()
-                                }.
+          {'error'
+          ,'not_found' |
+           'already_started' |
+           any()
+          }.
 restart(TaskId = ?NE_BINARY) ->
     gen_server:call(?SERVER, {'restart_task', TaskId}).
 
@@ -121,7 +116,7 @@ restart(TaskId = ?NE_BINARY) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec remove(kz_tasks:id()) -> {'ok', kz_json:object()} |
-                               {'error', 'not_found' | 'task_running'}.
+          {'error', 'not_found' | 'task_running'}.
 remove(TaskId=?NE_BINARY) ->
     gen_server:call(?SERVER, {'remove_task', TaskId}).
 
@@ -318,7 +313,7 @@ cleanup_task(API, Data) ->
 -spec init([]) -> {'ok', state()}.
 init([]) ->
     _ = process_flag('trap_exit', 'true'),
-    lager:info("ensuring db ~s exists", [?KZ_TASKS_DB]),
+    lager:info("started ~s", [?MODULE]),
     {'ok', #state{}}.
 
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
@@ -591,7 +586,7 @@ add_task(Task=#{id := TaskId}, State=#state{tasks = Tasks}) ->
     State#state{tasks = maps:put(TaskId, Task, Tasks)}.
 
 -spec update_task(kz_tasks:task()) -> {'ok', kz_json:object()} |
-                                      {'error', any()}.
+          {'error', any()}.
 update_task(Task = #{id := TaskId}) ->
     Updates = kz_json:to_proplist(kz_tasks:to_json(Task)),
     UpdateOptions = [{'update', Updates}
@@ -624,8 +619,8 @@ task_api(Category, Action) ->
 -spec worker_module(kz_json:object()) -> module().
 worker_module(API) ->
     case kz_tasks:input_mime(API) of
-        <<"none">> -> 'kz_task_worker_noinput';
-        _TextCSV -> 'kz_task_worker'
+        <<"none">> -> 'kt_task_worker_noinput';
+        _TextCSV -> 'kt_task_worker'
     end.
 
 %%% End of Module.

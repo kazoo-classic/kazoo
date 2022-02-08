@@ -93,12 +93,16 @@
                                ]
                               }
                              ,{<<"qubicle">>
-                              ,[<<"queues">>
-                               ,<<"recipients">>
+                              ,[<<"basic_queue">>
+                               ,<<"pro_queue">>
+                               ,<<"basic_recipient">>
+                               ,<<"pro_recipient">>
                                ]
                               }
                              ,{<<"voicemails">>
-                              ,[<<"mailbox">>]
+                              ,[<<"mailbox">>
+                               ,<<"transcription">>
+                               ]
                               }
                              ,{<<"faxes">>
                               ,[<<"mailbox">>]

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Represent a date, and perform various manipulations on it.
 %%% @author Mark Magnusson
 %%% @author Karl Anderson
@@ -15,6 +15,7 @@
         ,to_iso_week/1
 
         ,find_next_weekday/2
+        ,previous_day/1
         ,normalize/1
         ,relative_difference/2
 
@@ -38,7 +39,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec from_gregorian_seconds(kz_time:gregorian_seconds(), kz_term:ne_binary()) ->
-                                    kz_time:date().
+          kz_time:date().
 from_gregorian_seconds(Seconds, <<_/binary>>=TZ) when is_integer(Seconds) ->
     {{_,_,_}, {_,_,_}} = DateTime = calendar:gregorian_seconds_to_datetime(Seconds),
     TZList = kz_term:to_list(TZ),
@@ -131,6 +132,21 @@ find_next_weekday({Y, M, D}, Weekday) ->
         DOW ->
             normalize({Y, M, D + ( 7 - DOW ) + RefDOW})
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc Calculates the date of the previous day, while also handling the situation
+%% where that day falls on the previous month or previous year.
+%% @end
+%%------------------------------------------------------------------------------
+-spec previous_day(kz_time:date()) -> kz_time:date().
+previous_day({Y, 1, 1}) ->
+    {Y-1, 12, days_in_month(Y-1, 12)};
+
+previous_day({Y, M, 1}) ->
+    {Y, M-1, days_in_month(Y, M-1)};
+
+previous_day({Y, M, D}) ->
+    {Y, M, D-1}.
 
 -spec from_iso8601(binary()) -> kz_time:date() | 'error'.
 from_iso8601(<<Year:4/binary, Month:2/binary, Day:2/binary>>) ->

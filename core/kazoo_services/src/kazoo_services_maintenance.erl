@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -104,6 +104,7 @@ js_design_doc() ->
     Kazoo = kz_json:from_list([{<<"view_map">>, [ViewMap]}]),
     Props = [{<<"_id">>, <<"_design/services">>}
             ,{<<"kazoo">>, Kazoo}
+            ,{<<"language">>, <<"javascript">>}
             ,{<<"views">>, kz_json:from_list(Views)}
             ],
     kz_json:from_list(Props).
@@ -149,7 +150,9 @@ js_quantify_map() ->
        "        case 'user':"
        "            emit(['users', doc.priv_level], 1);"
        "            if (doc.qubicle && doc.qubicle.enabled) {"
-       "                emit(['qubicle', 'recipients'], 1);"
+       "                if (doc.qubicle.recipient) {"
+       "                    emit(['qubicle', (doc.qubicle.recipient.offering || 'basic') + '_recipient'], 1);"
+       "                }"
        "            }"
        "            break;"
        "        case 'device':"
@@ -207,10 +210,13 @@ js_quantify_map() ->
       ,kazoo_number_manager_maintenance:generate_js_classifiers(FunMatchBlock),
        "            break;"
        "        case 'qubicle_queue':"
-       "            emit(['qubicle', 'queues'], 1);"
+       "            emit(['qubicle', (doc.pvt_offering || 'basic') + '_queue'], 1);"
        "            break;"
        "        case 'vmbox':"
        "            emit(['voicemails', 'mailbox'], 1);"
+       "            if (doc.transcribe) {"
+       "                emit(['voicemails', 'transcription'], 1);"
+       "            }"
        "            break;"
        "        case 'faxbox':"
        "            emit(['faxes', 'mailbox'], 1);"
@@ -969,7 +975,7 @@ remove_orphaned_services() ->
     'no_return'.
 
 -spec maybe_remove_orphan(kz_json:object() | kz_term:ne_binary(), non_neg_integer()) ->
-                                 non_neg_integer().
+          non_neg_integer().
 maybe_remove_orphan(<<"_design/", _/binary>>, Count) -> Count;
 maybe_remove_orphan(<<_/binary>> = AccountId, Count) ->
     case kzd_accounts:fetch(AccountId) of

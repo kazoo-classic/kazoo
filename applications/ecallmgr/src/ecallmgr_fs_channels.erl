@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2019, 2600Hz
+%%% @copyright (C) 2013-2022, 2600Hz
 %%% @doc Track the FreeSWITCH channel information, and provide accessors
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -498,6 +498,8 @@ handle_cast({'gen_listener',{'created_queue', _QueueName}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
+handle_cast({'gen_listener', {'federators_consuming', _IsConsuming}}, State) ->
+    {'noreply', State};
 handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
     {'noreply', State}.
@@ -552,8 +554,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_by_auth_id(kz_term:ne_binary()) ->
-                             {'ok', kz_json:objects()} |
-                             {'error', 'not_found'}.
+          {'ok', kz_json:objects()} |
+          {'error', 'not_found'}.
 find_by_auth_id(AuthorizingId) ->
     MatchSpec = [{#channel{authorizing_id = '$1', _ = '_'}
                  ,[{'=:=', '$1', {'const', AuthorizingId}}]
@@ -648,8 +650,8 @@ find_by_user_realm(Username, Realm) ->
     end.
 
 -spec find_account_channels(kz_term:ne_binary()) ->
-                                   {'ok', kz_json:objects()} |
-                                   {'error', 'not_found'}.
+          {'ok', kz_json:objects()} |
+          {'error', 'not_found'}.
 find_account_channels(<<"all">>) ->
     case ets:match_object(?CHANNELS_TBL, #channel{_='_'}) of
         [] -> {'error', 'not_found'};
@@ -691,7 +693,7 @@ query_channels(Fields, CallId) ->
                   ).
 
 -spec query_channels({[channel()], ets:continuation()} | '$end_of_table', kz_term:ne_binary() | kz_term:ne_binaries(), kz_json:object()) ->
-                            kz_json:object().
+          kz_json:object().
 query_channels('$end_of_table', _, Channels) -> Channels;
 query_channels({[#channel{uuid=CallId}=Channel], Continuation}
               ,<<"all">>, Channels) ->

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2015-2019, 2600Hz
+%%% @copyright (C) 2015-2022, 2600Hz
 %%% @doc Generate schema for Kazoo AMQP APIs.
 %%% @author James Aimonetti
 %%% @end
@@ -120,8 +120,8 @@ process_module(KapiModule) ->
     Schemas.
 
 -spec print_dot(kz_term:ne_binary() | module(), acc()) ->
-                       acc() |
-                       {'skip', acc()}.
+          acc() |
+          {'skip', acc()}.
 print_dot(<<"kapi_fs">>, #acc{}=Acc) ->
     {'skip', Acc};
 print_dot(<<"kapi_schemas">>, #acc{}=Acc) ->
@@ -437,6 +437,12 @@ validator_properties({'kz_term', 'is_boolean', 1}) ->
 validator_properties({'kz_term', 'is_ne_binary', 1}) ->
     kz_json:from_list([{<<"type">>, <<"string">>}
                       ,{<<"minLength">>, 1}
+                      ]);
+validator_properties({'kz_term', 'is_ne_binary_or_binaries', 1}) ->
+    kz_json:from_list([{<<"type">>, [<<"string">>, <<"array">>]}
+                      ,{<<"items">>
+                       ,kz_json:from_list([{<<"type">>, <<"string">>}])
+                       }
                       ]);
 validator_properties({'kapi_dialplan', 'terminators_v', 1}) ->
     kz_json:from_list([{<<"type">>, <<"array">>}

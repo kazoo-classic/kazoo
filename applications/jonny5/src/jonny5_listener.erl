@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -29,7 +29,10 @@
                     ,{'j5_channel_destroy', [{<<"call_event">>, <<"CHANNEL_DESTROY">>}]}
                     ]).
 -define(BINDINGS, [{'call', [{'restrict_to', [<<"CHANNEL_DESTROY">>]}]}
-                  ,{'authz', []}
+                  ,{'authz', [{'restrict_to', ['authorize'
+                                              ,'balance_check'
+                                              ]
+                              }]}
                   ,{'self', []}
                   ]).
 -define(QUEUE_NAME, <<"jonny5_listener">>).

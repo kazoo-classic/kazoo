@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -108,7 +108,7 @@ maybe_cache_result(Services, #{cache_expiration := Expiration} = Options, Result
     _ = kz_cache:store_local(?CACHE_NAME, cache_key(Services, Options), Result, CacheOptions),
     Result.
 
--type cache_key() :: {atom(), kz_term:ne_binary(), non_neg_integer(), boolean()}.
+-type cache_key() :: {?MODULE, kz_term:ne_binary(), non_neg_integer()}.
 -spec cache_key(kz_services:services(), acceptable_options()) -> cache_key().
 cache_key(Services, #{cache_expiration := Expiration}) ->
     AccountId = kz_services:account_id(Services),
@@ -195,7 +195,7 @@ handle_bookkeeper_results([{_Invoice, _Error}|_]) ->
 %%------------------------------------------------------------------------------
 -type invoices_acc() :: [{kz_json:object(), kz_amqp_worker:request_return()}].
 -spec invoices_foldl_fun(kz_services:services(), acceptable_options()) ->
-                                fun((kz_json:object(), invoices_acc()) -> invoices_acc()).
+          fun((kz_json:object(), invoices_acc()) -> invoices_acc()).
 invoices_foldl_fun(Services, Options) ->
     fun(Invoice, Results) ->
             Type = kz_services_invoice:bookkeeper_type(Invoice),
@@ -210,7 +210,7 @@ invoices_foldl_fun(Services, Options) ->
     end.
 
 -spec check_bookkeeper(kz_term:ne_binary(), kz_services_invoice:invoice(), kz_services:services(), acceptable_options()) ->
-                              kz_amqp_worker:request_return().
+          kz_amqp_worker:request_return().
 check_bookkeeper(_Type, Invoice, Services, #{amount := Amount}) ->
     Request = [{<<"Account-ID">>, kz_services:account_id(Services)}
               ,{<<"Bookkeeper-ID">>, kz_services_invoice:bookkeeper_id(Invoice)}

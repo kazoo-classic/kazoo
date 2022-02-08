@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Handle offnet requests, including rating them
 %%% @author Karl Anderson
 %%% @author James Aimonetti
@@ -26,8 +26,7 @@ handle_req(OffnetJObj, _Props) ->
     _ = kapi_offnet_resource:put_callid(OffnetReq),
     case kapi_offnet_resource:resource_type(OffnetReq) of
         ?RESOURCE_TYPE_AUDIO -> handle_audio_req(OffnetReq);
-        ?RESOURCE_TYPE_ORIGINATE -> handle_originate_req(OffnetReq);
-        ?RESOURCE_TYPE_SMS -> handle_sms_req(OffnetReq)
+        ?RESOURCE_TYPE_ORIGINATE -> handle_originate_req(OffnetReq)
     end.
 
 %%------------------------------------------------------------------------------
@@ -87,20 +86,6 @@ maybe_force_originate_outbound(Props, OffnetReq) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec handle_sms_req(kapi_offnet_resource:req()) -> any().
-handle_sms_req(OffnetReq) ->
-    Number = stepswitch_util:get_outbound_destination(OffnetReq),
-    lager:debug("received outbound sms resource request for ~s", [Number]),
-    case knm_number:lookup_account(Number) of
-        {'ok', _AccountId, Props} ->
-            maybe_force_outbound_sms(Props, OffnetReq);
-        _ -> maybe_sms(Number, OffnetReq)
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
 -spec maybe_force_outbound(knm_number_options:extra_options(), kapi_offnet_resource:req()) -> any().
 maybe_force_outbound(Props, OffnetReq) ->
     case knm_number_options:should_force_outbound(Props)
@@ -109,21 +94,6 @@ maybe_force_outbound(Props, OffnetReq) ->
     of
         'false' -> local_extension(Props, OffnetReq);
         'true' -> maybe_bridge(knm_number_options:number(Props), OffnetReq)
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
--spec maybe_force_outbound_sms(knm_number_options:extra_options(), kapi_offnet_resource:req()) -> any().
-maybe_force_outbound_sms(Props, OffnetReq) ->
-    case knm_number_options:should_force_outbound(Props)
-        orelse kapi_offnet_resource:force_outbound(OffnetReq, 'false')
-        orelse kapi_offnet_resource:hunt_account_id(OffnetReq) /= 'undefined'
-        orelse knm_number_options:assign_to(Props) =:= 'undefined'
-    of
-        'false' -> local_sms(Props, OffnetReq);
-        'true' -> maybe_sms(knm_number_options:number(Props), OffnetReq)
     end.
 
 %%------------------------------------------------------------------------------
@@ -156,30 +126,10 @@ maybe_correct_shortdial(Number, OffnetReq) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_sms(kz_term:ne_binary(), kapi_offnet_resource:req()) -> any().
-maybe_sms(Number, OffnetReq) ->
-    RouteBy = stepswitch_util:route_by(),
-    case RouteBy:endpoints(Number, OffnetReq) of
-        [] -> publish_no_resources(OffnetReq);
-        Endpoints -> stepswitch_request_sup:sms(Endpoints, OffnetReq)
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
 -spec local_extension(knm_number_options:extra_options(), kapi_offnet_resource:req()) ->
-                             kz_types:sup_startchild_ret().
+          kz_types:sup_startchild_ret().
 local_extension(Props, OffnetReq) ->
     stepswitch_request_sup:local_extension(Props, OffnetReq).
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
--spec local_sms(knm_number_options:extra_options(), kapi_offnet_resource:req()) -> 'ok'.
-local_sms(Props, OffnetReq) ->
-    stepswitch_local_sms:local_message_handling(Props, OffnetReq).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -220,21 +170,36 @@ get_account_realm(AccountId) ->
     end.
 
 -spec create_loopback_endpoint(knm_number_options:extra_options(), kapi_offnet_resource:req()) ->
-                                      kz_json:object().
+          kz_json:object().
 create_loopback_endpoint(Props, OffnetReq) ->
     {CIDNum, CIDName} = local_originate_caller_id(OffnetReq),
     lager:debug("set outbound caller id to ~s '~s'", [CIDNum, CIDName]),
     Number = knm_number_options:number(Props),
-    AccountId = knm_number_options:account_id(Props),
-    Realm = get_account_realm(AccountId),
+    TargetAccountId = knm_number_options:account_id(Props),
+    TargetResellerId = kz_services_reseller:get_id(TargetAccountId),
+    TargetRealm = get_account_realm(TargetAccountId),
+    OriginalAccountId = kapi_offnet_resource:account_id(OffnetReq),
+    OriginalResellerId = kz_services_reseller:get_id(OriginalAccountId),
+    FromRealm = get_account_realm(OriginalAccountId),
     CCVs = kz_json:from_list(
-             [{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Inception">>, <<Number/binary, "@", Realm/binary>>}
-             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Account-ID">>, AccountId}
+             [{<<"Account-ID">>, OriginalAccountId}
+             ,{<<"Reseller-ID">>, OriginalResellerId}
+             ,{<<"Realm">>, FromRealm}
+             ,{<<"Resource-ID">>, TargetAccountId}
+             ,{<<"Resource-Type">>, <<"onnet-termination">>}
+             ,{<<"From-URI">>, <<CIDNum/binary, "@", FromRealm/binary>>}
+             ,{<<"Request-URI">>, <<Number/binary, "@", FromRealm/binary>>}
+             ,{<<"To-URI">>, <<Number/binary, "@", FromRealm/binary>>}
+
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Inception">>, <<Number/binary, "@", TargetRealm/binary>>}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Account-ID">>, TargetAccountId}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Reseller-ID">>, TargetResellerId}
              ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Retain-CID">>, "true"}
              ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Resource-Type">>, <<"onnet-origination">>}
-             ,{<<"Resource-ID">>, AccountId}
-             ,{<<"Loopback-Request-URI">>, <<Number/binary, "@", Realm/binary>>}
-             ,{<<"Resource-Type">>, <<"onnet-termination">>}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "From-URI">>, <<CIDNum/binary, "@", TargetRealm/binary>>}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Request-URI">>, <<Number/binary, "@", TargetRealm/binary>>}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "To-URI">>, <<Number/binary, "@", TargetRealm/binary>>}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "SIP-Invite-Domain">>, TargetRealm}
              ]),
     CAVs = kapi_offnet_resource:custom_application_vars(OffnetReq),
     kz_json:from_list(
@@ -251,7 +216,7 @@ create_loopback_endpoint(Props, OffnetReq) ->
       ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
       ,{<<"Route">>, Number}
       ,{<<"To-DID">>, Number}
-      ,{<<"To-Realm">>, Realm}
+      ,{<<"To-Realm">>, TargetRealm}
       ]).
 %%------------------------------------------------------------------------------
 %% @doc

@@ -9,6 +9,8 @@ BASE_BRANCH := $(shell cat $(ROOT)/.base_branch)
 
 CHANGED ?= $(shell git --no-pager diff --name-only HEAD $(BASE_BRANCH) -- applications core scripts)
 CHANGED_SWAGGER := $(shell git --no-pager diff --name-only HEAD $(BASE_BRANCH) -- applications/crossbar/priv/api/swagger.json)
+CHANGED_ERLANG=$(filter %.erl %.beam %/ebin,$(CHANGED))
+CHANGED_JSON=$(filter %.json,$(CHANGED))
 
 # You can override this when calling make, e.g. make JOBS=1
 # to prevent parallel builds, or make JOBS="8".
@@ -21,7 +23,7 @@ KAZOODIRS = core/Makefile applications/Makefile
 	bump-copyright apis validate-swagger sdks coverage-report fs-headers docs validate-schemas \
 	circle circle-pre circle-fmt circle-codechecks circle-build circle-docs circle-schemas circle-dialyze circle-release circle-unstaged \
 	clean clean-test clean-release \
-	dialyze dialyze-it dialyze-apps dialyze-core dialyze-kazoo dialyze-hard dialyze-changed \
+	dialyze dialyze-it dialyze-it-changed dialyze-apps dialyze-core dialyze-kazoo dialyze-hard dialyze-changed \
 	elvis install ci diff \
 	fixture_shell code_checks \
 	fmt clean-fmt \
@@ -181,25 +183,23 @@ dialyze-core: dialyze-it
 dialyze:       TO_DIALYZE ?= $(shell find $(ROOT)/applications -name ebin)
 dialyze: dialyze-it
 
-dialyze-changed: TO_DIALYZE = $(strip $(filter %.beam %.erl %/ebin,$(CHANGED)))
+dialyze-changed: export CHECK_DIALYZER_OPTS = --bulk
 dialyze-changed: dialyze-it-changed
 
-dialyze-hard: TO_DIALYZE = $(CHANGED)
-dialyze-hard: dialyze-it-hard
+dialyze-hard: export CHECK_DIALYZER_OPTS = --hard
+dialyze-hard: dialyze-it-changed
 
 dialyze-it: $(PLT)
-	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))
+	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(CHECK_DIALYZER_OPTS) $(strip $(filter %.beam %.erl %/ebin,$(TO_DIALYZE)))
 
-dialyze-it-hard: $(PLT)
-	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --hard $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))
-
+dialyze-it-changed: export TO_DIALYZE = $(CHANGED_ERLANG)
 dialyze-it-changed: $(PLT)
 	@if [ -n "$(TO_DIALYZE)" ]; then \
 		echo "dialyzing changes against $(BASE_BRANCH) ..." ; \
 		echo; \
 		echo "$(TO_DIALYZE)" ;\
 		echo; \
-		ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --bulk $(TO_DIALYZE) && echo "dialyzer is happy!"; \
+		$(MAKE) dialyze-it && echo "dialyzer is happy!"; \
 	else \
 		echo "no erlang changes to dialyze"; \
 	fi
@@ -233,7 +233,7 @@ diff: dialyze-it
 bump-copyright:
 	@$(ROOT)/scripts/bump-copyright-year.sh $(shell find applications core -iname '*.erl' -or -iname '*.hrl')
 
-FMT_SHA = 237604a566879bda46d55d9e74e3e66daf1b557a
+FMT_SHA = 4e9b3379952e0cb3319308d7bdef832eb305f816
 $(FMT):
 	wget -qO - 'https://codeload.github.com/fenollp/erlang-formatter/tar.gz/$(FMT_SHA)' | tar -vxz -C $(ROOT)/make/
 	mv $(ROOT)/make/erlang-formatter-$(FMT_SHA) $(ROOT)/make/erlang-formatter
@@ -258,9 +258,7 @@ code_checks:
 	@$(ROOT)/scripts/kz_diaspora.bash
 	@$(ROOT)/scripts/edocify.escript
 
-apis:
-	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/generate-schemas.escript
-	@$(ROOT)/scripts/format-json.sh $(shell find applications core -wholename '*/schemas/*.json')
+apis: schemas
 	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/generate-api-endpoints.escript
 	@$(ROOT)/scripts/generate-doc-schemas.sh `egrep -rl '(#+) Schema' core/ applications/ | grep -v '.[h|e]rl'`
 	@$(ROOT)/scripts/format-json.sh applications/crossbar/priv/api/swagger.json
@@ -268,8 +266,10 @@ apis:
 	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/generate-fs-headers-hrl.escript
 	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/generate-kzd-builders.escript
 
+.PHONY: schemas
 schemas:
-	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/generate-schemas.escript
+	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/generate-schemas.escript $(CHANGED)
+	@$(ROOT)/scripts/format-json.sh $(shell find applications core -wholename '*/schemas/*.json')
 
 DOCS_ROOT=$(ROOT)/doc/mkdocs
 docs: docs-validate docs-report docs-setup docs-build
@@ -302,7 +302,7 @@ validate-swagger:
 	@$(ROOT)/scripts/validate-swagger.sh
 
 validate-js:
-	@./scripts/validate-js.sh $(find {core,applications}/*/priv/**/* -name *.json)
+	@$(ROOT)/scripts/validate-js.sh $(CHANGED_JS)
 
 sdks:
 	@$(ROOT)/scripts/make-swag.sh

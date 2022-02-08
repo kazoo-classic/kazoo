@@ -100,6 +100,11 @@
             "description": "callflow singular call hook url",
             "type": "string"
         },
+        "vm_delete_amqp": {
+            "default": false,
+            "description": "callflow vm_delete_amqp",
+            "type": "boolean"
+        },
         "voicemail": {
             "properties": {
                 "delete_after_notify": {
@@ -115,6 +120,11 @@
                 "force_require_pin": {
                     "default": false,
                     "description": "If true, ignore the setting on the vmbox and require all users to enter a pin",
+                    "type": "boolean"
+                },
+                "is_voicemail_ff_rw_enabled": {
+                    "default": false,
+                    "description": "callflow allow fastforward and rewind during voicemail message playback",
                     "type": "boolean"
                 },
                 "max_box_number_length": {
@@ -170,6 +180,32 @@
                 "save_after_notify": {
                     "default": false,
                     "description": "callflow save after notify",
+                    "type": "boolean"
+                },
+                "seek_duration_ms": {
+                    "default": 10000,
+                    "description": "callflow fastforward and rewind seek duration",
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "should_disable_callback": {
+                    "default": false,
+                    "description": "If true, disallows callers to use voicemail callback feature",
+                    "type": "boolean"
+                },
+                "should_disable_offnet_callback": {
+                    "default": false,
+                    "description": "If true, requires caller to use an authorized device to use voicemail callback feature",
+                    "type": "boolean"
+                },
+                "transcribe_default": {
+                    "default": false,
+                    "description": "callflow voicemail transcribe_default",
+                    "type": "boolean"
+                },
+                "vm_delete_amqp": {
+                    "default": false,
+                    "description": "send ampq message to notify about voicemail deletion",
                     "type": "boolean"
                 },
                 "vm_message_forward_type": {

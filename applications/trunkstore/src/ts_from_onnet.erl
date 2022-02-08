@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Calls coming from known clients, getting settings for caller-id and
 %%% what not, and sending the calls offnet.
 %%%
@@ -228,7 +228,7 @@ wait_for_bridge(State, CtlQ, Timeout) ->
         {'error', #ts_callflow_state{aleg_callid='undefined'}} -> 'ok';
         {'error', #ts_callflow_state{aleg_callid=CallId}=State1} ->
             lager:info("responding to aleg ~s with 686", [CallId]),
-            kz_call_response:send(CallId, CtlQ, <<"686">>),
+            _ = kz_call_response:send(CallId, CtlQ, <<"686">>),
             ts_callflow:send_hangup(State1, <<"686">>)
     end.
 

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2014-2019, 2600Hz
+%%% @copyright (C) 2014-2022, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -27,6 +27,9 @@ id() ->
 macros() ->
     kz_json:from_list(
       [?MACRO_VALUE(<<"voicemail.vmbox_id">>, <<"voicemail_vmbox_id">>, <<"Voicemail Box Id">>, <<"Which voicemail box was the message left in">>)
+      ,?MACRO_VALUE(<<"voicemail.vmbox_name">>, <<"voicemail_vmbox_name">>, <<"Voicemail Box Name">>, <<"Name of the voicemail box were the message was left in">>)
+      ,?MACRO_VALUE(<<"voicemail.vmbox_number">>, <<"voicemail_vmbox_number">>, <<"Voicemail Box Number">>, <<"Number of the voicemail box were the message was left in">>)
+      ,?MACRO_VALUE(<<"voicemail.vmbox_include_message_on_notify">>, <<"voicemail_vmbox_include_message_on_notify">>, <<"Voicemail Box Include Message On Notify">>, <<"Whether or not to include the attachment when sending a new voicemail to email notification">>)
       ,?MACRO_VALUE(<<"voicemail.msg_id">>, <<"voicemail_msg_id">>, <<"Voicemail Message ID">>, <<"Message Id of the voicemail">>)
       ,?MACRO_VALUE(<<"voicemail.transcription">>, <<"voicemail_transcription">>, <<"Voicemail Message Transcription">>, <<"Voicemail Message Transcription">>)
       ,?MACRO_VALUE(<<"voicemail.length">>, <<"voicemail_length">>, <<"Voicemail Length">>, <<"Length of the voicemail file (formatted in HH:MM:SS)">>)
@@ -170,9 +173,9 @@ do_process_req(DataJObj) ->
 -spec macros(kz_json:object()) -> kz_term:proplist().
 macros(DataJObj) ->
     TemplateData = template_data(DataJObj),
-    EmailAttachements = email_attachments(DataJObj, TemplateData),
-    Macros = maybe_add_file_data(TemplateData, EmailAttachements),
-    props:set_value(<<"attachments">>, EmailAttachements, Macros).
+    EmailAttachments = maybe_email_attachments(DataJObj, TemplateData),
+    Macros = maybe_add_file_data(TemplateData, EmailAttachments),
+    props:set_value(<<"attachments">>, EmailAttachments, Macros).
 
 -spec template_data(kz_json:object()) -> kz_term:proplist().
 template_data(DataJObj) ->
@@ -180,13 +183,21 @@ template_data(DataJObj) ->
      | build_template_data(DataJObj)
     ].
 
+-spec maybe_email_attachments(kz_json:object(), kz_term:proplist()) -> attachments().
+maybe_email_attachments(DataJObj, Macros) ->
+    case kzd_vmboxes:include_message_on_notify(
+           kz_json:get_json_value(<<"vmbox_doc">>, DataJObj)
+          )
+        andalso (not teletype_util:is_preview(DataJObj))
+    of
+        'true' -> email_attachments(DataJObj, Macros);
+        'false' ->
+            lager:debug("not attaching voicemail message to this email"),
+            []
+    end.
+
 -spec email_attachments(kz_json:object(), kz_term:proplist()) -> attachments().
 email_attachments(DataJObj, Macros) ->
-    email_attachments(DataJObj, Macros, teletype_util:is_preview(DataJObj)).
-
--spec email_attachments(kz_json:object(), kz_term:proplist(), boolean()) -> attachments().
-email_attachments(_DataJObj, _Macros, 'true') -> [];
-email_attachments(DataJObj, Macros, 'false') ->
     VMId = kz_json:get_value(<<"voicemail_id">>, DataJObj),
     AccountId = kz_json:get_value(<<"account_id">>, DataJObj),
     Db = kvm_util:get_db(AccountId, VMId),
@@ -266,11 +277,26 @@ build_voicemail_data(DataJObj) ->
       ,{<<"box">>, kz_json:get_value(<<"voicemail_box">>, DataJObj)} %% backward compatibility
       ,{<<"vmbox_name">>, kz_json:get_value([<<"vmbox_doc">>, <<"name">>], DataJObj)}
       ,{<<"vmbox_number">>, kz_json:get_value([<<"vmbox_doc">>, <<"mailbox">>], DataJObj)}
+      ,{<<"vmbox_include_message_on_notify">>
+       ,kz_json:is_true([<<"vmbox_doc">>, <<"include_message_on_notify">>], DataJObj, 'true')
+       }
       ,{<<"msg_id">>, kz_json:get_value(<<"voicemail_id">>, DataJObj)}
       ,{<<"name">>, kz_json:get_value(<<"voicemail_id">>, DataJObj)} %% backward compatibility
-      ,{<<"transcription">>, get_transcription(DataJObj)}
+      ,{<<"transcription">>, maybe_get_transcription(DataJObj)}
       ,{<<"length">>, pretty_print_length(DataJObj)}
       ]).
+
+-spec maybe_get_transcription(kz_json:object()) -> kz_term:api_ne_binary().
+maybe_get_transcription(DataJObj) ->
+    case kzd_vmboxes:include_transcription_on_notify(
+           kz_json:get_json_value(<<"vmbox_doc">>, DataJObj)
+          )
+    of
+        'true' -> get_transcription(DataJObj);
+        'false' ->
+            lager:debug("not including transcription with this email"),
+            'undefined'
+    end.
 
 -spec get_transcription(kz_json:object()) -> kz_term:api_ne_binary().
 get_transcription(DataJObj) ->

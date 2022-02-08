@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc Handles starting/stopping a call recording.
 %%%
 %%% Callflow action Data:
@@ -45,6 +45,7 @@
 -define(SERVER, ?MODULE).
 -define(RECORDING_TIMER_EXPIRED, 'recording_timer_expired').
 -define(RECORDING_STOP_TIMER_EXPIRED, 'recording_stop_timer_expired').
+-define(RECORDING_STOP_TIMER_EXPIRED_MS, 30 * ?MILLISECONDS_IN_SECOND).
 
 -type media_directory() :: file:filename_all().
 -type media_name() :: file:filename_all().
@@ -58,7 +59,7 @@
                ,format                    :: kz_term:api_ne_binary()
                ,sample_rate               :: kz_term:api_integer()
                ,media                     :: media() | 'undefined'
-               ,doc_db                    :: kz_term:api_ne_binary()
+               ,doc_modb                  :: kz_term:api_ne_binary()
                ,doc_id                    :: kz_term:api_ne_binary()
                ,cdr_id                    :: kz_term:api_ne_binary()
                ,interaction_id            :: kz_term:api_ne_binary()
@@ -187,7 +188,7 @@ initialize_state(Call, Data) ->
     RecordMinSec = kz_json:get_integer_value(<<"record_min_sec">>, Data, DefaultRecordMinSec),
     AccountId = kapps_call:account_id(Call),
     {Year, Month, _} = erlang:date(),
-    AccountDb = kz_util:format_account_modb(kazoo_modb:get_modb(AccountId, Year, Month),'encoded'),
+    AccountMODb = kz_util:format_account_modb(kazoo_modb:get_modb(AccountId, Year, Month), 'encoded'),
     CallId = kapps_call:call_id(Call),
     CdrId = ?MATCH_MODB_PREFIX(kz_term:to_binary(Year), kz_date:pad_month(Month), CallId),
     RecordingId = kz_binary:rand_hex(16),
@@ -205,7 +206,7 @@ initialize_state(Call, Data) ->
           ,format=Format
           ,media={'undefined',MediaName}
           ,doc_id=DocId
-          ,doc_db=AccountDb
+          ,doc_modb=AccountMODb
           ,cdr_id=CdrId
           ,interaction_id=InteractionId
           ,call=Call
@@ -477,12 +478,13 @@ get_format(<<"mp4">> = MP4) -> MP4;
 get_format(<<"wav">> = WAV) -> WAV;
 get_format(_) -> get_format('undefined').
 
--spec store_recording_meta(state()) -> {'ok', kz_json:object()} |
-                                       {'error', any()}.
+-spec store_recording_meta(state()) ->
+          {'ok', kz_json:object()} |
+          kz_datamgr:data_error().
 store_recording_meta(#state{call=Call
                            ,format=Ext
                            ,media={_, MediaName}
-                           ,doc_db=Db
+                           ,doc_modb=AccountMODb
                            ,doc_id=DocId
                            ,cdr_id=CdrId
                            ,interaction_id=InteractionId
@@ -525,21 +527,25 @@ store_recording_meta(#state{call=Call
                      ]
                     ),
 
-    MediaDoc = kz_doc:update_pvt_parameters(BaseMediaDoc, Db, [{'type', kzd_call_recordings:type()}]),
-    case kazoo_modb:save_doc(Db, MediaDoc, [{'ensure_saved', 'true'}]) of
-        {'ok', Doc} -> {'ok', Doc};
-        {'error', _}= Err -> Err
+    MediaDoc = kz_doc:update_pvt_parameters(BaseMediaDoc, AccountMODb, [{'type', kzd_call_recordings:type()}]),
+    case kazoo_modb:save_doc(AccountMODb, MediaDoc, [{'ensure_saved', 'true'}]) of
+        {'ok', Doc} ->
+            lager:debug("saved metadata: ~s", [kz_json:encode(Doc)]),
+            {'ok', Doc};
+        {'error', _E}= Err ->
+            lager:warning("failed to save media doc ~s to ~s: ~p", [DocId, AccountMODb, _E]),
+            Err
     end.
 
 -spec maybe_store_recording_meta(state()) -> {'ok', kzd_call_recording:doc()} |
-                                             {'error', any()}.
-maybe_store_recording_meta(#state{doc_db=Db
+          {'error', any()}.
+maybe_store_recording_meta(#state{doc_modb=AccountMODb
                                  ,doc_id=DocId
                                  }=State) ->
-    case kz_datamgr:open_cache_doc(Db, {kzd_call_recordings:type(), DocId}) of
+    case kz_datamgr:open_cache_doc(AccountMODb, {kzd_call_recordings:type(), DocId}) of
         {'ok', Doc} -> {'ok', Doc};
         {'error', _E} ->
-            lager:debug("failed to find recording meta ~s in ~s: ~p", [DocId, Db, _E]),
+            lager:debug("failed to find recording meta ~s in ~s: ~p", [DocId, AccountMODb, _E]),
             store_recording_meta(State)
     end.
 
@@ -551,14 +557,14 @@ get_media_name(Name, Ext) ->
     end.
 
 -spec store_url(state(), kzd_call_recordings:doc()) -> kz_term:ne_binary().
-store_url(#state{doc_db=Db
+store_url(#state{doc_modb=AccountMODb
                 ,doc_id=MediaId
                 ,media={_,MediaName}
                 ,format=_Ext
                 ,should_store={'true', 'local'}
                 }, _MediaDoc) ->
-    kz_media_url:store(Db, {kzd_call_recordings:type(), MediaId}, MediaName, []);
-store_url(#state{doc_db=Db
+    kz_media_url:store(AccountMODb, {kzd_call_recordings:type(), MediaId}, MediaName, []);
+store_url(#state{doc_modb=AccountMODb
                 ,doc_id=MediaId
                 ,media={_,MediaName}
                 ,should_store={'true', 'other', Url}
@@ -575,16 +581,16 @@ store_url(#state{doc_db=Db
                ,att_handler => {AttHandler, HandlerOpts}
                },
     Options = [{'plan_override', Handler}],
-    kz_media_url:store(Db, {kzd_call_recordings:type(), MediaId}, MediaName, Options).
+    kz_media_url:store(AccountMODb, {kzd_call_recordings:type(), MediaId}, MediaName, Options).
 
 -spec handler_fields(kz_term:ne_binary(), state()) ->
-                            kz_att_util:format_fields().
+          kz_att_util:format_fields().
 handler_fields(Url, State) ->
     {Protocol, _, _, _, _} = kz_http_util:urlsplit(Url),
     handler_fields_for_protocol(Protocol, Url, State).
 
 -spec handler_fields_for_protocol(kz_term:ne_binary(), kz_term:ne_binary(), state()) ->
-                                         kz_att_util:format_fields().
+          kz_att_util:format_fields().
 handler_fields_for_protocol(<<"ftp", _/binary>>, _Url, #state{format=Ext}) ->
     [{'const', <<"call_recording_">>}
     ,{'field', <<"call_id">>}
@@ -684,7 +690,7 @@ save_recording(#state{call=Call
             lager:warning("error storing metadata : ~p", [Err]),
             gen_server:cast(self(), 'store_failed');
         {'ok', MediaDoc} ->
-            StoreUrl = fun()-> store_url(State, MediaDoc) end,
+            StoreUrl = fun() -> store_url(State, MediaDoc) end,
             store_recording(Media, StoreUrl, Call)
     end.
 
@@ -703,7 +709,7 @@ start_recording(Call, MediaName, TimeLimit, MediaDocId, SampleRate, RecordMinSec
     gen_server:cast(self(), 'recording_started').
 
 -spec store_recording({kz_term:ne_binary(), kz_term:ne_binary()}, kapps_call_command:store_fun(), kapps_call:call()) ->
-                             pid().
+          pid().
 store_recording({DirName, MediaName}, StoreUrl, Call) ->
     Filename = filename:join(DirName, MediaName),
     kz_util:spawn(fun store_recording/4, [self(), Filename, StoreUrl, Call]).
@@ -728,7 +734,7 @@ start_recording_timer(TimeLimit) ->
 -spec start_recording_stop_timer() -> reference().
 start_recording_stop_timer() ->
     lager:debug("starting timer while waiting for RECORD_STOP"),
-    erlang:start_timer(5 * ?MILLISECONDS_IN_SECOND
+    erlang:start_timer(?RECORDING_STOP_TIMER_EXPIRED_MS
                       ,self()
                       ,?RECORDING_STOP_TIMER_EXPIRED
                       ).
@@ -744,5 +750,7 @@ handle_channel_status_resp(JObj, Pid) ->
 
 -spec maybe_stop_timer(kz_term:api_reference()) -> 'ok'.
 maybe_stop_timer(Ref) when is_reference(Ref) ->
-    erlang:cancel_timer(Ref, [{'async', 'true'}]);
+    erlang:cancel_timer(Ref, [{'async', 'true'}
+                             ,{'info', 'false'}
+                             ]);
 maybe_stop_timer('undefined') -> 'ok'.

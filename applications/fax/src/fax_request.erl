@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -503,9 +503,9 @@ store_attachment(Pid, #state{call=Call
     end.
 
 -spec check_fax_attachment(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary())->
-                                  {'ok', kz_json:object()} |
-                                  {'missing', kz_json:object()} |
-                                  {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'missing', kz_json:object()} |
+          {'error', any()}.
 check_fax_attachment(Modb, DocId, Name) ->
     case kz_datamgr:open_doc(Modb, DocId) of
         {'ok', JObj} ->
@@ -522,8 +522,8 @@ get_fs_filename(#state{storage=#fax_storage{attachment_id=AttachmentId}}) ->
     <<LocalPath/binary, AttachmentId/binary>>.
 
 -spec create_fax_doc(kz_json:object(), state()) ->
-                            {'ok', kz_json:object()} |
-                            {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 create_fax_doc(JObj, #state{owner_id = OwnerId
                            ,faxbox_id = FaxBoxId
                            ,fax_notify = Notify
@@ -550,6 +550,7 @@ create_fax_doc(JObj, #state{owner_id = OwnerId
               [{<<"name">>, Name}
               ,{<<"to_number">>, kapps_call:request_user(Call)}
               ,{<<"from_number">>, kapps_call:from_user(Call)}
+              ,{<<"from_name">>, kapps_call:caller_id_name(Call)}
               ,{<<"description">>, <<"fax document received">>}
               ,{<<"source_type">>, <<"incoming_fax">>}
               ,{<<"folder">>, <<"inbox">>}

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Dialplan API commands.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -30,6 +30,7 @@
         ,execute_extension/1, execute_extension_v/1
         ,break/1, break_v/1
         ,play/1, play_v/1, playstop/1, playstop_v/1
+        ,playseek/1, playseek_v/1
         ,tts/1, tts_v/1
         ,record/1, record_v/1
         ,record_call/1, record_call_v/1
@@ -188,8 +189,8 @@ unbridge_v(JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec bridge_endpoint(kz_term:api_terms()) ->
-                             {'ok', kz_term:proplist()} |
-                             {'error', string()}.
+          {'ok', kz_term:proplist()} |
+          {'error', string()}.
 bridge_endpoint(Prop) when is_list(Prop) ->
     case bridge_endpoint_v(Prop) of
         'true' -> kz_api:build_message_specific(Prop, ?BRIDGE_REQ_ENDPOINT_HEADERS, ?OPTIONAL_BRIDGE_REQ_ENDPOINT_HEADERS);
@@ -199,8 +200,8 @@ bridge_endpoint(JObj) ->
     bridge_endpoint(kz_json:to_proplist(JObj)).
 
 -spec bridge_endpoint_headers(kz_term:api_terms()) ->
-                                     {'ok', kz_term:proplist()} |
-                                     {'error', string()}.
+          {'ok', kz_term:proplist()} |
+          {'error', string()}.
 bridge_endpoint_headers(Prop) when is_list(Prop) ->
     kz_api:build_message_specific_headers(Prop, ?BRIDGE_REQ_ENDPOINT_HEADERS, ?OPTIONAL_BRIDGE_REQ_ENDPOINT_HEADERS);
 bridge_endpoint_headers(JObj) ->
@@ -239,8 +240,8 @@ page_v(Prop) when is_list(Prop) ->
 page_v(JObj) -> page_v(kz_json:to_proplist(JObj)).
 
 -spec store(kz_term:api_terms()) ->
-                   {'ok', kz_term:proplist()} |
-                   {'error', string()}.
+          {'ok', kz_term:proplist()} |
+          {'error', string()}.
 store(Prop) when is_list(Prop) ->
     case store_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?STORE_REQ_HEADERS, ?OPTIONAL_STORE_REQ_HEADERS);
@@ -369,8 +370,8 @@ tones_req_tone_v(Prop) when is_list(Prop) ->
 tones_req_tone_v(JObj) -> tones_req_tone_v(kz_json:to_proplist(JObj)).
 
 -spec tones_req_tone_headers(kz_term:api_terms()) ->
-                                    {'ok', kz_term:proplist()} |
-                                    {'error', string()}.
+          {'ok', kz_term:proplist()} |
+          {'error', string()}.
 tones_req_tone_headers(Prop) when is_list(Prop) ->
     kz_api:build_message_specific_headers(Prop, ?TONES_REQ_TONE_HEADERS, ?OPTIONAL_TONES_REQ_TONE_HEADERS);
 tones_req_tone_headers(JObj) -> tones_req_tone_headers(kz_json:to_proplist(JObj)).
@@ -399,17 +400,18 @@ tone_detect_v(JObj) -> tone_detect_v(kz_json:to_proplist(JObj)).
 %% @end
 %%------------------------------------------------------------------------------
 -spec queue(kz_term:api_terms()) -> api_formatter_return().
-queue(Prop) when is_list(Prop) ->
-    case queue_v(Prop) of
-        'true' -> kz_api:build_message(Prop, ?QUEUE_REQ_HEADERS, ?OPTIONAL_QUEUE_REQ_HEADERS);
-        'false' -> {'error', "Proplist failed validation for queue_req"}
-    end;
-queue(JObj) -> queue(kz_json:to_proplist(JObj)).
+queue(API) ->
+    queue(API, queue_v(API)).
+
+-spec queue(kz_term:api_terms(), boolean()) -> api_formatter_return().
+queue(API, 'true') ->
+    kz_api:build_message(API, ?QUEUE_REQ_HEADERS, ?OPTIONAL_QUEUE_REQ_HEADERS);
+queue(_API, 'false') ->
+    {'error', "Proplist failed validation for queue_req"}.
 
 -spec queue_v(kz_term:api_terms()) -> boolean().
-queue_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?QUEUE_REQ_HEADERS, ?QUEUE_REQ_VALUES, ?QUEUE_REQ_TYPES);
-queue_v(JObj) -> queue_v(kz_json:to_proplist(JObj)).
+queue_v(API) ->
+    kz_api:validate(API, ?QUEUE_REQ_HEADERS, ?QUEUE_REQ_VALUES, ?QUEUE_REQ_TYPES).
 
 %%------------------------------------------------------------------------------
 %% @doc Play media.
@@ -465,6 +467,24 @@ playstop(JObj) -> playstop(kz_json:to_proplist(JObj)).
 playstop_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?PLAY_STOP_REQ_HEADERS, ?PLAY_STOP_REQ_VALUES, ?PLAY_STOP_REQ_TYPES);
 playstop_v(JObj) -> playstop_v(kz_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
+%% @doc Change position in playing media.
+%% Takes {@link kz_term:api_term()}, creates JSON string or error.
+%% @end
+%%------------------------------------------------------------------------------
+-spec playseek(kz_term:api_terms()) -> api_formatter_return().
+playseek(Prop) when is_list(Prop) ->
+    case playseek_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?PLAY_SEEK_REQ_HEADERS, ?OPTIONAL_PLAY_SEEK_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for playseek"}
+    end;
+playseek(JObj) -> playseek(kz_json:to_proplist(JObj)).
+
+-spec playseek_v(kz_term:api_terms()) -> boolean().
+playseek_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?PLAY_SEEK_REQ_HEADERS, ?PLAY_SEEK_REQ_VALUES, ?PLAY_SEEK_REQ_TYPES);
+playseek_v(JObj) -> playseek_v(kz_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
 %% @doc TTS - Text-to-speech.
@@ -1238,8 +1258,8 @@ fax_detection_v(Prop) when is_list(Prop) ->
 fax_detection_v(JObj) -> fax_detection_v(kz_json:to_proplist(JObj)).
 
 -spec store_vm(kz_term:api_terms()) ->
-                      {'ok', kz_term:proplist()} |
-                      {'error', string()}.
+          {'ok', kz_term:proplist()} |
+          {'error', string()}.
 store_vm(Prop) when is_list(Prop) ->
     case store_vm_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?STORE_VM_REQ_HEADERS, ?OPTIONAL_STORE_VM_REQ_HEADERS);

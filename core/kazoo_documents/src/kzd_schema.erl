@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc General schema manipulation
 %%% @author Hesaam Farhang
 %%% @end
@@ -12,6 +12,10 @@
         ]).
 
 -include("kz_documents.hrl").
+
+-type doc() :: kz_json:object().
+-type docs() :: [doc()].
+-export_type([doc/0, docs/0]).
 
 -define(SCHEMA_KEYWORDS_MAXLENGTH, <<"maxLength">>).
 

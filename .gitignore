@@ -80,9 +80,12 @@ compile_commands.json
 
 .idea/
 
+.vscode/
+
 core/kazoo_proper/priv/mp3.mp3
 *.md.bak
 *.md.new
 
 # asdf-vm "local" versions handler
 .tool-versions
+/applications/fax/test/pdf.pdf

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
@@ -199,6 +199,7 @@ migrate(Pause) ->
 
     _ = kazoo_bindings:map(binding('migrate'), []),
 
+    _ = maybe_log_telemetry_warning(),
     'no_return'.
 
 -spec migrate(integer(), kz_term:ne_binaries()) -> 'no_return'.
@@ -503,24 +504,38 @@ refresh() ->
 -spec refresh(kz_term:ne_binaries(), kz_term:text() | non_neg_integer()) -> 'no_return'.
 refresh(Databases, Pause) ->
     Total = length(Databases),
-    refresh(Databases, kz_term:to_integer(Pause), Total).
+    refresh(Databases, kz_term:to_integer(Pause), Total, []).
 
--spec refresh(kz_term:ne_binaries(), non_neg_integer(), non_neg_integer()) -> 'no_return'.
-refresh([], _, _) -> 'no_return';
-refresh([Database|Databases], Pause, Total) ->
-    io:format("~p (~p/~p) refreshing database '~s'~n"
-             ,[self(), length(Databases) + 1, Total, Database]
-             ),
-    _ = case refresh(Database) of
-            {'error', _Reason} ->
-                io:format("    - refresh failed: ~p~n", [_Reason]);
-            Bol -> Bol
-        end,
-    _ = case Pause < 1 of
-            'false' -> timer:sleep(Pause);
-            'true' -> 'ok'
-        end,
-    refresh(Databases, Pause, Total).
+-spec refresh(kz_term:ne_binaries(), non_neg_integer(), non_neg_integer(), [string()]) -> 'no_return'.
+refresh([], _, _, []) ->
+    'no_return';
+refresh([], _, _, [_H|_T] = Unexpected) ->
+    io:format("WARNING: although the migrate command finished it got the following exceptions~n"),
+    _ = lists:foreach(fun(Message) -> io:format("~s~n", [Message]) end, Unexpected),
+    'no_return';
+refresh([Database|Databases], Pause, Total, Unexpected) ->
+    NewUnexpected =
+        try
+            io:format("~p (~p/~p) refreshing database '~s'~n"
+                     ,[self(), length(Databases) + 1, Total, Database]
+                     ),
+            _ = case refresh(Database) of
+                    {'error', _Reason} ->
+                        io:format("    - refresh failed: ~p~n", [_Reason]);
+                    Bol -> Bol
+                end,
+            _ = case Pause < 1 of
+                    'false' -> timer:sleep(Pause);
+                    'true' -> 'ok'
+                end,
+            Unexpected
+        catch
+            ?STACKTRACE(Error, Reason, StackTrace)
+            [io_lib:format("WARNING: Unable to refresh/migrate db ~s! ~s: {~p, ~p}",
+                           [Database, Error, Reason, StackTrace])
+             | Unexpected]
+            end,
+    refresh(Databases, Pause, Total, NewUnexpected).
 
 -spec get_databases() -> kz_term:ne_binaries().
 get_databases() ->
@@ -528,8 +543,8 @@ get_databases() ->
     kzs_util:sort_by_priority(Databases ++ ?KZ_SYSTEM_DBS).
 
 -spec refresh(kz_term:ne_binary()) -> 'ok' |
-                                      boolean() |
-                                      {'error', 'invalid_db_name' | 'db_not_found'}.
+          boolean() |
+          {'error', 'invalid_db_name' | 'db_not_found'}.
 refresh(Database) ->
     case kz_datamgr:refresh_views(Database) of
         {'error', _} = Error ->
@@ -570,7 +585,7 @@ remove_deprecated_databases([]) -> 'ok';
 remove_deprecated_databases([Database|Databases]) ->
     _ = case kz_datamgr:db_classification(Database) of
             'deprecated' ->
-                io:format("    archive and remove depreciated database ~s~n", [Database]),
+                io:format("    archive and remove deprecated database ~s~n", [Database]),
                 _ = kz_datamgr:db_archive(Database),
                 maybe_delete_db(Database);
             _Else -> 'ok'
@@ -600,6 +615,16 @@ ensure_aggregates([Account|Accounts], Total) ->
 
 -spec ensure_aggregate(kz_term:ne_binary()) -> 'ok'.
 ensure_aggregate(Account) ->
+    ensure_aggregate(Account
+                    ,kz_datamgr:open_doc(kz_util:format_account_db(Account)
+                                        ,kz_util:format_account_id(Account)
+                                        )
+                    ).
+
+-spec ensure_aggregate(kz_term:ne_binary(), kz_datamgr:get_results_return()) -> 'ok'.
+ensure_aggregate(Account, {'error', 'not_found'}) ->
+    io:format("necessary documents from account '~s' are missing, skipping migration~n", [Account]);
+ensure_aggregate(Account, _) ->
     io:format("ensuring necessary documents from account '~s' are in aggregate dbs~n"
              ,[Account]
              ),
@@ -885,14 +910,14 @@ maybe_log_doc_update({'error', _Reason}, _, Failed) ->
                          }.
 
 -spec get_accounts_tree() -> {'ok', kz_json:objects()} |
-                             kz_datamgr:data_error().
+          kz_datamgr:data_error().
 get_accounts_tree() ->
     ViewOptions = [{'reduce', 'false'}],
     ViewName = <<"accounts_tree/list_by_tree_length">>,
     kz_datamgr:get_results(?KZ_ACCOUNTS_DB, ViewName, ViewOptions).
 
 -spec get_accounts_tree(kz_term:ne_binaries()) -> {'ok', kz_json:objects()} |
-                                                  kz_datamgr:data_error().
+          kz_datamgr:data_error().
 get_accounts_tree(Accounts) ->
     ViewOptions = [{'keys', [kz_util:format_account_id(A) || A <- Accounts]}
                   ,'include_docs'
@@ -1034,7 +1059,7 @@ fix_services_tree(AccountId, Tree) ->
     Services = kz_services:fetch(AccountId),
     fix_services_tree(Services, Tree, kz_services:services_jobj(Services)).
 
--spec fix_services_tree(kz_term:ne_binary(), kz_term:ne_binaries(), kzd_services:doc()) -> 'ok'.
+-spec fix_services_tree(kz_services:services(), kz_term:ne_binaries(), kzd_services:doc()) -> 'ok'.
 fix_services_tree(Services, Tree, ServicesJObj) ->
     case kzd_services:tree(ServicesJObj) =:= Tree of
         'true' -> 'ok';
@@ -1071,7 +1096,7 @@ fix_port_requests_tree(AccountId, Tree) ->
     end.
 
 -spec ensure_tree_is_tree(ensure_state(), map(), non_neg_integer()) ->
-                                 ensure_state().
+          ensure_state().
 ensure_tree_is_tree(State, Family, Depth) ->
     io:format("--> calculating tree for depth ~b~n", [Depth]),
     maps:fold(fun(AccountId, Tree, StateAcc) ->
@@ -1082,7 +1107,7 @@ ensure_tree_is_tree(State, Family, Depth) ->
              ).
 
 -spec ensure_tree_is_tree_fold(ensure_state(), kz_term:ne_binary(), kz_term:ne_binaries()) ->
-                                      ensure_state().
+          ensure_state().
 ensure_tree_is_tree_fold(#{fixed_trees := FixedTrees
                           }=State
                         ,AccountId, Tree) ->
@@ -1104,7 +1129,7 @@ ensure_tree_is_tree_fold(#{fixed_trees := FixedTrees
     end.
 
 -spec ensure_tree_is_tree_fold(ensure_state(), kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binaries()) ->
-                                      kz_term:ne_binaries().
+          kz_term:ne_binaries().
 ensure_tree_is_tree_fold(#{master := MasterAccountId}, MasterAccountId, _, _) ->
     [];
 
@@ -1283,8 +1308,8 @@ ensure_reseller_id_services(AccountId, ResellerId) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec cleanup_voicemail_media(kz_term:ne_binary()) ->
-                                     {'ok', kz_json:objects()} |
-                                     {'error', any()}.
+          {'ok', kz_json:objects()} |
+          {'error', any()}.
 cleanup_voicemail_media(Account) ->
     AccountDb = kz_util:format_account_id(Account, 'encoded'),
     Medias = get_medias(Account),
@@ -1389,7 +1414,7 @@ migrate_limits(Account) ->
     'ok'.
 
 -spec clean_trunkstore_docs(kz_term:ne_binary(), integer(), integer()) ->
-                                   {integer(), integer()}.
+          {integer(), integer()}.
 clean_trunkstore_docs(AccountDb, TwowayTrunks, InboundTrunks) ->
     ViewOptions = ['include_docs'
                   ,{'reduce', 'false'}
@@ -1400,7 +1425,7 @@ clean_trunkstore_docs(AccountDb, TwowayTrunks, InboundTrunks) ->
     end.
 
 -spec clean_trunkstore_docs(kz_term:ne_binary(), kz_json:objects(), integer(), integer()) ->
-                                   {integer(), integer()}.
+          {integer(), integer()}.
 
 clean_trunkstore_docs(_, [], Trunks, InboundTrunks) ->
     {Trunks, InboundTrunks};
@@ -1588,7 +1613,7 @@ maybe_update_attachment(AccountDb, Id, {OrigAttach, _CT1}, {NewAttach, CT}) ->
     lists:foldl(fun(F, Acc) -> F(Acc) end, [], Updaters).
 
 -spec try_load_attachment(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                 binary().
+          binary().
 try_load_attachment(AccountDb, Id, OrigAttach) ->
     case kz_datamgr:fetch_attachment(AccountDb, Id, OrigAttach) of
         {'ok', Content} -> Content;
@@ -1598,7 +1623,7 @@ try_load_attachment(AccountDb, Id, OrigAttach) ->
     end.
 
 -spec maybe_resave_attachment(binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                     'ok'.
+          'ok'.
 maybe_resave_attachment(Content1, AccountDb, Id, OrigAttach, NewAttach, CT) ->
     {'ok', Rev} = kz_datamgr:lookup_doc_rev(AccountDb, Id),
     Options = [{'content_type', CT}
@@ -1687,9 +1712,9 @@ maybe_delete_db(Database) ->
 %%------------------------------------------------------------------------------
 
 -spec purge_doc_type(kz_term:ne_binaries() | kz_term:ne_binary(), kz_term:ne_binary()) ->
-                            {'ok', kz_json:objects()} |
-                            {'error', _} |
-                            'ok'.
+          {'ok', kz_json:objects()} |
+          {'error', _} |
+          'ok'.
 purge_doc_type(Type, Account)
   when is_binary(Type);
        is_binary(Account) ->
@@ -1716,9 +1741,9 @@ purge_doc_type(Type, Account) when not is_binary(Account) ->
                   ).
 
 -spec purge_doc_type(kz_term:ne_binaries() | kz_term:ne_binary(), kz_term:ne_binary(), integer()) ->
-                            {'ok', kz_json:objects()} |
-                            {'error', _} |
-                            'ok'.
+          {'ok', kz_json:objects()} |
+          {'error', _} |
+          'ok'.
 purge_doc_type(Type, Account, ChunkSize) ->
     Db = kz_util:format_account_id(Account, 'encoded'),
     Opts = [{'key', Type}
@@ -1883,7 +1908,7 @@ delete_system_media_references(DocId, CallResponsesDoc) ->
     end.
 
 -spec remove_system_media_refs(kz_json:path(), kz_json:objects()) ->
-                                      {kz_json:path(), kz_json:json_term()}.
+          {kz_json:path(), kz_json:json_term()}.
 remove_system_media_refs(HangupCause, Config) ->
     case kz_json:is_json_object(Config) of
         'false' -> {HangupCause, Config};
@@ -1894,7 +1919,7 @@ remove_system_media_refs(HangupCause, Config) ->
     end.
 
 -spec remove_system_media_ref(kz_json:path(), kz_json:json_term(), kz_json:object()) ->
-                                     kz_json:object().
+          kz_json:object().
 remove_system_media_ref(Key, <<"/system_media/", Value/binary>>, Acc) -> kz_json:set_value(Key, Value, Acc);
 remove_system_media_ref(Key, Value, Acc) -> kz_json:set_value(Key, Value, Acc).
 
@@ -1925,19 +1950,19 @@ accounts_config_deprecate_timezone_for_default_timezone(AccountsConfig) ->
     end.
 
 -spec deprecate_timezone_for_default_timezone(kz_json:keys(), kz_json:object()) ->
-                                                     kz_json:object().
+          kz_json:object().
 deprecate_timezone_for_default_timezone(Nodes, AccountsConfig) ->
     lists:foldl(fun deprecate_timezone_for_node/2, AccountsConfig, Nodes).
 
 -spec deprecate_timezone_for_node(kz_json:key(), kz_json:object()) ->
-                                         kz_json:object().
+          kz_json:object().
 deprecate_timezone_for_node(Node, AccountsConfig) ->
     Timezone = kz_json:get_value([Node, <<"timezone">>], AccountsConfig),
     DefaultTimezone = kz_json:get_value([Node, <<"default_timezone">>], AccountsConfig),
     deprecate_timezone_for_node(Node, AccountsConfig, Timezone, DefaultTimezone).
 
 -spec deprecate_timezone_for_node(kz_json:key(), kz_json:object(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) ->
-                                         kz_json:object().
+          kz_json:object().
 deprecate_timezone_for_node(_Node, AccountsConfig, 'undefined', _Default) ->
     AccountsConfig;
 deprecate_timezone_for_node(Node, AccountsConfig, Timezone, 'undefined') ->
@@ -2166,19 +2191,21 @@ check_release() ->
 
 -spec run_check(fun()) -> 'ok'.
 run_check(CheckFun) ->
+    StartTimeMs = kz_time:now_ms(),
     {Pid, Ref} = kz_util:spawn_monitor(CheckFun, []),
-    wait_for_check(Pid, Ref).
+    wait_for_check(Pid, Ref, StartTimeMs).
 
--spec wait_for_check(pid(), reference()) -> 'ok'.
-wait_for_check(Pid, Ref) ->
+-spec wait_for_check(pid(), reference(), pos_integer()) -> 'ok'.
+wait_for_check(Pid, Ref, StartTimeMs) ->
     receive
-        {'DOWN', Ref, 'process', Pid, 'normal'} -> 'ok';
+        {'DOWN', Ref, 'process', Pid, 'normal'} ->
+            lager:info("check finished in ~pms", [kz_time:elapsed_ms(StartTimeMs)]);
         {'DOWN', Ref, 'process', Pid, Reason} ->
-            lager:error("check in ~p failed to run: ~p", [Pid, Reason]),
+            lager:error("check in ~p failed to run after ~pms: ~p", [Pid, kz_time:elapsed_ms(StartTimeMs), Reason]),
             throw(Reason)
     after 5 * ?MILLISECONDS_IN_MINUTE ->
             lager:error("check in ~p timed out", [Pid]),
-            exit(Pid, 'timeout'),
+            exit(Pid, 'kill'),
             throw('timeout')
     end.
 
@@ -2229,3 +2256,38 @@ migration_4_0_ran() ->
 migration_ran() ->
     lager:info("migrating"),
     'no_return' =:= migrate().
+
+-spec maybe_log_telemetry_warning() -> 'no_return'.
+maybe_log_telemetry_warning() ->
+    print_header(),
+    maybe_log_telemetry_warning(wg_util:days_remaining()).
+
+-spec maybe_log_telemetry_warning(non_neg_integer()) -> 'no_return'.
+maybe_log_telemetry_warning(Days)
+  when is_integer(Days)
+       andalso Days > 0 ->
+    io:format("~n~n      KAZOO telemetry will activate in ~p days.~n~n", [Days]),
+    'no_return';
+maybe_log_telemetry_warning(_Days) ->
+    io:format("~n~n      KAZOO telemetry is activated.~n~n"),
+    'no_return'.
+
+-spec print_header() -> 'no_return'.
+print_header() ->
+    io:format("~n~n"),
+    io:format("     KAZOO collects anonymous telemetry data by default so that we can provide~n"),
+    io:format("     you with the best performance, stability, and security. It enables us to~n"),
+    io:format("     continuously improve the platform for you and helps inform our roadmap~n"),
+    io:format("     decisions so we can create the products, features, and functionality that~n"),
+    io:format("     will best serve you. Rest assured — no sensitive data is transmitted and~n"),
+    io:format("     metrics are limited to aggregate values, aggregate statistics, and~n"),
+    io:format("     software version information.~n~n"),
+    io:format("     By allowing us to collect this data, you are making a contribution to~n"),
+    io:format("     the KAZOO community and are helping us make KAZOO better for you and~n"),
+    io:format("     the entire KAZOO community. You can opt-out at any time by consulting~n"),
+    io:format("     the configuration document in the system_config database.~n~n"),
+    io:format("     Here are a few examples:~n"),
+    io:format("       - https://success.trendmicro.com/data-collection-disclosure~n"),
+    io:format("       - https://www.mozilla.org/en-US/privacy/firefox/~n"),
+    io:format("       - https://derflounder.wordpress.com/2019/07/23/suppressing-microsoft-autoupdates-required-data-notice-screen/~n"),
+    'no_return'.

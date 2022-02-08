@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -28,6 +28,11 @@
         ,bgapi/5
         ,bgapi/6
         ]).
+-export([json_api/2
+        ,json_api/3
+        ,json_api/4
+        ,json_api/5
+        ]).
 -export([event/2
         ,event/3
         ]).
@@ -40,6 +45,8 @@
 -export([config/1
         ,bgapi4/5
         ]).
+
+-export([async_api/3]).
 
 -include("ecallmgr.hrl").
 
@@ -121,7 +128,7 @@ fetch_reply(Node, FetchID, Section, Reply) ->
     gen_server:cast({'mod_kazoo', Node}, {'fetch_reply', Section, FetchID, Reply}).
 
 -spec fetch_reply(atom(), binary(), atom() | binary(), binary() | string(), pos_integer() | 'infinity') ->
-                         'ok' | {'error', 'baduuid'}.
+          'ok' | {'error', 'baduuid'}.
 fetch_reply(Node, FetchID, Section, Reply, Timeout) ->
     try gen_server:call({'mod_kazoo', Node}, {'fetch_reply', Section, FetchID, Reply}, Timeout) of
         'timeout' -> {'error', 'timeout'};
@@ -132,6 +139,27 @@ fetch_reply(Node, FetchID, Section, Reply, Timeout) ->
             lager:info("failed to send fetch reply to ~s: ~p ~p", [Node, _E, _R]),
             {'error', 'exception'}
     end.
+
+api_result(Result, 'undefined') -> Result;
+api_result(Result, Bin) ->
+    case kz_binary:strip_left(kz_binary:strip_right(Bin, <<"\n">>), $\s) of
+        <<>> when Result =:= 'error' -> {error, 'failed'};
+        <<"true">> -> {Result, true};
+        <<"false">> -> {Result, false};
+        <<>> -> ok;
+        Msg -> {Result, maybe_number(Msg, byte_size(Msg))}
+    end.
+
+maybe_number(Msg, Size)
+  when Size < 10 ->
+    Float = (catch erlang:binary_to_float(Msg)),
+    Int = (catch erlang:binary_to_integer(Msg)),
+    case {is_number(Float), is_number(Int)} of
+        {'true', _} -> Float;
+        {_, 'true'} -> Int;
+        _ -> Msg
+    end;
+maybe_number(Msg, _Size) -> Msg.
 
 -spec api(atom(), kz_term:text()) -> fs_api_return().
 api(Node, Cmd) ->
@@ -151,6 +179,56 @@ api(Node, Cmd, Args, Timeout) when is_atom(Node) ->
         _E:_R ->
             lager:info("failed to execute api command ~s on ~s: ~p ~p", [Cmd, Node, _E, _R]),
             {'error', 'exception'}
+    end.
+
+
+-spec json_api(atom(), kz_term:ne_binary() | {kz_term:ne_binary(), kz_term:api_object()}) ->
+          freeswitch:fs_json_api_return().
+json_api(Node, {Cmd, Args}) ->
+    json_api(Node, 'undefined', Cmd, Args, ?TIMEOUT);
+json_api(Node, Cmd) ->
+    json_api(Node, 'undefined', Cmd, 'undefined', ?TIMEOUT).
+
+-spec json_api(atom(), kz_term:api_ne_binary(), kz_term:text()) ->
+          freeswitch:fs_json_api_return().
+json_api(Node, UUID, Cmd) ->
+    json_api(Node, UUID, Cmd, 'undefined', ?TIMEOUT).
+
+-spec json_api(atom(), kz_term:api_ne_binary(), kz_term:ne_binary(), kz_term:api_object()) ->
+          freeswitch:fs_json_api_return().
+json_api(Node, UUID, Cmd, Args) ->
+    json_api(Node, UUID, Cmd, Args, ?TIMEOUT).
+
+-spec json_api(atom(), kz_term:api_ne_binary(), kz_term:ne_binary(), kz_term:api_object() | binary(), timeout()) ->
+          freeswitch:fs_json_api_return().
+json_api(Node, UUID, Cmd, 'undefined', Timeout) ->
+    json_api(Node, UUID, Cmd, <<>>, Timeout);
+json_api(Node, UUID, Cmd, Data, Timeout) when is_atom(Node) ->
+    Params = [{<<"command">>, Cmd}
+             ,{<<"uuid">>, UUID}
+             ,{<<"data">>, Data}
+             ],
+    JObj = kz_json:from_list(Params),
+    try gen_server:call({'mod_kazoo', Node}, {'json_api', kz_json:encode(JObj)}, Timeout) of
+        'timeout' -> {'error', 'timeout'};
+        {'error', {'parse_error', _Where}} = Err -> Err;
+        {'ok', Result} -> json_api_result('ok', Result);
+        {'error', Result} -> json_api_result('error', Result)
+    catch
+        _E:_R ->
+            lager:info("failed to execute api command ~s on ~s: ~p ~p", [Cmd, Node, _E, _R]),
+            {'error', 'exception'}
+    end.
+
+json_api_result(Result, 'undefined') -> Result;
+json_api_result('error', Bin) ->
+    JObj = kz_json:decode(Bin),
+    {'error', kz_json:get_first_defined([<<"error">>, <<"message">>], JObj)};
+json_api_result('ok', Bin) ->
+    JObj = kz_json:decode(Bin),
+    case kz_json:get_atom_value(<<"status">>, JObj) of
+        'success' -> {'ok', kz_json:get_json_value(<<"response">>, JObj)};
+        'error' -> {'error', kz_json:get_first_defined([<<"error">>, <<"message">>], JObj)}
     end.
 
 %%------------------------------------------------------------------------------
@@ -344,8 +422,8 @@ config(Node) ->
     gen_server:cast({'mod_kazoo', Node}, {'config', []}).
 
 -spec bgapi4(atom(), atom(), string() | binary(), fun(), list()) ->
-                    {'ok', binary()} |
-                    {'error', 'timeout' | 'exception' | binary()}.
+          {'ok', binary()} |
+          {'error', 'timeout' | 'exception' | binary()}.
 bgapi4(Node, Cmd, Args, Fun, CallBackParams) ->
     Self = self(),
     _ = kz_util:spawn(
@@ -387,3 +465,20 @@ bgapi4(Node, Cmd, Args, Fun, CallBackParams) ->
 internal_fs_error(Reason) ->
     Error = kz_binary:strip(binary:replace(Reason, <<"\n">>, <<>>)),
     {'error', Error}.
+
+%%------------------------------------------------------------------------------
+%% @doc Make a background API call to FreeSWITCH and wait for reply.
+%% @end
+%%------------------------------------------------------------------------------
+-spec async_api(atom(), atom(), string() | binary()) -> freeswitch:fs_api_return().
+async_api(Node, Cmd, Args) ->
+    case bgapi(Node, Cmd, Args) of
+        {'error', _} = Error -> Error;
+        {'ok', JobId} ->
+            receive
+                {'bgok', JobId, <<"-ERR", Reason/binary>>} -> api_result('error', Reason);
+                {'bgok', JobId, <<"+OK", Result/binary>>} -> api_result('ok', Result);
+                {'bgok', JobId, Result} -> api_result('ok', Result);
+                {'bgerror', JobId, Error} -> api_result('error', Error)
+            end
+    end.

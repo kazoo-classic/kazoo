@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2014-2019, 2600Hz
+%%% @copyright (C) 2014-2022, 2600Hz
 %%% @doc
 %%% @author Luis Azedo
 %%% @end
@@ -23,6 +23,10 @@
         ,code_change/3
         ,terminate/2
         ]).
+
+-ifdef(TEST).
+-export([decode_data/1]).
+-endif.
 
 -include("fax.hrl").
 
@@ -59,8 +63,8 @@
 -type peer() :: {inet:ip_address(), non_neg_integer()}.
 
 -spec init(kz_term:ne_binary(), non_neg_integer(), peer(), kz_term:proplist()) ->
-                  {'ok', string(), #state{}} |
-                  {'stop', _, string()}.
+          {'ok', string(), #state{}} |
+          {'stop', _, string()}.
 init(Hostname, SessionCount, Address, Options) ->
     case SessionCount > ?SMTP_MAX_SESSIONS  of
         'false' ->
@@ -77,16 +81,16 @@ init(Hostname, SessionCount, Address, Options) ->
     end.
 
 -spec handle_HELO(binary(), state()) ->
-                         {'ok', pos_integer(), state()} |
-                         {'ok', state()} |
-                         error_message().
+          {'ok', pos_integer(), state()} |
+          {'ok', state()} |
+          error_message().
 handle_HELO(Hostname, State) ->
     lager:debug("HELO from ~s, max message size is ~B", [Hostname, ?SMTP_MSG_MAX_SIZE]),
     {'ok', ?SMTP_MSG_MAX_SIZE, State}.
 
 -spec handle_EHLO(binary(), list(), state()) ->
-                         {'ok', list(), state()} |
-                         error_message().
+          {'ok', list(), state()} |
+          error_message().
 handle_EHLO(Hostname, Extensions, #state{options=Options, proxy = Proxy}=State) ->
     lager:debug("EHLO from ~s with proxy ~s", [Hostname, Proxy]),
     %% You can advertise additional extensions, or remove some defaults
@@ -117,15 +121,15 @@ handle_MAIL(FromHeader, State) ->
     check_faxbox((reset(State))#state{from=From}).
 
 -spec handle_MAIL_extension(binary(), state()) ->
-                                   'error'.
+          'error'.
 handle_MAIL_extension(Extension, _State) ->
     Error = kz_term:to_binary(io_lib:format("554 Unknown MAIL FROM extension ~s", [Extension])),
     lager:debug(Error),
     'error'.
 
 -spec handle_RCPT(binary(), state()) ->
-                         {'ok', state()} |
-                         {'error', string(), state()}.
+          {'ok', state()} |
+          {'error', string(), state()}.
 handle_RCPT(ToHeader, #state{from='undefined'}=State) ->
     To = kz_term:to_lower_binary(ToHeader),
     lager:debug("Mail to ~s", [To]),
@@ -136,15 +140,15 @@ handle_RCPT(ToHeader, State) ->
     check_faxbox((reset(State))#state{to=To}).
 
 -spec handle_RCPT_extension(binary(), state()) ->
-                                   'error'.
+          'error'.
 handle_RCPT_extension(Extension, _State) ->
     Error = kz_term:to_binary(io_lib:format("554 Unknown RCPT TO extension ~s", [Extension])),
     lager:debug(Error),
     'error'.
 
 -spec handle_DATA(binary(), kz_term:ne_binaries(), binary(), state()) ->
-                         {'ok', string(), state()} |
-                         {'error', string(), state()}.
+          {'ok', string(), state()} |
+          {'error', string(), state()}.
 handle_DATA(From, To, <<>>, State) ->
     lager:debug("552 Message too small. From ~p to ~p", [From, To]),
     {'error', "552 Message too small", State};
@@ -158,42 +162,56 @@ handle_DATA(From, To, Data, #state{doc='undefined'}=State) ->
         Error -> Error
     end;
 handle_DATA(From, To, Data, #state{options=Options}=State) ->
-    lager:debug("Handle Data From ~p to ~p", [From,To]),
+    Reference = kz_binary:rand_hex(16),
 
-    %% JMA: Can this be done with kz_binary:rand_hex() ?
-    Reference = lists:flatten(
-                  [io_lib:format("~2.16.0b", [X])
-                   || <<X>> <= erlang:md5(term_to_binary(kz_time:now()))
-                  ]),
+    lager:debug("Handle Data From ~p to ~p: reference: ~s", [From, To, Reference]),
 
-    try mimemail:decode(Data) of
+    case decode_data(Data) of
         {Type, SubType, Headers, Parameters, Body} ->
             lager:debug("Message decoded successfully!"),
             case process_message(Type, SubType, Headers, Parameters, Body, State) of
                 {ProcessResult, #state{errors=[]}=NewState} ->
                     {ProcessResult, Reference, NewState};
                 {ProcessResult, #state{errors=[Error | _]}=NewState} ->
-                    {ProcessResult, <<"554 ",Error/binary>>, NewState}
-            end
-    catch
-        _What:_Why ->
-            lager:debug("Message decode FAILED with ~p:~p", [_What, _Why]),
+                    {ProcessResult, <<"554 ", Error/binary>>, NewState}
+            end;
+        'error' ->
             handle_DATA_exception(Options, Reference, Data),
             {'error', "554 Message decode failed", State#state{errors=[<<"Message decode failed">>]
                                                               ,has_smtp_errors='true'
                                                               }}
     end.
 
--spec handle_DATA_exception(kz_term:proplist(), list(), binary()) -> 'ok'.
+-spec decode_data(iodata()) ->
+          'error' | mimemail:mimetuple().
+decode_data(Data) ->
+    DecodeOptions = [{'encoding', <<"utf-8">>}           %% default to utf8
+                    ,{'decode_attachments', 'true'}      %% decode base64/quoted-printable attachments
+                    ,{'allow_missing_version', 'true'}   %% assume default MIME version
+                    ,{'default_mime_version', <<"1.0">>} %% default MIME version
+                    ],
+
+    try mimemail:decode(Data, DecodeOptions)
+    catch
+        _What:_Why ->
+            ?LOG_INFO("Message decode FAILED with ~p:~p", [_What, _Why]),
+            'error'
+    end.
+
+-spec handle_DATA_exception(kz_term:proplist(), kz_term:ne_binary(), binary()) -> 'ok'.
 handle_DATA_exception(Options, Reference, Data) ->
     case props:get_is_true('dump', Options, 'false') of
         'false' -> 'ok';
         'true' ->
             %% optionally dump the failed email somewhere for analysis
-            File = "/tmp/"++Reference,
+            File = filename:join(["/tmp/", Reference]),
             case filelib:ensure_dir(File) of
-                'ok' -> kz_util:write_file(File, Data);
-                _ -> 'ok'
+                'ok' ->
+                    case kz_util:write_file(File, Data) of
+                        'ok' -> lager:debug("wrote DATA exception data to ~s", [File]);
+                        {'error', _E} -> lager:debug("failed to write DATA exception data to ~s: ~p", [File, _E])
+                    end;
+                {'error', _E} -> lager:debug("failed to ensure ~s: ~p", [File, _E])
             end
     end.
 
@@ -204,13 +222,13 @@ handle_RSET(State) ->
     State.
 
 -spec handle_VRFY(binary(), state()) ->
-                         {'error', string(), state()}.
+          {'error', string(), state()}.
 handle_VRFY(_Address, State) ->
     lager:debug("252 VRFY disabled by policy, just send some mail"),
     {'error', "252 VRFY disabled by policy, just send some mail", State}.
 
 -spec handle_other(binary(), binary(), state()) ->
-                          {string() | 'noreply', state()}.
+          {string() | 'noreply', state()}.
 handle_other(<<"PROXY">>, Args, State) ->
     {'noreply', State#state{proxy=Args}};
 handle_other(Verb, Args, State) ->
@@ -219,7 +237,7 @@ handle_other(Verb, Args, State) ->
     {lists:flatten(["500 Error: command not recognized : '", kz_term:to_list(Verb), "'"]), State}.
 
 -spec handle_AUTH('login' | 'plain' | 'cram-md5', binary(), binary() | {binary(), binary()}, state()) ->
-                         'error'.
+          'error'.
 handle_AUTH(_Type, _Username, _Password, _State) ->
     'error'.
 
@@ -347,7 +365,7 @@ faxbox_log(#state{account_id=AccountId}=State) ->
               ]
              )
            ),
-    kazoo_modb:save_doc(AccountId, Doc),
+    _ = kazoo_modb:save_doc(AccountId, Doc),
     maybe_system_report(State).
 
 -spec error_doc() -> kz_term:ne_binary().
@@ -407,8 +425,8 @@ reset(State) ->
                }.
 
 -spec check_faxbox(state()) ->
-                          {'ok', state()} |
-                          {'error', string(), state()}.
+          {'ok', state()} |
+          {'error', string(), state()}.
 check_faxbox(#state{to=To}=State) ->
     case binary:split(kz_term:to_lower_binary(To), <<"@">>) of
         [FaxNumber, Domain] ->
@@ -428,8 +446,8 @@ check_faxbox(#state{to=To}=State) ->
     end.
 
 -spec check_number(state()) ->
-                          {'ok', state()} |
-                          {'error', string(), state()}.
+          {'ok', state()} |
+          {'error', string(), state()}.
 check_number(#state{number= <<>>
                    ,original_number=Number
                    ,faxbox='undefined'
@@ -461,8 +479,8 @@ check_number(#state{faxbox=FaxBoxDoc, number=Number, errors=Errors}=State) ->
     end.
 
 -spec check_permissions(state()) ->
-                               {'ok', state()} |
-                               {'error', string(), state()}.
+          {'ok', state()} |
+          {'error', string(), state()}.
 check_permissions(#state{from=_From
                         ,owner_email=OwnerEmail
                         ,faxbox=FaxBoxDoc
@@ -478,8 +496,8 @@ check_permissions(#state{from=_From
     end.
 
 -spec check_permissions(state(), kz_term:ne_binaries()) ->
-                               {'ok', state()} |
-                               {'error', string(), state()}.
+          {'ok', state()} |
+          {'error', string(), state()}.
 check_permissions(#state{from=From
                         ,owner_email=OwnerEmail
                         ,faxbox=FaxBoxDoc
@@ -500,8 +518,8 @@ check_permissions(#state{from=From
     end.
 
 -spec check_empty_permissions(state()) ->
-                                     {'ok', state()} |
-                                     {'error', string(), state()}.
+          {'ok', state()} |
+          {'error', string(), state()}.
 check_empty_permissions(#state{errors=Errors
                               ,doc=Doc
                               }=State) ->
@@ -653,8 +671,8 @@ maybe_faxbox_by_rules([JObj | JObjs], #state{from=From}=State) ->
     end.
 
 -spec add_fax_document(state()) ->
-                              {'ok', state()} |
-                              {'error', string(), state()}.
+          {'ok', state()} |
+          {'error', string(), state()}.
 
 add_fax_document(#state{from=From
                        ,owner_email=OwnerEmail
@@ -721,8 +739,9 @@ add_fax_document(#state{from=From
 %% @end
 %%------------------------------------------------------------------------------
 -spec process_message(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), kz_term:proplist(), binary() | mimemail:mimetuple(), state()) ->
-                             {'ok', state()}.
-process_message(<<"multipart">>, Multipart, _Headers, _Parameters, Body, #state{errors=Errors}=State) ->
+          {'ok', state()}.
+process_message(<<"multipart">>, Multipart, Headers, _Parameters, Body, #state{errors=Errors}=State) ->
+    NewState = maybe_get_subject(Headers, State),
     lager:debug("processing multipart/~s", [Multipart]),
     case Body of
         {Type, SubType, _HeadersPart, ParametersPart, BodyPart} ->
@@ -730,20 +749,31 @@ process_message(<<"multipart">>, Multipart, _Headers, _Parameters, Body, #state{
             maybe_process_part(<<Type/binary, "/", SubType/binary>>
                               ,ParametersPart
                               ,BodyPart
-                              ,State
+                              ,NewState
                               );
         [{Type, SubType, _HeadersPart, _ParametersPart, _BodyParts}|_OtherParts]=Parts ->
             lager:debug("processing multiple parts, first is ~s/~s", [Type, SubType]),
-            process_parts(Parts, State);
+            process_parts(Parts, NewState);
         A ->
             lager:debug("missed processing ~p", [A]),
-            {'ok', State#state{errors=[<<"invalid body">> | Errors]
-                              ,has_smtp_errors='true'
-                              }}
+            {'ok', NewState#state{errors=[<<"invalid body">> | Errors]
+                                 ,has_smtp_errors='true'
+                                 }}
     end;
 process_message(_Type, _SubType, _Headers, _Parameters, _Body, State) ->
     lager:debug("skipping ~s/~s",[_Type, _SubType]),
     {'ok', State}.
+
+-spec maybe_get_subject(kz_term:proplist(), state()) -> state().
+maybe_get_subject(Headers, #state{doc=Doc}=State) ->
+    case props:get_binary_value(<<"Subject">>, Headers) of
+        'undefined' ->
+            lager:debug("subject line not found"),
+            State;
+        Subject ->
+            lager:debug("found subject line ~p", [Subject]),
+            State#state{doc=kz_json:set_value(<<"subject">>, Subject, Doc)}
+    end.
 
 -spec process_parts([mimemail:mimetuple()], state()) -> {'ok', state()}.
 process_parts([], #state{filename='undefined'
@@ -766,7 +796,7 @@ process_parts([{Type, SubType, _Headers, Parameters, BodyPart}
     process_parts(Parts, maybe_ignore_no_valid_attachment(NewState)).
 
 -spec maybe_process_part(kz_term:ne_binary(), kz_term:proplist(), binary() | mimemail:mimetuple(), state()) ->
-                                {'ok', state()}.
+          {'ok', state()}.
 maybe_process_part(<<"multipart/", Multipart/binary>>, _Parameters, Body, #state{errors=Errors}=State) ->
     lager:debug("processing multipart/~s", [Multipart]),
     case Body of
@@ -883,13 +913,13 @@ content_type_matched_json(CT, Type, <<"prefix">> = Field) ->
     end.
 
 -spec maybe_process_image(kz_term:ne_binary(), binary() | mimemail:mimetuple(), state()) ->
-                                 {'ok', state()}.
+          {'ok', state()}.
 maybe_process_image(CT, Body, State) ->
     Size = kapps_config:get_binary(?CONFIG_CAT, <<"image_min_size">>, <<"700x10">>),
     maybe_process_image(CT, Body, Size, State).
 
 -spec maybe_process_image(kz_term:ne_binary(), binary() | mimemail:mimetuple(), kz_term:ne_binary(), state()) ->
-                                 {'ok', state()}.
+          {'ok', state()}.
 maybe_process_image(CT, Body, Size, State) ->
     {MinX, MinY} = case re:split(Size, "x") of
                        [P] -> {kz_term:to_integer(P), kz_term:to_integer(P)};
@@ -912,14 +942,14 @@ maybe_process_image(CT, Body, Size, State) ->
     end.
 
 -spec write_tmp_file(kz_term:ne_binary(), binary() | mimemail:mimetuple()) ->
-                            {'ok', kz_term:api_binary()} |
-                            {'error', any()}.
+          {'ok', kz_term:api_binary()} |
+          {'error', any()}.
 write_tmp_file(Extension, Body) ->
     write_tmp_file('undefined', Extension, Body).
 
 -spec write_tmp_file(kz_term:api_binary() , kz_term:ne_binary(), binary() | mimemail:mimetuple()) ->
-                            {'ok', kz_term:api_binary()} |
-                            {'error', any()}.
+          {'ok', kz_term:api_binary()} |
+          {'error', any()}.
 write_tmp_file('undefined', Extension, ?NE_BINARY = Body) ->
     Basename = kz_term:to_hex_binary(erlang:md5(Body)),
     Filename = <<"/tmp/email_attachment_", Basename/binary>>,

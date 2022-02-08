@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Handle CRUD operations for Directories
 %%% @author James Aimonetti
 %%% @end
@@ -35,7 +35,7 @@
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec init() -> ok.
+-spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.directories">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.directories">>, ?MODULE, 'resource_exists'),
@@ -46,7 +46,7 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.post.directories">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.patch.directories">>, ?MODULE, 'patch'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.directories">>, ?MODULE, 'delete'),
-    ok.
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc This function determines the verbs that are appropriate for the
@@ -300,7 +300,9 @@ read(Id, Context) ->
 -spec load_directory_users(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 load_directory_users(Id, Context) ->
     Context1 = crossbar_doc:load_view(?CB_USERS_LIST
-                                     ,[{'key', Id}]
+                                     ,[{'startkey', [Id]}
+                                      ,{'endkey', [Id, kz_json:new()]}
+                                      ]
                                      ,Context
                                      ,fun normalize_users_results/2
                                      ),
@@ -363,7 +365,7 @@ normalize_view_results(JObj, Acc) ->
 -spec normalize_users_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
 normalize_users_results(JObj, Acc) ->
     [kz_json:from_list([{<<"user_id">>, kz_doc:id(JObj)}
-                       ,{<<"callflow_id">>, kz_json:get_value(<<"value">>, JObj)}
+                       ,{<<"callflow_id">>, kz_json:get_ne_binary_value(<<"value">>, JObj)}
                        ])
      | Acc
     ].

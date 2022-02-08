@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Calls coming from offnet (in this case, likely stepswitch) potentially
 %%% destined for a trunkstore client, or, if the account exists and
 %%% failover is configured, to an external DID or SIP URI
@@ -150,22 +150,25 @@ wait_for_bridge(State, Timeout) ->
 
 -spec try_failover(ts_callflow:state()) -> 'ok'.
 try_failover(State) ->
-    case {ts_callflow:get_control_queue(State)
-         ,ts_callflow:get_failover(State)
-         }
-    of
-        {<<>>, _} ->
-            lager:info("no callctl for failover");
-        {_, 'undefined'} ->
-            lager:info("no failover defined");
-        {_, Failover} ->
-            case kz_json:is_empty(Failover) of
-                'true' ->
-                    lager:info("no failover configured");
-                'false' ->
-                    lager:info("trying failover"),
-                    failover(State, Failover)
-            end
+    try_failover(State
+                ,ts_callflow:get_control_queue(State)
+                ,ts_callflow:get_failover(State)
+                ).
+
+-spec try_failover(ts_callflow:state(), binary(), kz_term:api_object()) -> 'ok'.
+try_failover(_State, <<>>, _Failover) ->
+    lager:info("no callctl for failover");
+try_failover(State, _CtlQ, 'undefined') ->
+    lager:info("no failover defined"),
+    ts_callflow:send_hangup(State);
+try_failover(State, _CtlQ, Failover) ->
+    case kz_json:is_empty(Failover) of
+        'true' ->
+            lager:info("no failover configured"),
+            ts_callflow:send_hangup(State);
+        'false' ->
+            lager:info("trying failover"),
+            failover(State, Failover)
     end.
 
 -spec failover(ts_callflow:state(), kz_json:object()) -> 'ok'.
@@ -263,7 +266,7 @@ get_endpoint_data(State) ->
     end.
 
 -spec get_endpoint_data(ts_callflow:state(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), knm_number_options:extra_options()) ->
-                               {'endpoint', kz_json:object()}.
+          {'endpoint', kz_json:object()}.
 get_endpoint_data(State, JObj, ToDID, AccountId, NumberProps) ->
     ForceOut = knm_number_options:should_force_outbound(NumberProps),
     lager:info("building endpoint for account id ~s with force out ~s", [AccountId, ForceOut]),
@@ -422,7 +425,7 @@ routing_data(ToDID, AccountId, Settings) ->
 -spec build_ip(kz_term:api_binary(), kz_term:api_binary() | integer()) -> kz_term:api_binary().
 build_ip('undefined', _) -> 'undefined';
 build_ip(IP, 'undefined') -> IP;
-build_ip(IP, <<_/binary>> = PortBin) -> build_ip(IP, kz_term:to_integer(PortBin));
+build_ip(IP, <<PortBin/binary>>) -> build_ip(IP, kz_term:to_integer(PortBin));
 build_ip(IP, 5060) -> IP;
 build_ip(IP, Port) -> list_to_binary([IP, ":", kz_term:to_binary(Port)]).
 
@@ -445,7 +448,7 @@ callee_id([JObj | T]) ->
     end.
 
 -spec maybe_anonymize_caller_id(ts_callflow:state(), {kz_term:ne_binary(), kz_term:ne_binary()}, kz_term:api_object()) ->
-                                       kz_term:proplist().
+          kz_term:proplist().
 maybe_anonymize_caller_id(State, {Name, Number}, CidFormat) ->
     CCVs = ts_callflow:get_custom_channel_vars(State),
     [{<<"Outbound-Caller-ID-Number">>, kapps_call:maybe_format_caller_id_str(Number, CidFormat)}

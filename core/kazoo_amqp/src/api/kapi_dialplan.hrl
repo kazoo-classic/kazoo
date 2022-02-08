@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2018 2600Hz
+%%% @copyright (C) 2011-2021 2600Hz
 %%% @doc Dialplan API definitions.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -592,6 +592,16 @@
                               ,{<<"Insert-At">>, <<"now">>}
                               ]).
 -define(PLAY_STOP_REQ_TYPES, []).
+
+%% PlaySeek Request
+-define(PLAY_SEEK_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Duration">>, <<"Direction">>]).
+-define(OPTIONAL_PLAY_SEEK_REQ_HEADERS, [<<"Insert-At">>]).
+-define(PLAY_SEEK_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
+                              ,{<<"Event-Name">>, <<"command">>}
+                              ,{<<"Application-Name">>, <<"playseek">>}
+                              ,{<<"Insert-At">>, <<"now">>}
+                              ]).
+-define(PLAY_SEEK_REQ_TYPES, [{<<"Duration">>, fun is_integer/1}]).
 
 %% Record Request
 -define(RECORD_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Media-Name">>]).

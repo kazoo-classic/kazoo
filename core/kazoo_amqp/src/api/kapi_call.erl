@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Call-related messages, like switch events, status requests, etc AMQP API.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -346,7 +346,11 @@ publish_event(Event, ContentType) ->
 
 -spec find_event_call_id(kz_term:proplist()) -> kz_term:api_ne_binary().
 find_event_call_id(Event) ->
-    Keys = case props:is_true(<<"Channel-Is-Loopback">>, Event, 'false') of
+    %% fax needs origination-call-id
+    %% c2c and pivot do not
+    Keys = case kz_api:event_name(Event) =/= <<"CHANNEL_FAX_STATUS">>
+               andalso props:is_true(<<"Channel-Is-Loopback">>, Event, 'false')
+           of
                'true' -> [<<"Call-ID">>, <<"Unique-ID">>];
                'false' -> [<<"Origination-Call-ID">>, <<"Call-ID">>, <<"Unique-ID">>]
            end,
@@ -482,7 +486,7 @@ publish_usurp_publisher(CallId, JObj) ->
 -spec publish_usurp_publisher(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_usurp_publisher(CallId, JObj, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?PUBLISHER_USURP_CONTROL_VALUES, fun usurp_publisher/1),
-    kz_amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('publisher_usurp', CallId), Payload, ContentType).
+    kz_amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('usurp_publisher', CallId), Payload, ContentType).
 
 -spec get_status(kz_term:api_terms()) -> kz_term:ne_binary().
 get_status(API) when is_list(API) -> props:get_value(<<"Status">>, API);

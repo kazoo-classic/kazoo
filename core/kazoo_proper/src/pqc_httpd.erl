@@ -72,13 +72,13 @@ get_req(Path) ->
     gen_server:call(?MODULE, {'get_req', Path}).
 
 -spec wait_for_req(kz_json:path()) -> {'ok', kz_json:api_json_term()} |
-                                      {'error', 'timeout'}.
+          {'error', 'timeout'}.
 wait_for_req(Path) ->
     wait_for_req(Path, 5 * ?MILLISECONDS_IN_SECOND).
 
 -spec wait_for_req(kz_json:path(), pos_integer()) ->
-                          {'ok', kz_json:api_json_term()} |
-                          {'error', 'timeout'}.
+          {'ok', kz_json:api_json_term()} |
+          {'error', 'timeout'}.
 wait_for_req(Path, TimeoutMs) ->
     gen_server:call(?MODULE, {'wait_for_req', Path, TimeoutMs}, TimeoutMs + 100).
 
@@ -89,7 +89,7 @@ update_req(Path, <<_/binary>>=Content) ->
             catch
                 'error':_ -> Content
             end,
-    ?INFO("trying to store ~p: ~s", [Path, Store]),
+    lager:info("trying to store ~p: ~s", [Path, Store]),
     gen_server:call(?MODULE, {'req', Path, Store}).
 
 log_meta(LogId) ->
@@ -105,7 +105,7 @@ init([LogId]) ->
 
     Dispatch = cowboy_router:compile(routes(LogId)),
     {'ok', _Pid} = start_plaintext(Dispatch),
-    ?INFO("started HTTPD(~p) at ~s", [_Pid, base_url()]),
+    lager:info("started HTTPD(~p) at ~s", [_Pid, base_url()]),
     {'ok', #state{}}.
 
 -spec routes(kz_term:ne_binary()) -> cowboy_router:routes().
@@ -130,7 +130,7 @@ base_url() ->
     kz_term:to_binary(["http://", Host, $:, integer_to_list(Port), $/]).
 
 -spec init(cowboy_req:req(), kz_term:proplist()) ->
-                  {'ok', cowboy_req:req(), 'undefined'}.
+          {'ok', cowboy_req:req(), 'undefined'}.
 init(Req, HandlerOpts) ->
     log_meta(props:get_value('log_id', HandlerOpts)),
     handle(Req, HandlerOpts).
@@ -157,7 +157,7 @@ get_from_state(Req, State) ->
             Value -> {200, Value}
         end,
 
-    ?INFO("GET req ~s: ~p", [Path, RespCode]),
+    lager:info("GET req ~s: ~p", [Path, RespCode]),
 
     Req1 = cowboy_req:reply(RespCode, #{}, Body, Req),
     {'ok', Req1, State}.
@@ -173,7 +173,7 @@ add_req_to_state(Req, State) ->
                    _Value -> 200
                end,
 
-    ?INFO("PUT req ~s: ~p: ~s", [Path, RespCode, ReqBody]),
+    lager:info("PUT req ~s: ~p: ~s", [Path, RespCode, ReqBody]),
     update_req(PathParts, iolist_to_binary(ReqBody)),
 
     Headers = #{<<"content-type">> => <<"application/json">>},
@@ -195,42 +195,42 @@ maybe_handle_multipart(Req) ->
     maybe_handle_multipart(Req, cowboy_req:parse_header(<<"content-type">>, Req)).
 
 maybe_handle_multipart(Req, {<<"multipart">>, <<"form-data">>, _Boundary}) ->
-    ?INFO("handle multipart body with boundary: ~p", [_Boundary]),
+    lager:info("handle multipart body with boundary: ~p", [_Boundary]),
     handle_multipart(Req);
 maybe_handle_multipart(Req, _CT) ->
-    ?INFO("req has content-type: ~p", [_CT]),
+    lager:info("req has content-type: ~p", [_CT]),
     read_body(cowboy_req:read_body(Req)).
 
 handle_multipart(Req0) ->
     case cowboy_req:read_part(Req0) of
         {'ok', Headers, Req1} ->
-            ?INFO("recv part headers: ~p", [Headers]),
+            lager:info("recv part headers: ~p", [Headers]),
             handle_part_headers(Req1, Headers);
         {'done', Req1} ->
-            ?INFO("finished reading parts, no body"),
+            lager:info("finished reading parts, no body"),
             {Req1, <<>>}
     end.
 
 handle_part_headers(Req, #{<<"content-type">> := <<"application/json">>}) ->
-    ?INFO("skipping JSON metadata"),
+    lager:info("skipping JSON metadata"),
     handle_multipart(Req);
 handle_part_headers(Req, Headers) ->
     case cow_multipart:form_data(Headers) of
         {'data', Field} ->
-            ?INFO("field: ~p", [Field]),
+            lager:info("field: ~p", [Field]),
             {'ok', Body, Req1} = cowboy_req:read_part_body(Req),
-            ?INFO("body: ~p", [Body]),
+            lager:info("body: ~p", [Body]),
             {Req1, Body};
         {'file', _FieldName, _Filename, _CType} ->
-            ?INFO("file ~p: ~p: ~p", [_FieldName, _Filename, _CType]),
+            lager:info("file ~p: ~p: ~p", [_FieldName, _Filename, _CType]),
             {'ok', Body, Req1} = cowboy_req:read_part_body(Req),
-            ?INFO("body: ~p", [Body]),
+            lager:info("body: ~p", [Body]),
             {Req1, Body}
     end.
 
 -spec terminate(any(), cowboy_req:req(), any()) -> 'ok'.
 terminate(_Reason, _Req, _State) ->
-    ?INFO("finished req ~p", [kz_time:elapsed_ms(get('now'))]).
+    lager:info("finished req ~p", [kz_time:elapsed_ms(get('now'))]).
 
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
@@ -243,8 +243,8 @@ code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
 -spec handle_call(any(), kz_term:pid_ref(), state()) ->
-                         {'noreply', state()} |
-                         {'reply', kz_json:api_json_term(), state()}.
+          {'noreply', state()} |
+          {'reply', kz_json:api_json_term(), state()}.
 handle_call({'wait_for_req', Path, TimeoutMs}
            ,From
            ,#state{requests=Requests
@@ -262,19 +262,19 @@ handle_call('status', _From, State) ->
 handle_call({'fetch_req', Path}, _From, #state{requests=Requests}=State) ->
     case kz_json:take_value(Path, Requests) of
         'false' ->
-            ?INFO("failed to fetch ~p", [Path]),
+            lager:info("failed to fetch ~p", [Path]),
             {'reply', 'undefined', State};
         {'value', Value, NewRequests} ->
-            ?INFO("fetched ~p: ~s", [Path, Value]),
+            lager:info("fetched ~p: ~s", [Path, Value]),
             {'reply', Value, State#state{requests=NewRequests}}
     end;
 handle_call({'get_req', Path}, _From, #state{requests=Requests}=State) ->
-    ?INFO("getting ~p", [Path]),
+    lager:info("getting ~p", [Path]),
     {'reply', kz_json:get_value(Path, Requests), State};
 handle_call({'req', PathInfo, ReqBody}, _From, #state{requests=Requests
                                                      ,waits=Waits
                                                      }=State) ->
-    ?INFO("storing to ~p: ~s", [PathInfo, ReqBody]),
+    lager:info("storing to ~p: ~s", [PathInfo, ReqBody]),
     UpdatedReqs = kz_json:set_value(PathInfo, ReqBody, Requests),
 
     {Relays, StillWaiting} =

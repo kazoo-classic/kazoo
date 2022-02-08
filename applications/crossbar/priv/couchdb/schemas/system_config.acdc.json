@@ -39,7 +39,12 @@
         "default_agent_pause_timeout": {
             "default": 600,
             "description": "acdc default agent pause timeout",
-            "type": "integer"
+            "minimum": 0,
+            "pattern": "infinity",
+            "type": [
+                "integer",
+                "string"
+            ]
         },
         "default_queue_max_priority": {
             "description": "Maximum Call-Priority level supported by queues unless overridden on a per-queue basis",

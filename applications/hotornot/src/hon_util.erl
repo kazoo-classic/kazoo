@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -26,23 +26,23 @@
                                   kz_datamgr:data_error().
 
 -spec candidate_rates(kz_term:ne_binary()) ->
-                             candidate_rates_return().
+          candidate_rates_return().
 candidate_rates(ToDID) ->
     candidate_rates(ToDID, 'undefined', 'undefined').
 
 -spec candidate_rates(kz_term:ne_binary(), kz_term:api_ne_binary()) ->
-                             candidate_rates_return().
+          candidate_rates_return().
 candidate_rates(ToDID, AccountId) ->
     candidate_rates(ToDID, AccountId, 'undefined').
 
 -spec candidate_rates(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) ->
-                             candidate_rates_return().
+          candidate_rates_return().
 candidate_rates(ToDID, AccountId, RatedeckId) ->
     E164 = knm_converters:normalize(ToDID),
     find_candidate_rates(E164, AccountId, RatedeckId).
 
 -spec find_candidate_rates(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) ->
-                                  candidate_rates_return().
+          candidate_rates_return().
 find_candidate_rates(E164, AccountId, RatedeckId)
   when byte_size(E164) > ?MIN_PREFIX_LEN ->
     case hotornot_config:should_use_trie() of
@@ -54,7 +54,7 @@ find_candidate_rates(DID, _AccountId, _RatedeckId) ->
     {'error', 'did_too_short'}.
 
 -spec find_trie_rates(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) ->
-                             candidate_rates_return().
+          candidate_rates_return().
 find_trie_rates(E164, AccountId, RatedeckId) ->
     case hon_trie:match_did(only_numeric(E164), AccountId, RatedeckId) of
         {'ok', Result} -> {'ok', Result};
@@ -76,12 +76,12 @@ maybe_update_trie(_RatedeckId, _Candidates, _Module) ->
     'ok'.
 
 -spec fetch_candidate_rates(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) ->
-                                   candidate_rates_return().
+          candidate_rates_return().
 fetch_candidate_rates(E164, AccountId, RatedeckId) ->
     fetch_candidate_rates(E164, AccountId, RatedeckId, build_keys(E164)).
 
 -spec fetch_candidate_rates(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), kz_term:ne_binaries()) ->
-                                   candidate_rates_return().
+          candidate_rates_return().
 fetch_candidate_rates(_E164, _AccountId, _RatedeckId, []) ->
     {'error', 'did_too_short'};
 fetch_candidate_rates(E164, AccountId, RatedeckId, Keys) ->
@@ -101,7 +101,7 @@ fetch_candidate_rates(E164, AccountId, RatedeckId, Keys) ->
     end.
 
 -spec fetch_rates_from_ratedeck(kz_term:ne_binary(), [integer()]) ->
-                                       kz_datamgr:get_results_return().
+          kz_datamgr:get_results_return().
 fetch_rates_from_ratedeck(RatedeckDb, Keys) ->
     kz_datamgr:get_results(RatedeckDb
                           ,<<"rates/lookup">>
@@ -183,7 +183,7 @@ build_keys(<<D:1/binary, Rest/binary>>, Prefix, Acc) ->
 build_keys(<<>>, _, Acc) -> Acc.
 
 -spec matching_rates(kzd_rates:docs(), kapi_rate:req()) ->
-                            kzd_rates:docs().
+          kzd_rates:docs().
 matching_rates(Rates, RateReq) ->
     FilterList = hotornot_config:filter_list(),
     lists:foldl(fun(Filter, Acc) ->
@@ -235,11 +235,7 @@ matching_rate(Rate, <<"routes">>, RateReq) ->
              );
 
 matching_rate(Rate, <<"caller_id_numbers">>, RateReq) ->
-    FromDID = kapi_rate:from_did(RateReq),
-    E164 = knm_converters:normalize(FromDID),
-    lists:any(fun(Regex) -> re:run(E164, Regex) =/= 'nomatch' end
-             ,kzd_rates:caller_id_numbers(Rate, [<<".">>])
-             );
+    matching_rate_on_caller_id(Rate, kapi_rate:from_did(RateReq));
 
 matching_rate(Rate, <<"ratedeck_id">>, RateReq) ->
     AccountId = kapi_rate:account_id(RateReq),
@@ -257,6 +253,13 @@ matching_rate(Rate, <<"version">>, _RateReq) ->
     kzd_rates:rate_version(Rate) =:= hotornot_config:rate_version();
 
 matching_rate(_Rate, _FilterType, _RateReq) -> 'false'.
+
+matching_rate_on_caller_id(_Rate, 'undefined') -> 'true';
+matching_rate_on_caller_id(Rate, FromDID) ->
+    E164 = knm_converters:normalize(FromDID),
+    lists:any(fun(Regex) -> re:run(E164, Regex) =/= 'nomatch' end
+             ,kzd_rates:caller_id_numbers(Rate, [<<".">>])
+             ).
 
 %% Return true if RateA has lower weight than RateB
 -spec sort_rate_by_weight(kzd_rates:doc(), kzd_rates:doc()) -> boolean().

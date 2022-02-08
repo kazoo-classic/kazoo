@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -47,6 +47,8 @@ node_info(Server, Started) ->
           [{<<"Startup">>, Started}
           ,{<<"Instance-UUID">>, ecallmgr_fs_node:instance_uuid(Server)}
           ,{<<"Interfaces">>, ecallmgr_fs_node:interfaces(Server)}
+          ,{<<"Sessions">>, ecallmgr_fs_node:sessions(Server)}
+          ,{<<"Version">>, ecallmgr_fs_node:version(Server)}
           ])
     catch
         _E:_R -> 'undefined'
@@ -75,7 +77,6 @@ declare_exchanges() ->
     _ = kapi_resource:declare_exchanges(),
     _ = kapi_route:declare_exchanges(),
     _ = kapi_sysconf:declare_exchanges(),
-    _ = kapi_sms:declare_exchanges(),
     _ = kapi_switch:declare_exchanges(),
     _ = kapi_presence:declare_exchanges(),
     kapi_self:declare_exchanges().

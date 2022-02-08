@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Callflow action to control call forwarding feature.
 %%%
 %%% <h4>Data options:</h4>
@@ -22,7 +22,7 @@
 -define(MOD_CONFIG_CAT, <<(?CF_CONFIG_CAT)/binary, ".call_forward">>).
 -define(KEY_LENGTH, 1).
 
--define(MIN_CALLFWD_NUMBER_LENGTH, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"min_callfwd_number_length">>, 3)).
+-define(MIN_CALLFWD_NUMBER_LENGTH, max(kapps_config:get_integer(?MOD_CONFIG_CAT, <<"min_callfwd_number_length">>, 3), 1)).
 -define(MAX_CALLFWD_NUMBER_LENGTH, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"max_callfwd_number_length">>, 20)).
 -define(CALLFWD_NUMBER_TIMEOUT, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"callfwd_number_timeout">>, 8000)).
 
@@ -216,8 +216,8 @@ cf_update_number(CF, CaptureGroup, _) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec update_callfwd(callfwd(), kapps_call:call()) ->
-                            {'ok', kz_term:api_object()} |
-                            {'error', atom()}.
+          {'ok', kz_term:api_object()} |
+          {'error', atom()}.
 update_callfwd('undefined', _Call) -> {'ok', 'undefined'};
 update_callfwd(#callfwd{doc_id=Id
                        ,enabled=Enabled
@@ -251,8 +251,8 @@ update_callfwd(#callfwd{doc_id=Id
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_call_forward(kapps_call:call()) ->
-                              callfwd() |
-                              {'error', callfwd()}.
+          callfwd() |
+          {'error', callfwd()}.
 get_call_forward(Call) ->
     AuthorizingId = kapps_call:authorizing_id(Call),
 
@@ -264,8 +264,8 @@ get_call_forward(Call) ->
     maybe_get_call_forward(Call, OwnerId).
 
 -spec maybe_get_call_forward(kapps_call:call(), kz_term:api_binary()) ->
-                                    callfwd() |
-                                    {'error', callfwd()}.
+          callfwd() |
+          {'error', callfwd()}.
 maybe_get_call_forward(_Call, 'undefined') ->
     lager:debug("cannot get call forwarding from undefined"),
     {'error', #callfwd{}};

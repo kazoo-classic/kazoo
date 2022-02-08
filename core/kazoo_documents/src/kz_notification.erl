@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2014-2019, 2600Hz
+%%% @copyright (C) 2014-2022, 2600Hz
 %%% @doc Device document manipulation
 %%% @author James Aimonetti
 %%% @end
@@ -80,11 +80,11 @@ macros(JObj) ->
 set_macros(JObj, Macros) ->
     kz_json:set_value(?MACROS, Macros, JObj).
 
--spec macro(doc(), kz_json:path()) -> kz_json:api_json_term().
+-spec macro(doc(), kz_json:key()) -> kz_json:api_json_term().
 macro(JObj, Key) ->
     kz_json:get_value([?MACROS, Key], JObj).
 
--spec set_macro(doc(), kz_json:path(), kz_json:json_term()) -> doc().
+-spec set_macro(doc(), kz_json:key(), kz_json:json_term()) -> doc().
 set_macro(JObj, Key, Value) ->
     kz_json:set_value([?MACROS, Key], Value, JObj).
 

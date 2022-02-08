@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2022, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @end
@@ -36,6 +36,8 @@
 
 -export([with_role/1, with_role/2]).
 -export([print_role/1]).
+-export([nodes/0]).
+
 -export([init/1
         ,handle_call/3
         ,handle_cast/2
@@ -745,6 +747,9 @@ handle_call({'print_status', Nodes}, _From, State) ->
     {'reply', 'ok', State};
 handle_call('zone', _From, #state{zone=Zone}=State) ->
     {'reply', Zone, State};
+handle_call('nodes', _From, State) ->
+    Nodes = lists:sort(fun compare_nodes/2, ets:tab2list(?MODULE)),
+    {'reply', Nodes, State};
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -1180,7 +1185,7 @@ whapp_oldest_node(Whapp, Zone)
     determine_whapp_oldest_node(kz_term:to_binary(Whapp), MatchSpec).
 
 -spec determine_whapp_oldest_node(kz_term:ne_binary(), ets:match_spec()) ->
-                                         'undefined' | node().
+          'undefined' | node().
 determine_whapp_oldest_node(Whapp, MatchSpec) ->
     case oldest_whapp_node(Whapp, MatchSpec) of
         {Node, _Start} -> Node;
@@ -1191,7 +1196,7 @@ determine_whapp_oldest_node(Whapp, MatchSpec) ->
                              {node(), kz_time:gregorian_seconds()}.
 
 -spec oldest_whapp_node(kz_term:ne_binary(), ets:match_spec()) ->
-                               oldest_whapp_node().
+          oldest_whapp_node().
 oldest_whapp_node(Whapp, MatchSpec) ->
     lists:foldl(fun({Whapps, _Node}=Info, Acc) when is_list(Whapps) ->
                         determine_whapp_oldest_node_fold(Info, Acc, Whapp)
@@ -1201,7 +1206,7 @@ oldest_whapp_node(Whapp, MatchSpec) ->
                ).
 
 -spec determine_whapp_oldest_node_fold({kz_types:kapps_info(), node()}, oldest_whapp_node(), kz_term:ne_binary()) ->
-                                              oldest_whapp_node().
+          oldest_whapp_node().
 determine_whapp_oldest_node_fold({Whapps, Node}, 'undefined', Whapp) ->
     case props:get_value(Whapp, Whapps) of
         'undefined' -> 'undefined';
@@ -1227,9 +1232,14 @@ maybe_add_zone(#kz_node{zone=Zone, broker=B}, #state{zones=Zones}=State) ->
 
 -spec node_info() -> kz_json:object().
 node_info() ->
-    kz_json:from_list(pool_states()
-                      ++ amqp_status()
-                     ).
+    AMQP = [{<<"connections">>, kz_json:from_list(amqp_status())}
+           ,{<<"pools">>, kz_json:from_list(pool_states())}
+           ],
+    Info = kazoo_bindings:map(<<"kz_nodes.node.info">>, []),
+    NodeInfo = [{<<"amqp">>, kz_json:from_list(AMQP)}
+                | [{Key, Value} || {Key, Value} <- Info]
+               ],
+    kz_json:from_list(NodeInfo).
 
 -spec amqp_status() -> [{kz_term:ne_binary(), kz_json:object()}].
 amqp_status() ->
@@ -1240,7 +1250,13 @@ amqp_status() ->
 amqp_status_connection(Connection) ->
     Count = kz_amqp_assignments:channel_count(Connection),
     Broker = kz_amqp_connection:broker(Connection),
-    {Broker, kz_json:from_list([{<<"channel_count">>, Count}])}.
+    BrokerZone = kz_amqp_connection:zone(Connection),
+
+    {Broker
+    ,kz_json:from_list([{<<"channel_count">>, Count}
+                       ,{<<"zone">>, kz_term:to_binary(BrokerZone)}
+                       ])
+    }.
 
 -spec pool_states() -> kz_term:proplist().
 pool_states() ->
@@ -1388,3 +1404,7 @@ with_role_filter(Role, MatchSpec) ->
                ,[]
                ,ets:select(?MODULE, MatchSpec)
                ).
+
+-spec nodes() -> kz_types:kz_nodes().
+nodes() ->
+    gen_listener:call(?MODULE, 'nodes').

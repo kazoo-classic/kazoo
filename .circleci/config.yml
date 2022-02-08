@@ -2,8 +2,8 @@ version: 2
 
 workflows:
   version: 2
-  
-  build-branch:
+
+  build_branch:
     jobs:
       - setup
       - build_deps:
@@ -67,7 +67,7 @@ workflows:
            branches:
              ignore: /.*/
          requires:
-           - build_deps           
+           - build_deps
       - checks:
           filters:
              tags:
@@ -113,7 +113,6 @@ workflows:
             - docs
             - analyze
             - release
-
 defaults: &defaults
   docker:
     - image: offical2600hz/circleci:19.3.6.13
@@ -127,14 +126,14 @@ jobs:
     <<: *defaults
     steps:
       - checkout
-      - run: 
+      - run:
           name: Listing Changes
           command: make changed
       - persist_to_workspace:
           root: .
           paths:
             - .
-  
+
   build_deps:
     <<: *defaults
     steps:
@@ -142,19 +141,29 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - deps-v3.2-{{ checksum "make/deps.mk" }}
-      - run: 
-          name: Making deps 
+            - deps-v2-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
+      - run:
+          name: Calculating dependency hash for CircleCI cache
+          command: |
+            deps_hash=$(md5sum make/deps.mk | cut -d" " -f1)
+            if [ x"$(cat .git/.kz_deps_hash)" = x"$deps_hash" ]; then
+              touch "make/.deps.mk.$deps_hash"
+            fi
+            (echo -n $(md5sum $KAZOO_ROOT/make/deps.mk | cut -d" " -f1) | tee "$KAZOO_ROOT/.git/.kz_deps_hash") && echo
+            md5sum make/deps.mk
+            ls -al make
+      - run:
+          name: Making dependencies
           command: make deps
       - save_cache:
-          key: deps-v3.2-{{ checksum "make/deps.mk" }}
+          key: deps-v2-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
           paths:
             - deps/
       - persist_to_workspace:
           root: .
           paths:
             - .
-            
+
   build:
     <<: *defaults
     steps:
@@ -162,19 +171,15 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - deps-v3.2-{{ checksum "make/deps.mk" }}
-      - run: 
+            - deps-v2-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
+      - run:
           name: Compiling the project
           command: JOBS="2" make
-      - save_cache:
-          key: deps-v3.2-{{ checksum "make/deps.mk" }}
-          paths:
-            - deps/
       - persist_to_workspace:
           root: .
           paths:
             - .
-      
+
   eunit_tests:
     <<: *defaults
     steps:
@@ -182,44 +187,42 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - deps-v3.2-{{ checksum "make/deps.mk" }}
+            - deps-v2-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
       - run:
-          name: Displaying deps hash
-          command: |
-            md5sum make/deps.mk || true
-            ls -al make || true
-      - run: 
           name: Compiling for unit test enviornment
           command: ERLC_OPTS='-DPROPER' make compile-test
-      - run: 
+      - run:
           name: Running Eunit tests
           command: make eunit
+      ## disabling this for now until we figure out why it is crashing, and how to set token
+      # - run:
+      #     name: Uploading Coverage Report
+      #     command: make coverage-report
 
-            
   checks:
     <<: *defaults
     steps:
       - attach_workspace:
           at: .
-      - run: 
+      - run:
+          name: Running code formatter
+          command: make fmt
+      - run:
           name: Running code checks
           command: make code_checks
-      - run: 
-          name: Running additional code checks 
-          command: scripts/code_checks.bash
-      - run: 
-          name: Making app applications 
+      - run:
+          name: Checking app source file
           command: make app_applications
-      - run: 
-          name: Generating sup bash completion file
+      - run:
+          name: Generating sup bash completion files
           command: make sup_completion
-      - run: 
+      - run:
           name: Running xref check
           command: make xref
-      - run: 
-          name: Running code style check 
+      - run:
+          name: Running Elvis code style check
           command: make elvis
-      - run: 
+      - run:
           name: Checking for unstaged files
           command: scripts/check-unstaged.bash
 
@@ -228,25 +231,25 @@ jobs:
     steps:
       - attach_workspace:
           at: .
-      - run: 
+      - run:
           name: Generating APIs
           command: make apis
-      - run: 
-          name: Validating view JS
+      - run:
+          name: Validating CouchDB view files
           command: make validate-js
-      - run: 
+      - run:
           name: Validating schemas
           command: make validate-schemas
-      - run: 
+      - run:
           name: Generating docs
           command: make docs || true
-      - run: 
+      - run:
           name: Checking doc states
           command: scripts/state-of-docs.sh || true
-      - run: 
-          name: Validating doc states
+      - run:
+          name: Validating EDoc states
           command: scripts/state-of-edoc.escript
-      - run: 
+      - run:
           name: Checking for unstaged files
           command: scripts/check-unstaged.bash
 
@@ -257,12 +260,15 @@ jobs:
           at: .
       - restore_cache:
           keys:
-            - plt-v2-{{ checksum "make/deps.mk" }}
-      - run: 
-          name: Running dailyzer checks
-          command: make build-plt dialyze-changed
+            - plt-v2-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
+      - run:
+          name: Building plt file
+          command: make build-plt
+      - run:
+          name: Dailyzing changed Erlang files
+          command: make dialyze-changed
       - save_cache:
-          key: plt-v2-{{ checksum "make/deps.mk" }}
+          key: plt-v2-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
           paths:
             - .kazoo.plt
 
@@ -270,7 +276,7 @@ jobs:
     <<: *defaults
     docker:
       - image: offical2600hz/circleci:19.3.6.13
-      - image: couchdb:2.1.1
+      - image: couchdb:2.3.1
       - image: rabbitmq:3.7
     environment:
       CIRCLE_ARTIFACTS: /tmp/circleci-artifacts
@@ -281,26 +287,29 @@ jobs:
       - run:
           name: Creating artifacts directory
           command: mkdir -p $CIRCLE_ARTIFACTS
-      - run: 
-          name: Making CI release
+      - run:
+          name: Building CI release
           command: make build-ci-release
-      - run: 
-          name: Making release
+      - run:
+          name: Running Kazoo release
           command: KAZOO_CONFIG=${PWD}/rel/ci.config.ini REL="kazoo_apps" ACT="console" NODE_NAME_TYPE="-sname" make release
-      - run: 
-          name: Copying artifacts 
+      - run:
+          name: Copying Relx config artifacts
           command: cp ${PWD}/rel/ci.relx.config $CIRCLE_ARTIFACTS/
-      - run: 
-          name: Finding Artifacts
+      - run:
+          name: Copying release Artifacts
           command: find ${PWD}/_rel/kazoo/releases -name kazoo.rel -exec cp {} $CIRCLE_ARTIFACTS/ \;
       - store_artifacts:
           path: /tmp/circleci-artifacts
-      - run: 
-          name: Checking for errors
+      - run:
+          name: Checking for errors in artifacts
           command: |
             if [[ $(grep -c -v -F 'exit with reason shutdown' ${CIRCLE_ARTIFACTS}/log/error.log) -gt 0 ]]; then
+              printf ":: some errors are detected during running release\n\n"
               cat ${CIRCLE_ARTIFACTS}/log/error.log
               exit 1
+            else
+              printf ":: no errors are found in release\n\n"
             fi
 
   build_centos7:
@@ -322,7 +331,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - deps-centos7-v3.2-{{ checksum "make/deps.mk" }}
+            - deps-packager-v1-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
       - run:
           name: Making dependencies
           command: |
@@ -330,7 +339,7 @@ jobs:
             ls -al make || true
             make deps
       - save_cache:
-          key: deps-centos7-v3.2-{{ checksum "make/deps.mk" }}
+          key: deps-packager-v1-{{ checksum "make/deps.mk" }}-{{ checksum "/usr/local/lib/erlang/releases/RELEASES" }}
           paths:
             - deps/
             - .git/.kz_deps_hash

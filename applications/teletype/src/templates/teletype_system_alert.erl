@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2015-2019, 2600Hz
+%%% @copyright (C) 2015-2022, 2600Hz
 %%% @doc
 %%% @author Peter Defebvre
 %%% @end
@@ -27,6 +27,14 @@ id() -> <<"system_alert">>.
 macros() ->
     kz_json:from_list(
       [?MACRO_VALUE(<<"message">>, <<"message">>, <<"Message">>, <<"System message">>)
+      ,?MACRO_VALUE(<<"details.key_store">>, <<"details_key_store">>, <<"Details key store">>, <<"Details key store">>)
+      ,?MACRO_VALUE(<<"details.channel_vars">>, <<"details_channel_vars">>, <<"Details channel vars">>, <<"Details channel vars">>)
+      ,?MACRO_VALUE(<<"details.sip_headers">>, <<"details_sip_headers">>, <<"Details SIP headers">>, <<"Details SIP headers">>)
+      ,?MACRO_VALUE(<<"details.callflow">>, <<"details_callflow">>, <<"Details callflow">>, <<"Details callflow">>)
+      ,?MACRO_VALUE(<<"details.error_details">>, <<"details_error_details">>, <<"Details error details">>, <<"Details error details">>)
+      ,?MACRO_VALUE(<<"details.http_headers">>, <<"details_http_headers">>, <<"Details HTTP headers">>, <<"Details HTTP headers">>)
+      ,?MACRO_VALUE(<<"request.msg_id">>, <<"request_msg_id">>, <<"Request message ID">>, <<"Request message ID">>)
+      ,?MACRO_VALUE(<<"request.node">>, <<"request_node">>, <<"Request node">>, <<"Request node">>)
        | ?USER_MACROS
        ++ ?COMMON_TEMPLATE_MACROS
       ]).
@@ -167,7 +175,7 @@ details_groups(Details) ->
     details_groups(Details, {<<"details">>, []}).
 
 -spec details_groups(kz_term:proplist(), {kz_term:ne_binary(), kz_term:proplist()}) ->
-                            kz_term:proplist().
+          kz_term:proplist().
 details_groups([], {_, Acc}) -> Acc;
 
 details_groups([{<<"key_value_store">>, V} | KS], {Group, Acc}) ->
@@ -188,7 +196,7 @@ details_groups([KV | KS], {Group, Acc}) ->
     details_groups(KS, {Group, add_to_group(Group, KV, Acc)}).
 
 -spec add_to_group(kz_term:ne_binary(), {kz_json:path(), kz_json:json_term()}, kz_term:proplist()) ->
-                          kz_term:proplist().
+          kz_term:proplist().
 add_to_group(Group, KV, Acc) ->
     case props:get_value(Group, Acc) of
         'undefined' -> props:set_value(Group,[KV], Acc);

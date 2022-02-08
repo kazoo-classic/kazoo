@@ -46,6 +46,15 @@
             "description": "blackhole ip",
             "type": "string"
         },
+        "max_connections_per_ip": {
+            "description": "blackhole max_connections_per_ip",
+            "type": "integer"
+        },
+        "max_queued_messages": {
+            "default": 50,
+            "description": "Max_queued_messages to be sent on a websocket before terminating the socket (slow client)",
+            "type": "integer"
+        },
         "port": {
             "default": 5555,
             "description": "blackhole port",
@@ -54,6 +63,11 @@
         "request_timeout_ms": {
             "default": 10000,
             "description": "blackhole request_timeout_ms",
+            "type": "integer"
+        },
+        "send_timeout_ms": {
+            "default": 5000,
+            "description": "How long to wait for a packet to be confirmed sent",
             "type": "integer"
         },
         "ssl_ca_cert": {
@@ -82,6 +96,10 @@
             "default": 100,
             "description": "blackhole ssl_workers",
             "type": "integer"
+        },
+        "url": {
+            "description": "The advertised URL of the Kazoo websocket",
+            "type": "string"
         },
         "use_plaintext": {
             "default": true,

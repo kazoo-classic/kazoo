@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Conversion of types.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -38,6 +38,7 @@
         ,is_boolean/1
         ,is_ne_binary/1, is_api_ne_binary/1
         ,is_ne_binaries/1
+        ,is_ne_binary_or_binaries/1
         ,is_empty/1, is_not_empty/1
         ,is_proplist/1, is_ne_list/1
         ,is_pos_integer/1
@@ -66,6 +67,7 @@
 %% Denotes definition of each key-value in a proplist.
 
 -type proplist() :: [proplist_property()].
+-type api_proplist() :: proplist() | 'undefined'.
 %% A key-value form of data, `[{Key, Value}|atom]'.
 
 -type proplists() :: [proplist()].
@@ -180,6 +182,7 @@
              ,api_pid_ref/0
              ,api_pid_refs/0
              ,api_pos_integer/0
+             ,api_proplist/0
              ,api_reference/0
              ,api_string/0
              ,api_terms/0
@@ -428,6 +431,11 @@ is_ne_binaries(V)
   when is_list(V) ->
     lists:all(fun is_ne_binary/1, V);
 is_ne_binaries(_) -> 'false'.
+
+-spec is_ne_binary_or_binaries(any()) -> boolean().
+is_ne_binary_or_binaries(V) ->
+    is_ne_binary(V)
+        orelse is_ne_binaries(V).
 
 -spec is_boolean(binary() | string() | atom()) -> boolean().
 is_boolean(<<"true">>) -> 'true';

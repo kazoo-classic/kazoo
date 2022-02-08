@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Store routing keys/`pid' bindings. When a binding is fired,
 %%% pass the payload to the `pid' for evaluation, accumulating
 %%% the results for the response to the running process.
@@ -23,7 +23,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0
+-export([start_link/0, is_running/0
         ,bind/2, bind/3, bind/4
         ,unbind/3, unbind/4
         ,map/2, map/3, pmap/2, pmap/3
@@ -44,14 +44,12 @@
         ]).
 
 %% Helper Function for calling map/3
--export([candidates/1
-        ]).
+-export([candidates/1]).
 
 -export([rt_options/0, rt_options/1]).
 
 %% Helper Functions for debugging
--export([bindings/0, bindings/1, bindings/2
-        ]).
+-export([bindings/0, bindings/1, bindings/2]).
 
 %% ETS Persistence
 -export([table_id/0
@@ -291,6 +289,10 @@ matches(_, _) -> 'false'.
 start_link() ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
+-spec is_running() -> boolean().
+is_running() ->
+    is_pid(whereis(?SERVER)).
+
 -spec stop() -> 'ok'.
 stop() -> gen_server:cast(?SERVER, 'stop').
 
@@ -299,22 +301,23 @@ stop() -> gen_server:cast(?SERVER, 'stop').
 -type bind_results() :: [bind_result()].
 
 -spec bind(kz_term:ne_binary() | kz_term:ne_binaries(), atom() | fun()) ->
-                  bind_result() | bind_results().
+          bind_result() | bind_results().
 bind(Bindings, Fun) ->
     bind(Bindings, 'undefined', Fun).
 
 -spec bind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom() | fun()) ->
-                  bind_result() | bind_results().
+          bind_result() | bind_results().
 bind([_|_]=Bindings, Module, Fun) ->
     [bind(Binding, Module, Fun) || Binding <- Bindings];
 bind(Binding, Module, Fun) when is_binary(Binding) ->
     bind(Binding, Module, Fun, 'undefined').
 
 -spec bind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom() | fun(), any()) ->
-                  bind_result() | bind_results().
+          bind_result() | bind_results().
 bind([_|_]=Bindings, Module, Fun, Payload) ->
     [bind(Binding, Module, Fun, Payload) || Binding <- Bindings];
-bind(Binding, 'undefined' = Module, Fun, Payload) ->
+bind(Binding, Module, Fun, Payload)
+  when is_function(Fun, 1) ->
     lager:debug("adding binding ~s for ~p (~p)", [Binding, Fun, Payload]),
     gen_server:call(?SERVER, {'bind', Binding, Module, Fun, Payload}, 'infinity');
 bind(Binding, Module, Fun, Payload) ->
@@ -326,14 +329,14 @@ bind(Binding, Module, Fun, Payload) ->
 -type unbind_results() :: [unbind_result()].
 
 -spec unbind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom()) ->
-                    unbind_result() | unbind_results().
+          unbind_result() | unbind_results().
 unbind([_|_]=Bindings, Module, Fun) ->
     [unbind(Binding, Module, Fun) || Binding <- Bindings];
 unbind(Binding, Module, Fun) when is_binary(Binding) ->
     unbind(Binding, Module, Fun, 'undefined').
 
 -spec unbind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom(), any()) ->
-                    unbind_result() | unbind_results().
+          unbind_result() | unbind_results().
 unbind([_|_]=Bindings, Module, Fun, Payload) ->
     [unbind(Binding, Module, Fun, Payload) || Binding <- Bindings];
 unbind(Binding, Module, Fun, Payload) ->
@@ -413,8 +416,8 @@ handle_call({'unbind', Binding, Mod, Fun, Payload}, _, #state{}=State) ->
     {'reply', Resp, State}.
 
 -spec maybe_add_binding(kz_term:ne_binary(), atom(), atom() | fun(), any()) ->
-                               'ok' |
-                               {'error', 'exists'}.
+          'ok' |
+          {'error', 'exists'}.
 maybe_add_binding(Binding, Mod, Fun, Payload) ->
     Responder = #kz_responder{module=Mod
                              ,function=Fun
@@ -446,8 +449,8 @@ maybe_add_binding(Binding, Mod, Fun, Payload) ->
     end.
 
 -spec maybe_rm_binding(kz_term:ne_binary(), atom(), atom(), any()) ->
-                              {'ok', 'deleted_binding' | 'updated_binding'} |
-                              {'error', 'not_found'}.
+          {'ok', 'deleted_binding' | 'updated_binding'} |
+          {'error', 'not_found'}.
 maybe_rm_binding(Binding, Mod, Fun, Payload) ->
     Responder = #kz_responder{module=Mod
                              ,function=Fun
@@ -460,8 +463,8 @@ maybe_rm_binding(Binding, Mod, Fun, Payload) ->
     end.
 
 -spec maybe_rm_responder(kz_term:ne_binary(), kz_responder(), kz_binding()) ->
-                                {'ok', 'deleted_binding' | 'updated_binding'} |
-                                {'error', 'not_found'}.
+          {'ok', 'deleted_binding' | 'updated_binding'} |
+          {'error', 'not_found'}.
 maybe_rm_responder(Binding, Responder, #kz_binding{binding_responders=Responders}=Bind) ->
     case queue:member(Responder, Responders) of
         'false' ->
@@ -824,7 +827,8 @@ apply_map_responder(#kz_responder{module=M
     end.
 
 -spec apply_map_responder(atom(), atom() | fun(), payload()) -> any().
-apply_map_responder('undefined', Fun, Payload) ->
+apply_map_responder(_M, Fun, Payload)
+  when is_function(Fun, 1) ->
     Fun(Payload);
 apply_map_responder(M, F, Payload) ->
     erlang:apply(M, F, Payload).

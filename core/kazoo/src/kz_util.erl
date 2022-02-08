@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc Various utilities - a veritable cornucopia.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -7,7 +7,7 @@
 %%%-----------------------------------------------------------------------------
 -module(kz_util).
 
--export([log_stacktrace/0, log_stacktrace/1, log_stacktrace/2
+-export([log_stacktrace/0, log_stacktrace/1, log_stacktrace/2, log_stacktrace/3
         ,format_account_id/1, format_account_id/2, format_account_id/3
         ,format_account_mod_id/1, format_account_mod_id/2, format_account_mod_id/3
         ,format_account_db/1
@@ -92,6 +92,7 @@ log_stacktrace(Fmt, Args) ->
     ST = erlang:get_stacktrace(),
     log_stacktrace(ST, Fmt, Args).
 
+-spec log_stacktrace(list(), string(), list()) -> ok.
 log_stacktrace(ST, Fmt, Args) ->
     ?LOG_ERROR("stacktrace: " ++ Fmt, Args),
     _ = [log_stacktrace_mfa(M, F, A, Info)
@@ -267,7 +268,7 @@ format_resource_selectors_db(AccountId) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec format_account_id(kz_term:api_binary(), kz_time:year() | kz_term:ne_binary(), kz_time:month() | kz_term:ne_binary()) ->
-                               kz_term:api_binary().
+          kz_term:api_binary().
 format_account_id('undefined', _Year, _Month) -> 'undefined';
 format_account_id(AccountId, Year, Month) when not is_integer(Year) ->
     format_account_id(AccountId, kz_term:to_integer(Year), Month);
@@ -302,7 +303,7 @@ format_account_mod_id(AccountId, Timestamp) when is_integer(Timestamp) ->
 %%------------------------------------------------------------------------------
 
 -spec format_account_mod_id(kz_term:api_binary(), kz_time:year() | kz_term:ne_binary(), kz_time:month() | kz_term:ne_binary()) ->
-                                   kz_term:api_binary().
+          kz_term:api_binary().
 format_account_mod_id(AccountId, Year, Month) ->
     format_account_id(AccountId, Year, Month).
 
@@ -679,7 +680,7 @@ process_fold(App, _, M, _) -> {App, M}.
 %%------------------------------------------------------------------------------
 -spec calling_app() -> kz_term:ne_binary().
 calling_app() ->
-    Modules = erlang:process_info(self(),current_stacktrace),
+    Modules = erlang:process_info(self(), 'current_stacktrace'),
     {'current_stacktrace', [_Me, {Module, _, _, _} | Start]} = Modules,
     {'ok', App} = application:get_application(Module),
     case process_fold(Start, App) of
@@ -689,7 +690,7 @@ calling_app() ->
 
 -spec calling_app_version() -> {kz_term:ne_binary(), kz_term:ne_binary()}.
 calling_app_version() ->
-    Modules = erlang:process_info(self(),current_stacktrace),
+    Modules = erlang:process_info(self(), 'current_stacktrace'),
     {'current_stacktrace', [_Me, {Module, _, _, _} | Start]} = Modules,
     {'ok', App} = application:get_application(Module),
     NewApp = case process_fold(Start, App) of
@@ -701,13 +702,13 @@ calling_app_version() ->
 
 -spec calling_process() -> map().
 calling_process() ->
-    Modules = erlang:process_info(self(),current_stacktrace),
+    Modules = erlang:process_info(self(), 'current_stacktrace'),
     {'current_stacktrace', [_Me, {Module, _, _, _}=M | Start]} = Modules,
     App = case application:get_application(Module) of
               {'ok', KApp} -> KApp;
               'undefined' -> Module
           end,
-    {NewApp, {Mod, Function, Arity, [{file, Filename}, {line, Line}]}} =
+    {NewApp, {Mod, Function, Arity, [{'file', Filename}, {'line', Line}]}} =
         case process_fold(Start, App) of
             App -> {App, M};
             {Parent, MFA } -> {Parent, MFA}
@@ -721,7 +722,7 @@ calling_process() ->
      }.
 
 -spec get_app(atom() | kz_term:ne_binary()) -> {atom(), string(), string()} | 'undefined'.
-get_app(<<_/binary>> = AppName) ->
+get_app(<<AppName/binary>>) ->
     get_app(kz_term:to_atom(AppName));
 get_app(AppName) ->
     case [App || {Name, _, _}=App <- application:loaded_applications(), Name =:= AppName] of
@@ -742,13 +743,13 @@ application_version(Application) ->
 %% Time: `O(nlog(n))'
 %% @end
 %%------------------------------------------------------------------------------
--spec uniq([kz_term:proplist()]) -> kz_term:proplist().
+-spec uniq(kz_term:proplist()) -> kz_term:proplist().
 uniq(KVs) when is_list(KVs) -> uniq(KVs, sets:new(), []).
 uniq([], _, L) -> lists:reverse(L);
 uniq([{K,_}=KV|Rest], S, L) ->
     case sets:is_element(K, S) of
-        true -> uniq(Rest, S, L);
-        false ->
+        'true' -> uniq(Rest, S, L);
+        'false' ->
             NewS = sets:add_element(K, S),
             uniq(Rest, NewS, [KV|L])
     end.

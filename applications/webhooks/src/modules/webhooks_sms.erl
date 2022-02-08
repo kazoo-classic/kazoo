@@ -1,5 +1,10 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
+%%%
+%%%
+%%% This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%%
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -12,13 +17,11 @@
         ]).
 
 -include("webhooks.hrl").
--include_lib("kazoo_amqp/include/kapi_conf.hrl").
--include_lib("kazoo_documents/include/doc_types.hrl").
 
 -define(ID, kz_term:to_binary(?MODULE)).
 -define(HOOK_NAME, <<"sms">>).
 -define(NAME, <<"SMS">>).
--define(DESC, <<"Receive notifications when sms is created">>).
+-define(DESC, <<"Receive notifications when sms is received">>).
 
 -define(METADATA
        ,kz_json:from_list(
@@ -44,7 +47,7 @@ init() ->
 -spec bindings_and_responders() -> {gen_listener:bindings(), gen_listener:responders()}.
 bindings_and_responders() ->
     Bindings = bindings(),
-    Responders = [{{?MODULE, 'handle_sms'}, [{<<"configuration">>, ?DOC_CREATED}]}],
+    Responders = [{{?MODULE, 'handle_sms'}, [{<<"sms">>, <<"inbound">>}]}],
     {Bindings, Responders}.
 
 %%------------------------------------------------------------------------------
@@ -58,33 +61,18 @@ account_bindings(_AccountId) -> [].
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec handle_sms(kz_json:object(), kz_term:proplist()) -> any().
-handle_sms(JObj, _Props) ->
-    kz_util:put_callid(JObj),
-    'true' = kapi_conf:doc_update_v(JObj),
-    Type = kapi_conf:get_type(JObj),
-    Action = kz_api:event_name(JObj),
-    handle_sms(Action, Type, JObj).
-
--spec handle_sms(kz_term:api_ne_binary(), kz_term:api_ne_binary(), json:object()) -> any().
-handle_sms(?DOC_CREATED, <<"sms">>, JObj) ->
-    Db = kapi_conf:get_database(JObj),
-    Id = kapi_conf:get_id(JObj),
-    {'ok', Doc} = kz_datamgr:open_doc(Db, Id),
-    AccountId = kz_util:format_account_id(Db),
-    case AccountId =/= 'undefined'
-        andalso webhooks_util:find_webhooks(?HOOK_NAME, AccountId) of
-        'false' -> 'ok';
+-spec handle_sms(kz_json:object(), kz_term:proplist()) -> 'ok'.
+handle_sms(Payload, _Props) ->
+    kz_util:put_callid(Payload),
+    'true' = kapi_im:inbound_v(Payload),
+    AccountId = kz_im:account_id(Payload),
+    case webhooks_util:find_webhooks(?HOOK_NAME, AccountId) of
         [] ->
-            lager:debug("no hooks to handle ~s for ~s"
-                       ,[kz_api:event_name(JObj), AccountId]
-                       );
+            lager:debug("no hooks to handle ~s for ~s", [kz_api:event_name(Payload), AccountId]);
         Hooks ->
-            Event = format_event(Doc, AccountId),
+            Event = format_event(Payload, AccountId),
             webhooks_util:fire_hooks(Event, Hooks)
-    end;
-handle_sms(_Action, _Type, _JObj) ->
-    'ok'.
+    end.
 
 %%%=============================================================================
 %%% Internal functions
@@ -97,22 +85,25 @@ handle_sms(_Action, _Type, _JObj) ->
 %%------------------------------------------------------------------------------
 -spec bindings() -> gen_listener:bindings().
 bindings() ->
-    [{'conf', [{'restrict_to', ['doc_updates']}
-              ,{'action', 'created'}
-              ,{'doc_type', <<"sms">>}
-              ]}].
+    [{'im', [{'restrict_to', ['inbound']}
+            ,{'route_type', 'offnet'}
+            ,{'im_types', ['sms']}
+            ]
+     }
+    ].
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
 -spec format_event(kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
-format_event(JObj, AccountId) ->
+format_event(Payload, AccountId) ->
     kz_json:from_list(
-      [{<<"id">>, kz_doc:id(JObj)}
+      [{<<"id">>, kz_im:message_id(Payload)}
       ,{<<"account_id">>, AccountId}
-      ,{<<"from">>, kzd_sms:from_user(JObj)}
-      ,{<<"to">>, kzd_sms:to_user(JObj)}
-      ,{<<"body">>, kzd_sms:body(JObj)}
-      ,{<<"direction">>, kzd_sms:direction(JObj)}
-      ,{<<"status">>, kzd_sms:status(JObj)}
+      ,{<<"type">>, kz_im:type(Payload)}
+      ,{<<"from">>, kz_im:from(Payload)}
+      ,{<<"to">>, kz_im:to(Payload)}
+      ,{<<"body">>, kz_im:body(Payload)}
+      ,{<<"origin">>, kz_im:route_type(Payload)}
+      ,{<<"charges">>, kz_im:charges(Payload)}
       ]).

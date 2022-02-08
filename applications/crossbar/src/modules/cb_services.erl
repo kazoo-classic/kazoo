@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc
 %%% @author Peter Defebvre
 %%% @author Karl Anderson
@@ -167,7 +167,7 @@ to_csv({Req, Context}) ->
     {Req, to_response(Context, <<"csv">>, cb_context:req_nouns(Context))}.
 
 -spec to_response(cb_context:context(), kz_term:ne_binary(), req_nouns()) ->
-                         cb_context:context().
+          cb_context:context().
 to_response(Context, _, [{<<"services">>, [?SUMMARY]}, {?KZ_ACCOUNTS_DB, _}|_]) ->
     JObj = cb_context:resp_data(Context),
     case kz_json:get_list_value(<<"invoices">>, JObj, []) of
@@ -233,17 +233,15 @@ validate(Context, ?AUDIT) ->
     %% NOTE: show the billing audit logs
     load_audit_logs(Context);
 validate(Context, ?AUDIT_SUMMARY) ->
-    ViewOptions = [{'group_level', 1}
+    StartKeyFun = fun(Timestamp) -> [audit_summary_range_key(Timestamp)] end,
+    EndKeyFun = fun(Timestamp) -> [audit_summary_range_key(Timestamp), <<16#fff0/utf8>>] end,
+    ViewOptions = [{'group_level', 2}
                   ,{'mapper', fun normalize_day_summary_by_date/2}
-                  ,{'range_start_keymap', fun audit_summary_range_key/1}
-                  ,{'range_end_keymap', fun audit_summary_range_key/1}
+                  ,{'range_start_keymap', StartKeyFun}
+                  ,{'range_end_keymap', EndKeyFun}
                   ],
     ViewName = <<"services/day_summary_by_date">>,
-    Context1 = audit_summary(Context, ViewName, ViewOptions),
-    case cb_context:resp_status(Context1) of
-        'success' -> merge_day_summary_by_date_result(Context1);
-        _ -> Context1
-    end;
+    audit_summary(Context, ViewName, ViewOptions);
 validate(Context, ?TOPUP) ->
     %% NOTE: top-up the accounts credit
     validate_topup_amount(Context);
@@ -319,40 +317,20 @@ audit_summary_range_key(SourceService, Timestamp) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec merge_day_summary_by_date_result(cb_context:context()) -> cb_context:context().
-merge_day_summary_by_date_result(Context) ->
-    Result = cb_context:resp_data(Context),
-    merge_day_summary_by_date_result(Context, Result, #{}).
-
--spec merge_day_summary_by_date_result(cb_context:context(), kz_json:objects(), map()) -> cb_context:context().
-merge_day_summary_by_date_result(Context, [], #{}=Acc) ->
-    cb_context:set_resp_data(Context
-                            ,kz_json:from_list(lists:sort(maps:to_list(Acc)))
-                            );
-merge_day_summary_by_date_result(Context, [JObj|JObjs], #{}=Acc) ->
-    [DateString] = kz_json:get_keys(JObj),
-    NewAcc = kz_json:foldl(fun(Service, Summary, AccAcc) ->
-                                   merge_date_to_service(DateString, Service, Summary, AccAcc)
-                           end
-                          ,Acc
-                          ,kz_json:get_value(DateString, JObj)
-                          ),
-    merge_day_summary_by_date_result(Context, JObjs, NewAcc).
-
--spec merge_date_to_service(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), map()) -> map().
-merge_date_to_service(DateString, Service, Summary, AccAcc) ->
-    ServiceAcc = maps:get(Service, AccAcc, []),
-    AccAcc#{Service => [kz_json:from_list([{DateString, Summary}]) | ServiceAcc]}.
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
 -spec normalize_day_summary_by_date(kz_json:object(), kz_json:objects()) -> kz_json:objects().
-normalize_day_summary_by_date(JObj, Acc) ->
-    DateString = kz_json:get_value(<<"key">>, JObj),
-    [kz_json:from_list([{DateString, kz_json:get_value(<<"value">>, JObj)}])
-     | Acc
+normalize_day_summary_by_date(JObj, []) ->
+    [DateString, SourceService] = kz_json:get_value(<<"key">>, JObj),
+    [kz_json:set_value([SourceService, DateString]
+                      ,kz_json:get_value(<<"value">>, JObj)
+                      ,kz_json:new()
+                      )
+    ];
+normalize_day_summary_by_date(JObj, [Acc]) ->
+    [DateString, SourceService] = kz_json:get_value(<<"key">>, JObj),
+    [kz_json:set_value([SourceService, DateString]
+                      ,kz_json:get_value(<<"value">>, JObj)
+                      ,Acc
+                      )
     ].
 
 %%------------------------------------------------------------------------------
@@ -692,7 +670,7 @@ pipe_services(Context, Routines, RespFunction) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec normalize_available_view_results(kz_json:object(), kz_json:objects()) ->
-                                              kz_json:objects().
+          kz_json:objects().
 normalize_available_view_results(JObj, Acc) ->
     case kz_json:get_ne_json_value(<<"doc">>, JObj) of
         'undefined' -> [kz_json:get_json_value(<<"value">>, JObj)|Acc];
@@ -704,7 +682,7 @@ normalize_available_view_results(JObj, Acc) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec normalize_audit_view_results(kz_json:object(), kz_json:objects()) ->
-                                          kz_json:objects().
+          kz_json:objects().
 normalize_audit_view_results(JObj, Acc) ->
     [kz_json:get_json_value(<<"value">>, JObj)|Acc].
 
@@ -794,7 +772,7 @@ check_plan_ids(Context, ResellerId, PlanIds) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec check_plan_id(cb_context:context(), path_token(), kz_term:ne_binary()) ->
-                           cb_context:context().
+          cb_context:context().
 check_plan_id(Context, PlanId, ResellerId) ->
     ResellerDb = kz_util:format_account_id(ResellerId, 'encoded'),
     crossbar_doc:load(PlanId, cb_context:set_account_db(Context, ResellerDb), ?TYPE_CHECK_OPTION(kzd_service_plan:type())).

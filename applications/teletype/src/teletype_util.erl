@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2014-2019, 2600Hz
+%%% @copyright (C) 2014-2022, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -56,12 +56,12 @@
        ).
 
 -spec send_email(email_map(), kz_term:ne_binary(), rendered_templates()) ->
-                        'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 send_email(Emails, Subject, RenderedTemplates) ->
     send_email(Emails, Subject, RenderedTemplates, []).
 
 -spec send_email(email_map(), kz_term:ne_binary(), rendered_templates(), attachments()) ->
-                        'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 send_email(Emails0, Subject, RenderedTemplates, Attachments) ->
     Emails = [{Key, lists:usort(KeyEmails)} || {Key, KeyEmails} <- Emails0, KeyEmails =/= 'undefined'],
     ?LOG_DEBUG("emails: ~p", [Emails]),
@@ -72,6 +72,7 @@ send_email(Emails0, Subject, RenderedTemplates, Attachments) ->
             ,email_parameters([{<<"To">>, To}
                               ,{<<"Cc">>, props:get_value(<<"cc">>, Emails)}
                               ,{<<"Bcc">>, props:get_value(<<"bcc">>, Emails)}
+                              ,{<<"X-Teletype-Log-ID">>, kz_util:get_callid()}
                               ]
                              ,[{<<"From">>, From}
                               ,{<<"Reply-To">>, props:get_value(<<"reply_to">>, Emails)}
@@ -154,13 +155,11 @@ email_parameters([], Params) ->
     lists:reverse(props:filter_empty(Params));
 email_parameters([{_Key, 'undefined'}|T], Params) ->
     email_parameters(T, Params);
-email_parameters([{Key, Vs}|T], Params) when is_list(Vs) ->
-    email_parameters(T, [{Key, V} || V <- Vs] ++ Params);
 email_parameters([{Key, V}|T], Params) ->
     email_parameters(T, [{Key, V} | Params]).
 
 -spec relay_email(kz_term:api_binaries(), kz_term:ne_binary(), mimemail:mimetuple()) ->
-                         'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 relay_email(To, From, {_Type
                       ,_SubType
                       ,Addresses
@@ -194,14 +193,14 @@ maybe_relay_to_bcc(From, Encoded, Bcc) ->
     end.
 
 -spec relay_to_bcc(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binaries() | kz_term:ne_binary()) ->
-                          {'ok', kz_term:ne_binary()} | {'error', any()}.
+          {'ok', kz_term:ne_binary()} | {'error', any()}.
 relay_to_bcc(From, Encoded, Bcc) when is_binary(Bcc) ->
     relay_encoded_email([Bcc], From, Encoded);
 relay_to_bcc(From, Encoded, Bcc) ->
     relay_encoded_email(Bcc, From, Encoded).
 
 -spec relay_encoded_email(kz_term:api_binaries(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                 {'ok', kz_term:ne_binary()} | {'error', any()}.
+          {'ok', kz_term:ne_binary()} | {'error', any()}.
 relay_encoded_email('undefined', _From, _Encoded) ->
     lager:debug("failed to send email as the TO address(es) are missing"),
     {'error', 'invalid_to_addresses'};
@@ -223,10 +222,9 @@ send(To, From, Encoded) ->
                         ).
 
 -spec handle_send(kz_term:binaries(), kz_term:ne_binary(), gen_smtp_send_resp()) ->
-                         {'ok', kz_term:ne_binary()} | {'error', any()}.
-handle_send(To, From, {'ok', _Pid}) ->
-    lager:debug("smtp client is processing with pid ~p", [_Pid]),
-    wait_for_response(To, From);
+          {'ok', kz_term:ne_binary()} | {'error', any()}.
+handle_send(To, From, {'ok', Pid}) ->
+    handle_send(To, From, Pid);
 handle_send(_To, _From, {'error', _R}=Error) ->
     lager:info("error trying to send email: ~p", [_R]),
     Error;
@@ -249,7 +247,7 @@ wait_for_response(To, From) ->
     end.
 
 -spec handle_relay_response(kz_term:binaries(), kz_term:ne_binary(), {'ok', kz_term:ne_binary()} | {'error', any()}) ->
-                                   {'ok', kz_term:ne_binary()} | {'error', any()}.
+          {'ok', kz_term:ne_binary()} | {'error', any()}.
 handle_relay_response(To, From, {'ok', Receipt}) ->
     kz_cache:store_local(?CACHE_NAME
                         ,{'receipt', Receipt}
@@ -355,7 +353,7 @@ add_rendered_templates_to_email([{ContentType, Content}|Rs], Acc) ->
                   ,{<<"Content-Transfer-Encoding">>, CTEncoding}
                   ])
                ,[]
-               ,iolist_to_binary(Content)
+               ,sanitize_content(iolist_to_binary(Content))
                },
     lager:debug("adding template ~s (encoding ~s)", [ContentType, CTEncoding]),
     add_rendered_templates_to_email(Rs, [Template | Acc]).
@@ -363,6 +361,32 @@ add_rendered_templates_to_email([{ContentType, Content}|Rs], Acc) ->
 -spec default_content_transfer_encoding(binary()) -> binary().
 default_content_transfer_encoding(<<"text/html">>) -> <<"base64">>;
 default_content_transfer_encoding(_) -> <<"7BIT">>.
+
+%% @doc Sanitizing Email Content.
+%% This function is soppouse to sanitize the email content. For now
+%% it just fixing Bare Line Feed.
+%%
+%% Per SMTP spec bare line feed (LF) are forbidden and
+%% CRLF should be used instead. Some SMTP relays and server in both ends
+%% are nice enough to correct bad line ending, but some don't.
+%%
+%% Like in one case relay server is Office 365 and receiving end is AOL.com.
+%% Office 365 stopped correcting line endings and AOL is not fixing it either.
+%% This cause the email to bounce back with Non-Delivery Report (NDR) message.
+%%
+%% When bare line feed characters are included in a message, the SMTP protocol
+%% chunking feature is required to transmit the message between email servers.
+%% Chunking uses the SMTP protocol BDAT command, but the recipient's email
+%% server (in our case AOL) doesn't support the BDAT command.
+-spec sanitize_content(binary()) -> binary().
+sanitize_content(Content) ->
+    %% We first replace `\r\n' to `\n', so when converting `\n' back to `\r\n' we don't
+    %% double converting `\n', just in case the template lines are edited to end with `\r\n'.
+    binary:replace(binary:replace(Content, <<$\r, $\n>>, <<$\n>>, ['global'])
+                  ,<<$\n>>
+                  ,<<$\r, $\n>>
+                  ,['global']
+                  ).
 
 -spec system_params() -> kz_term:proplist().
 system_params() ->
@@ -529,7 +553,7 @@ find_account_admin_email(AccountId, ResellerId) ->
     end.
 
 -spec query_account_for_admin_emails(kz_term:ne_binary()) -> kz_term:ne_binaries().
-query_account_for_admin_emails(<<_/binary>> = AccountId) ->
+query_account_for_admin_emails(<<AccountId/binary>>) ->
     AccountDb = kz_util:format_account_db(AccountId),
     ViewOptions = [{'key', <<"user">>}
                   ,'include_docs'
@@ -656,24 +680,13 @@ is_notice_enabled_default(TemplateKey) ->
     end.
 
 -spec find_addresses(kz_json:object(), kz_json:object(), kz_term:ne_binary()) ->
-                            email_map().
+          email_map().
 find_addresses(DataJObj, TemplateMetaJObj, ConfigCat) ->
     AddressKeys = [<<"to">>, <<"cc">>, <<"bcc">>, <<"from">>, <<"reply_to">>],
-    find_addresses(DataJObj, TemplateMetaJObj, ConfigCat, AddressKeys, []).
-
--spec find_addresses(kz_json:object(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binaries(), email_map()) ->
-                            email_map().
-find_addresses(_DataJObj, _TemplateMetaJObj, _ConfigCat, [], Acc) -> Acc;
-find_addresses(DataJObj, TemplateMetaJObj, ConfigCat, [Key|Keys], Acc) ->
-    find_addresses(DataJObj
-                  ,TemplateMetaJObj
-                  ,ConfigCat
-                  ,Keys
-                  ,[find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key)|Acc]
-                  ).
+    [find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key) || Key <- AddressKeys].
 
 -spec find_address(kz_json:object(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                          {kz_term:ne_binary(), kz_term:api_ne_binaries()}.
+          email_item().
 find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key) ->
     find_address(DataJObj
                 ,TemplateMetaJObj
@@ -686,10 +699,10 @@ find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key) ->
                 ).
 
 -spec find_address(kz_json:object(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary(), boolean()) ->
-                          {kz_term:ne_binary(), kz_term:api_ne_binaries()}.
+          email_item().
 find_address(DataJObj, TemplateMetaJObj, _ConfigCat, Key, 'undefined', _) ->
     lager:debug("email type for '~s' not defined in template, checking just the key", [Key]),
-    {Key, find_first_defined_address(Key, [Key], [DataJObj, TemplateMetaJObj])};
+    {Key, find_first_defined_address(Key, [[Key]], [DataJObj, TemplateMetaJObj])};
 find_address(DataJObj, _TemplateMetaJObj, _ConfigCat, <<"to">> = Key, ?EMAIL_SPECIFIED, 'true') ->
     lager:debug("notification is preview, checking data only for '~s' email addresses", [Key]),
     {Key, find_first_defined_address(Key, [[Key, <<"email_addresses">>], Key], [DataJObj])};
@@ -698,7 +711,7 @@ find_address(DataJObj, TemplateMetaJObj, _ConfigCat, Key, ?EMAIL_SPECIFIED, _) -
     {Key, find_first_defined_address(Key, [[Key, <<"email_addresses">>], Key], [TemplateMetaJObj, DataJObj])};
 find_address(DataJObj, TemplateMetaJObj, _ConfigCat, Key, ?EMAIL_ORIGINAL, _) ->
     lager:debug("checking data for '~s' email address(es)", [Key]),
-    {Key, find_first_defined_address(Key, [Key, [Key, <<"email_addresses">>]], [DataJObj, TemplateMetaJObj])};
+    {Key, find_first_defined_address(Key, [[Key], [Key, <<"email_addresses">>]], [DataJObj, TemplateMetaJObj])};
 find_address(DataJObj, _TemplateMetaJObj, ConfigCat, Key, ?EMAIL_ADMINS, _) ->
     lager:debug("looking for admin emails for '~s'", [Key]),
     {Key, find_admin_emails(DataJObj, ConfigCat, Key)}.
@@ -723,13 +736,9 @@ get_address_value(Key, Path, [JObj|JObjs]) ->
 -spec check_address_value(binary() | kz_term:binaries() | kz_json:object() | 'undefined') -> kz_term:api_ne_binaries().
 check_address_value('undefined') -> 'undefined';
 check_address_value(<<>>) -> 'undefined';
-check_address_value(<<_/binary>> = Email) -> check_address_value([Email]);
+check_address_value(<<Email/binary>>) -> check_address_value([Email]);
 check_address_value(Emails) when is_list(Emails) ->
-    case [E || E <- Emails,
-               kz_term:is_ne_binary(E),
-               length(binary:split(E, <<"@">>, ['global'])) == 2
-         ]
-    of
+    case only_valid_emails(Emails) of
         [] -> 'undefined';
         Es -> Es
     end;
@@ -739,8 +748,20 @@ check_address_value(Emails) ->
         'false' -> 'undefined'
     end.
 
--spec find_admin_emails(kz_json:object(), kz_term:ne_binary(), kz_json:path()) ->
-                               kz_term:api_ne_binaries().
+-spec only_valid_emails(kz_term:ne_binaries()) -> kz_term:ne_binaries().
+only_valid_emails(Emails) ->
+    [Email || <<Email/binary>> <- Emails,
+              has_user_and_server(Email)
+    ].
+
+-spec has_user_and_server(kz_term:ne_binary() | kz_term:ne_binaries()) -> boolean().
+has_user_and_server(<<Email/binary>>) ->
+    has_user_and_server(binary:split(Email, <<"@">>, ['global']));
+has_user_and_server([_, _]) -> 'true';
+has_user_and_server(_) -> 'false'.
+
+-spec find_admin_emails(kz_json:object(), kz_term:ne_binary(), kz_json:key()) ->
+          kz_term:api_ne_binaries().
 find_admin_emails(DataJObj, ConfigCat, Key) ->
     case find_account_rep_email(kapi_notifications:account_id(DataJObj)) of
         'undefined' ->
@@ -749,14 +770,14 @@ find_admin_emails(DataJObj, ConfigCat, Key) ->
         Emails -> Emails
     end.
 
--spec admin_emails_from_system_template(kz_term:ne_binary(), kz_json:path()) -> kz_term:api_ne_binaries().
+-spec admin_emails_from_system_template(kz_term:ne_binary(), kz_json:key()) -> kz_term:api_ne_binaries().
 admin_emails_from_system_template(ConfigCat, Key) ->
     case kz_datamgr:open_cache_doc(?KZ_CONFIG_DB, ConfigCat) of
         {'ok', JObj} -> admin_emails_from_system_template(ConfigCat, Key, JObj);
         {'error', _} -> 'undefined'
     end.
 
--spec admin_emails_from_system_template(kz_term:ne_binary(), kz_json:path(), kz_json:object()) -> kz_term:api_ne_binaries().
+-spec admin_emails_from_system_template(kz_term:ne_binary(), kz_json:key(), kz_json:object()) -> kz_term:api_ne_binaries().
 admin_emails_from_system_template(ConfigCat, Key, JObj) ->
     case check_address_value(kz_json:get_ne_value([<<"default">>, <<"default_", Key/binary>>], JObj)) of
         'undefined' ->
@@ -777,17 +798,17 @@ template_system_value(TemplateId) ->
         {'error', _} -> kz_json:new()
     end.
 
--spec template_system_value(kz_term:ne_binary(), kz_json:path()) -> any().
+-spec template_system_value(kz_term:ne_binary(), kz_json:key()) -> any().
 template_system_value(TemplateId, Key) ->
     template_system_value(TemplateId, Key, 'undefined').
 
--spec template_system_value(kz_term:ne_binary(), kz_json:path(), any()) -> any().
+-spec template_system_value(kz_term:ne_binary(), kz_json:key(), any()) -> any().
 template_system_value(TemplateId, Key, Default) ->
     kz_json:get_first_defined([Key, lists:flatten([<<"default">>, Key])], template_system_value(TemplateId), Default).
 
 -spec open_doc(kz_term:ne_binary(), kz_term:api_binary(), kz_json:object()) ->
-                      {'ok', kz_json:object()} |
-                      {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 open_doc(Type, 'undefined', DataJObj) ->
     maybe_load_preview(Type, {'error', 'empty_doc_id'}, is_preview(DataJObj));
 open_doc(Type, DocId, DataJObj) ->
@@ -801,16 +822,16 @@ open_doc(Type, DocId, DataJObj) ->
 -type read_file_error() :: file:posix() | 'badarg' | 'terminated' | 'system_limit'.
 
 -spec maybe_load_preview(kz_term:ne_binary(), E, boolean()) ->
-                                {'ok', kz_json:object()} |
-                                {'error', read_file_error()} | E.
+          {'ok', kz_json:object()} |
+          {'error', read_file_error()} | E.
 maybe_load_preview(_Type, Error, 'false') ->
     Error;
 maybe_load_preview(Type, _Error, 'true') ->
     read_preview_doc(Type).
 
 -spec read_preview_doc(kz_term:ne_binary()) ->
-                              {'ok', kz_json:object()} |
-                              {'error', read_file_error()}.
+          {'ok', kz_json:object()} |
+          {'error', read_file_error()}.
 read_preview_doc(File) ->
     PreviewFile = filename:join([code:priv_dir(?APP), "preview_data", <<File/binary,".json">>]),
     case file:read_file(PreviewFile) of
