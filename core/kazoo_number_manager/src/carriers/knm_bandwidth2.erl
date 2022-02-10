@@ -309,7 +309,7 @@ process_site(Site) ->
 
 -spec peers(binary()) -> 'ok'.
 peers(SiteId) ->
-    {'ok', Xml} = api_get(url(["sippeers"], []), []),
+    {'ok', Xml} = api_get(url(["sites/", ?BW2_SITE_ID, "/sippeers"], []), []),
     io:format("listing all peers for account ~p, site ~p~n", [?BW2_ACCOUNT_ID, SiteId]),
     Peers = xmerl_xpath:string("SipPeers/SipPeer", Xml),
     lists:foreach(fun process_peer/1, Peers),

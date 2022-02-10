@@ -27,10 +27,10 @@
         "Pause-Time": {
             "type": "integer"
         },
-        "Timestamp": {
+        "Queue-ID": {
             "type": "string"
         },
-        "Queue-ID": {
+        "Timestamp": {
             "type": "string"
         }
     },

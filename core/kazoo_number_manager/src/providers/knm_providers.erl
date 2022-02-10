@@ -12,7 +12,8 @@
 
 -export([save/1]).
 -export([delete/1]).
--export([available_features/1, available_features/6
+-export([available_features/1
+        ,available_features/2
         ,service_name/2
         ]).
 -export([e911_caller_name/2]).
@@ -24,6 +25,11 @@
 -export([deactivate_features/2
         ,deactivate_feature/2
         ]).
+
+-export([settings/1, settings/2]).
+
+-export([setup_account_context/1, setup_account_context/2]).
+-export([setup_number_context/1, setup_number_context/2]).
 
 -define(DEFAULT_E911_PROVIDER, <<"knm_dash_e911">>).
 -define(E911_PROVIDER(AccountId, ResellerId)
@@ -49,6 +55,8 @@
 
 -define(SYSTEM_PROVIDERS, kapps_config:get_ne_binaries(?KNM_CONFIG_CAT, <<"providers">>)).
 
+-define(PROVIDERS_WITH_AVAILABLE, [<<"sms">>, <<"mms">>]).
+
 -define(PP(NeBinaries), kz_util:iolist_join($,, NeBinaries)).
 
 -ifdef(TEST).
@@ -58,6 +66,7 @@
                             ,used_by :: kz_term:api_ne_binary()
                             ,allowed_features = [] :: kz_term:ne_binaries()
                             ,denied_features = [] :: kz_term:ne_binaries()
+                            ,context = #{} :: map()
                             ,num :: kz_term:ne_binary() %% TEST-only
                             }).
 -else.
@@ -67,6 +76,7 @@
                             ,used_by :: kz_term:api_ne_binary()
                             ,allowed_features = [] :: kz_term:ne_binaries()
                             ,denied_features = [] :: kz_term:ne_binaries()
+                            ,context = #{} :: map()
                             }).
 -endif.
 -type feature_parameters() :: #feature_parameters{}.
@@ -88,6 +98,31 @@ delete(Number) ->
     do_exec(Number, 'delete').
 
 %%------------------------------------------------------------------------------
+%% @doc Settings for features.
+%% @end
+%%------------------------------------------------------------------------------
+-spec settings(knm_phone_number:knm_phone_number()) -> kz_json:object().
+settings(PhoneNumber) ->
+    settings(PhoneNumber, available_features(PhoneNumber)).
+
+%%------------------------------------------------------------------------------
+%% @doc Settings for features.
+%% @end
+%%------------------------------------------------------------------------------
+-spec settings(knm_phone_number:knm_phone_number(), kz_term:ne_binaries()) -> kz_json:object().
+settings(PhoneNumber, Features) ->
+    AccountId = knm_phone_number:assigned_to(PhoneNumber),
+    Fun = fun(Feature) ->
+                  Module = provider_module(Feature, AccountId),
+                  JObj = knm_gen_provider:settings(Module, PhoneNumber),
+                  case kz_json:is_empty(JObj) of
+                      true -> false;
+                      false -> {true, {Feature, JObj}}
+                  end
+          end,
+    kz_json:from_list(lists:filtermap(Fun, Features)).
+
+%%------------------------------------------------------------------------------
 %% @doc List features a number is allowed by its reseller to enable.
 %% @end
 %%------------------------------------------------------------------------------
@@ -95,10 +130,12 @@ delete(Number) ->
 available_features(PhoneNumber) ->
     list_available_features(feature_parameters(PhoneNumber)).
 
--spec available_features(boolean(), boolean(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), kz_term:ne_binaries(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
-available_features(IsLocal, IsAdmin, AssignedTo, UsedBy, Allowed, Denied) ->
-    list_available_features(feature_parameters(IsLocal, IsAdmin, AssignedTo, UsedBy, Allowed, Denied)).
-
+-spec available_features(kz_json:object(), map()) -> kz_term:ne_binaries().
+available_features(JObj, Context) ->
+    Ctx = setup_number_context(JObj, Context),
+    Params = feature_parameters_from_context(Ctx),
+    Features = list_available_features(Params),
+    filter_available_features(Features, Ctx).
 %%------------------------------------------------------------------------------
 %% @doc The name of the billable service associated with a feature.
 %% @end
@@ -210,6 +247,16 @@ feature_parameters(IsLocal, IsAdmin, AssignedTo, UsedBy, Allowed, Denied) ->
                        ,denied_features = Denied
                        }.
 
+-spec feature_parameters_from_context(map()) -> feature_parameters().
+feature_parameters_from_context(Context) ->
+    #feature_parameters{is_local = maps:get(is_local, Context, true)
+                       ,is_admin = maps:get(is_admin, Context, false)
+                       ,assigned_to = maps:get(assigned_to, Context, undefined)
+                       ,used_by = maps:get(used_by, Context, undefined)
+                       ,allowed_features = maps:get(allowed_features, Context, [])
+                       ,denied_features = maps:get(denied_features, Context, [])
+                       ,context = Context
+                       }.
 -spec list_allowed_features(feature_parameters()) -> kz_term:ne_binaries().
 list_allowed_features(Parameters) ->
     case number_allowed_features(Parameters) of
@@ -565,3 +612,55 @@ deactivate_features(Number, Features) ->
     ExistingFeatures = knm_phone_number:features(PhoneNumber),
     PN = knm_phone_number:set_features(PhoneNumber, kz_json:delete_keys(Features, ExistingFeatures)),
     knm_number:set_phone_number(Number, PN).
+
+-spec setup_account_context(kz_term:ne_binary()) -> map().
+setup_account_context(AccountId) ->
+    setup_account_context(AccountId, false).
+
+-spec setup_account_context(kz_term:ne_binary(), boolean()) -> map().
+setup_account_context(AccountId, Admin) ->
+    Allowed = reseller_allowed_features(AccountId),
+    #{allowed => Allowed
+     ,local_feature_override => ?LOCAL_FEATURE_OVERRIDE
+     ,denied => ?FEATURES_DENIED_RESELLER(AccountId)
+     ,admin_only => ?ADMIN_ONLY_FEATURES
+     ,with_available => ?PROVIDERS_WITH_AVAILABLE
+     ,is_admin => Admin
+     ,modules => maps:from_list([{Feature, provider_module(Feature, AccountId)} || Feature <- Allowed])
+     ,account_id => AccountId
+     }.
+
+-spec setup_number_context(kz_json:object(), map()) -> map().
+setup_number_context(JObj, Context) ->
+    maps:merge(Context, setup_number_context(JObj)).
+
+-spec setup_number_context(kz_json:object()) -> map().
+setup_number_context(JObj) ->
+    #{assigned_to => kz_json:get_ne_binary_value(<<"assigned_to">>, JObj)
+     ,used_by => kz_json:get_ne_binary_value(<<"used_by">>, JObj)
+     ,features_allowed => kz_json:get_list_value(<<"features_allowed">>, JObj, [])
+     ,features_denied => kz_json:get_list_value(<<"features_denied">>, JObj, [])
+     ,is_local => lists:member(?FEATURE_LOCAL, kz_json:get_list_value(<<"features">>, JObj, []))
+     ,carrier => kz_json:get_ne_binary_value(<<"pvt_module_name">>, JObj)
+     ,state => kz_json:get_ne_binary_value(<<"state">>, JObj)
+     }.
+
+%%------------------------------------------------------------------------------
+%% @doc List features a number is allowed by its reseller to enable.
+%% @end
+%%------------------------------------------------------------------------------
+-spec filter_available_features(kz_term:ne_binaries(), map()) -> kz_term:ne_binaries().
+filter_available_features(Features, #{with_available := []}) -> Features;
+filter_available_features(Features, #{with_available := Check
+                                     ,account_id := AccountId
+                                     ,carrier := Carrier
+                                     ,state := State
+                                     }) ->
+    Fun = fun(Feature) ->
+                  case lists:member(Feature, Check) of
+                      false -> true;
+                      true -> knm_gen_provider:available(Feature, Carrier, State, AccountId)
+                  end
+          end,
+    lists:filter(Fun, Features);
+filter_available_features(Features, _) -> Features.
