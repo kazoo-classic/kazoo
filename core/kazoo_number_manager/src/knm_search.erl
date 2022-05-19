@@ -235,7 +235,7 @@ first(Options) ->
     QID = query_id(Options),
     gen_listener:cast(?MODULE, {'reset_search', QID}),
     Self = self(),
-    Opts = [{'quantity', ?MAX_SEARCH}
+    Opts = [{'quantity', quantity(Options)}
            ,{'offset', 0}
            ,{'normalized_prefix', normalized_prefix(Options)}
             | Options
