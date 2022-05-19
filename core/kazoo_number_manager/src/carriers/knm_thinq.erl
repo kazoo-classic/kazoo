@@ -89,52 +89,65 @@ find_numbers(<<"1", Rest/binary>>, Quantity, Options) ->
     find_numbers(Rest, Quantity, Options);
 
 find_numbers(<<Prefix:3/binary, _/binary>>=Num, Quantity, Options) when ?IS_US_TOLLFREE(Prefix) ->
-    Params = ["maxdids=", quantity_uri_param(Quantity),
+    Params = ["searchType=tollfree",
+              "&searchBy=",
+              "&quantity=", quantity_uri_param(Quantity),
+              "&contiguous=false",
+              "&npa=", Prefix,
               "&rows=", quantity_uri_param(Quantity),
               "&page=", "1"
              ],
-    JObj = kz_json:from_list([{<<"search">>, tf_prefix(Num)}]),
-    Result = search_tollfree(Num, Params, JObj, []),
+    Result = search(Num, Params, Options),
     process_search_response(Result, Options);
 
 find_numbers(<<Prefix:3/binary, _/binary>>=Num, Quantity, Options) when ?IS_US_TOLLFREE_WILDCARD(Prefix) ->
-    Params = ["maxdids=", quantity_uri_param(Quantity),
+    Params = ["searchType=tollfree",
+              "&searchBy=",
+              "&quantity=", quantity_uri_param(Quantity),
+              "&contiguous=false",
+              "&npa=", tf_prefix(Prefix),
               "&rows=", quantity_uri_param(Quantity),
               "&page=", "1"
              ],
-    JObj = kz_json:from_list([{<<"search">>, tf_prefix(Num)}]),
-    Result = search_tollfree(Num, Params, JObj, []),
+    Result = search(Num, Params, Options),
     process_search_response(Result, Options);
 
 find_numbers(<<NPA:3/binary>>, Quantity, Options) ->
-    Params = ["rows=",quantity_uri_param(Quantity),
+    Params = ["searchType=domestic",
+              "&searchBy=npa",
+              "&quantity=", quantity_uri_param(Quantity),
+              "&contiguous=false",
+              "&npa=", NPA,
+              "&rows=", quantity_uri_param(Quantity),
               "&page=", "1"
              ],
-    JObj = kz_json:from_list([{<<"search">>, npanxx(NPA)}]),
-    Result = search_regular(NPA, Params, JObj, Options),
+    Result = search(NPA, Params, Options),
     process_search_response(Result, Options);
 
 find_numbers(Search, Quantity, Options) ->
     NpaNxx = kz_binary:truncate_right(Search, 6),
-    JObj = kz_json:from_list([{<<"search">>, npanxx(NpaNxx)}]),
-    Params = ["rows=", quantity_uri_param(Quantity),
+    <<NPA:3, NXX:3>> = NpaNxx,
+    Params = ["searchType=domestic",
+              "&searchBy=npanxx",
+              "&quantity=", quantity_uri_param(Quantity),
+              "&contiguous=false",
+              "&npa=", NPA,
+              "&nxx=", NXX,
+              "&rows=", quantity_uri_param(Quantity),
               "&page=", "1"
              ],
-    Result = search_regular(NpaNxx, Params, JObj, Options),
+    Result = search(NPA, Params, Options),
     process_search_response(Result, Options).
 
-npanxx(NPA) ->
-    kz_json:from_list([{<<"npanxx">>,NPA}]).
-
 tf_prefix(<<P1:1/binary, P2:1/binary, "*">>) ->
-    kz_json:from_list([{<<"tf_prefix">>,<<P1/binary,P2/binary,P2/binary>>}]);
+    <<P1/binary, P2/binary, (integer_to_binary(rand:uniform(10)))/binary>>;
 tf_prefix(Num) ->
-    kz_json:from_list([{<<"tf_prefix">>,Num}]).
+    Num.
 
 process_search_response(JObj, Options) ->
     QID = knm_search:query_id(Options),
-    Result = kz_json:get_value(<<"rows">>, JObj),
-    Numbers = [{QID, { <<"+1", 
+    Result = kz_json:get_value(<<"dids">>, JObj),
+    Numbers = [{QID, { <<"+", 
                          (integer_to_binary(kz_json:get_integer_value(<<"id">>, Data)))/binary>>, 
                         ?MODULE, ?NUMBER_STATE_DISCOVERY, Data}}
      || Data <- Result
@@ -272,7 +285,7 @@ disconnect_number(Number, Options) ->
 
 -spec sites() -> 'ok'.
 sites() ->
-    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sites"], [])),
+    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sites"])),
     io:format("listing all sites for account ~p~n", [?THQ_ACCOUNT_ID]),
     Sites = xmerl_xpath:string("Sites/Site", Xml),
     lists:foreach(fun process_site/1, Sites),
@@ -286,7 +299,7 @@ process_site(Site) ->
 
 -spec peers(binary()) -> 'ok'.
 peers(SiteId) ->
-    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sippeers"], [])),
+    {'ok', Xml} = knm_thinq_util:api_get(url_search(["sippeers"])),
     io:format("listing all peers for account ~p, site ~p~n", [?THQ_ACCOUNT_ID, SiteId]),
     Peers = xmerl_xpath:string("SipPeers/SipPeer", Xml),
     lists:foreach(fun process_peer/1, Peers),
@@ -301,10 +314,10 @@ process_peer(Peer) ->
 %%% Internals
 %{{host}}/origination/did/search/individual/{{account_id}}
 %{{host}}/origination/did/search/tollfree/{{account_id}}
--spec url_search([nonempty_string()], knm_search:options()) -> nonempty_string().
-url_search(RelativePath, Options) ->
+-spec url_search([nonempty_string()]) -> nonempty_string().
+url_search(RelativePath) ->
     lists:flatten(
-        io_lib:format("~s~s~s", [?THQ_BASE_URL, RelativePath, ?ACCOUNT_ID(Options)])
+        io_lib:format("~s~s", [?THQ_BASE_URL, RelativePath])
     ).
 
 %{{host}}/account/{{account_id}}/origination/order/create
@@ -328,24 +341,12 @@ url_disconnect(Options) ->
         io_lib:format("~s/account/~s/origination/disconnect", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
     ).
 
-
-
--spec search_regular(nonempty_string(), [nonempty_string()], kz_json:object(), knm_search:options()) -> kz_json:object().
-search_regular(Num, Params, JObj, Options) ->
-    case knm_thinq_util:api_post(lists:flatten(
-                    [url_search("/origination/did/search/individual/", Options)
+-spec search(nonempty_string(), [nonempty_string()], knm_search:options()) -> kz_json:object().
+search(Num, Params, Options) ->
+    case knm_thinq_util:api_get(lists:flatten(
+                    [url_search("/inbound/get-numbers")
                      ,"?" 
-                     ,Params]), JObj, Options) of
-        {'ok', Results} -> Results;
-        {'error', Reason} -> knm_errors:by_carrier(?MODULE, Reason, Num)
-    end.
-
--spec search_tollfree(nonempty_string(), [nonempty_string()], kz_json:object(), knm_search:options()) -> kz_json:object().
-search_tollfree(Num, Params, JObj, Options) ->
-    case knm_thinq_util:api_post(lists:flatten(
-                    [url_search("/origination/did/search/tollfree/", Options)
-                     ,"?" 
-                     ,Params]), JObj, Options) of
+                     ,Params]), Options) of
         {'ok', Results} -> Results;
         {'error', Reason} -> knm_errors:by_carrier(?MODULE, Reason, Num)
     end.

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -10,8 +10,10 @@
         ,public_fields/0
         ,public_fields/1
         ,get/1
+        ,get_portin_number/2
         ,new/2
         ,account_active_ports/1
+        ,account_ports_by_state/2
         ,descendant_active_ports/1
         ,account_has_active_port/1
         ,normalize_attachments/1
@@ -25,6 +27,7 @@
         ]).
 
 -export([transition_metadata/2, transition_metadata/3, transition_metadata/4]).
+-export([app_used_by_portin/2, get_dids_for_app/2]).
 -export_type([transition_metadata/0]).
 
 -compile({'no_auto_import', [get/1]}).
@@ -46,6 +49,10 @@
 -define(ACTIVE_PORT_LISTING, <<"port_requests/active_port_request">>).
 -define(DESCENDANT_ACTIVE_PORT_LISTING, <<"port_requests/listing_by_descendant_state">>).
 -define(ACTIVE_PORT_IN_NUMBERS, <<"port_requests/port_in_numbers">>).
+-define(PORT_NUM_LISTING, <<"port_requests/phone_numbers_listing">>).
+-define(PORT_LISTING_BY_STATE, <<"port_requests/listing_by_state">>).
+-define(CALLFLOW_LIST, <<"callflows/listing_by_number">>).
+-define(TRUNKSTORE_LIST, <<"trunkstore/lookup_did">>).
 
 -type transition_response() :: {'ok', kz_json:object()} |
                                {'error', 'invalid_state_transition' | 'user_not_allowed' | kz_json:object()}.
@@ -119,7 +126,7 @@ read_only_public_fields(Doc) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get(kz_term:ne_binary()) -> {'ok', kz_json:object()} |
-                                  {'error', any()}.
+          kz_datamgr:data_error().
 -ifdef(TEST).
 get(?TEST_NEW_PORT_NUM) -> {'ok', ?TEST_NEW_PORT_REQ};
 get(?NE_BINARY) -> {'error', 'not_found'}.
@@ -139,18 +146,53 @@ get(DID=?NE_BINARY) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
+-spec get_portin_number(kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_json:objects()} |
+          kz_datamgr:data_error().
+get_portin_number(AccountId, DID=?NE_BINARY) ->
+    ViewOptions = [{'key', [AccountId, DID]}
+                  ,'include_docs'
+                  ],
+    case kz_datamgr:get_results(?KZ_PORT_REQUESTS_DB, ?PORT_NUM_LISTING, ViewOptions) of
+        {'ok', JObjs} ->
+            {'ok', [kz_json:get_value(<<"doc">>, JObj) || JObj <- JObjs]};
+        {'error', _E}=Error ->
+            lager:debug("failed to find portin number '~s': ~p", [DID, _E]),
+            Error
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec account_active_ports(kz_term:ne_binary()) -> {'ok', kz_json:objects()} |
-                                                   {'error', 'not_found'}.
+          kz_datamgr:data_error().
 account_active_ports(AccountId) ->
     ViewOptions = [{'key', AccountId}
                   ,'include_docs'
                   ],
     case kz_datamgr:get_results(?KZ_PORT_REQUESTS_DB, ?ACTIVE_PORT_LISTING, ViewOptions) of
-        {'ok', []} -> {'error', 'not_found'};
         {'ok', Ports} -> {'ok', [kz_json:get_value(<<"doc">>, Doc) || Doc <- Ports]};
-        {'error', _R} ->
+        {'error', _R} = Err ->
             lager:error("failed to query for account port numbers ~p", [_R]),
-            {'error', 'not_found'}
+            Err
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec account_ports_by_state(kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_json:objects()} |
+          kz_datamgr:data_error().
+account_ports_by_state(AccountId, PortState) ->
+    ViewOptions = [{'startkey', [AccountId, PortState]}
+                  ,{'endkey', [AccountId, PortState, kz_json:new()]}
+                  ,'include_docs'
+                  ],
+    case kz_datamgr:get_results(?KZ_PORT_REQUESTS_DB, ?PORT_LISTING_BY_STATE, ViewOptions) of
+        {'ok', Ports} -> {'ok', [kz_json:get_value(<<"doc">>, Doc) || Doc <- Ports]};
+        {'error', _R} = Err ->
+            lager:error("failed to query for account port numbers ~p", [_R]),
+            Err
     end.
 
 %%------------------------------------------------------------------------------
@@ -158,23 +200,22 @@ account_active_ports(AccountId) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec descendant_active_ports(kz_term:ne_binary()) -> {'ok', kz_json:objects()} |
-                                                      {'error', 'not_found'}.
+          kz_datamgr:data_error().
 descendant_active_ports(AccountId) ->
     ViewOptions = [{'startkey', [AccountId]}
                   ,{'endkey', [AccountId, kz_json:new()]}
                   ,'include_docs'
                   ],
     case kz_datamgr:get_results(?KZ_PORT_REQUESTS_DB, ?DESCENDANT_ACTIVE_PORT_LISTING, ViewOptions) of
-        {'ok', []} -> {'error', 'not_found'};
         {'ok', Ports} ->
             {'ok', [kz_json:get_value(<<"doc">>, Doc)
                     || Doc <- Ports
                            ,is_active_descendant_port(Doc)
                    ]
             };
-        {'error', _R} ->
+        {'error', _R} = Err ->
             lager:error("failed to query for descendant port numbers ~p", [_R]),
-            {'error', 'not_found'}
+            Err
     end.
 
 -spec is_active_descendant_port(kz_json:object()) -> boolean().
@@ -189,8 +230,9 @@ is_active_descendant_port(JObj) ->
 -spec account_has_active_port(kz_term:ne_binary()) -> boolean().
 account_has_active_port(AccountId) ->
     case account_active_ports(AccountId) of
+        {'ok', []} -> 'false';
         {'ok', [_|_]} -> 'true';
-        {'error', 'not_found'} -> 'false'
+        {'error', _} -> 'false'
     end.
 
 %%------------------------------------------------------------------------------
@@ -202,7 +244,7 @@ normalize_attachments(Attachments) ->
     kz_json:map(fun normalize_attachments_map/2, Attachments).
 
 -spec normalize_attachments_map(kz_json:path(), kz_json:json_term()) ->
-                                       {kz_json:path(), kz_json:json_term()}.
+          {kz_json:path(), kz_json:json_term()}.
 normalize_attachments_map(K, V) ->
     {K, kz_json:delete_keys([<<"digest">>, <<"revpos">>, <<"stub">>], V)}.
 
@@ -217,7 +259,7 @@ normalize_numbers(PortReq) ->
     kzd_port_requests:set_numbers(PortReq, Normalized).
 
 -spec normalize_number_map(kz_json:path(), kz_json:json_term()) ->
-                                  {kz_json:path(), kz_json:json_term()}.
+          {kz_json:path(), kz_json:json_term()}.
 normalize_number_map(N, Meta) ->
     {knm_converters:normalize(N), Meta}.
 
@@ -288,7 +330,7 @@ attempt_transition(PortReq, Metadata, ToState) ->
     end.
 
 -spec is_user_allowed_to_move_state(kz_json:object(), transition_metadata(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
-                                           boolean().
+          boolean().
 is_user_allowed_to_move_state(_, #{}, ToState, _)
   when ToState =:= ?PORT_UNCONFIRMED;
        ToState =:= ?PORT_SUBMITTED ->
@@ -335,12 +377,12 @@ compatibility_transition(NumberProps, Metadata) ->
     completed_portin(Num, AccountId, Metadata).
 
 -spec transition(kz_json:object(), transition_metadata(), kz_term:ne_binaries(), kz_term:ne_binary()) ->
-                        transition_response().
+          transition_response().
 transition(JObj, Metadata, FromStates, ToState) ->
     transition(JObj, Metadata, FromStates, ToState, current_state(JObj)).
 
 -spec transition(kz_json:object(), transition_metadata(), kz_term:ne_binaries(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                        transition_response().
+          transition_response().
 transition(_JObj, _Metadata, [], _ToState, _CurrentState) ->
     lager:debug("cant go from ~s to ~s", [_CurrentState, _ToState]),
     lager:debug("metadata: ~p", [_Metadata]),
@@ -443,24 +485,30 @@ get_user_name(AuthAccountId, UserId) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec assign_to_app(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_json:object()) ->
-                           {'ok', kz_json:object()} |
-                           {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 assign_to_app(Number, NewApp, JObj) ->
-    case kz_json:get_value([?NUMBERS_KEY, Number, ?USED_BY_KEY], JObj) of
+    Numbers = kzd_port_requests:numbers(JObj),
+    lager:debug("assigning number ~s in port request ~s from ~p to ~s"
+               ,[Number, kz_doc:id(JObj), Numbers, NewApp]
+               ),
+    assign_to_app(Number, NewApp, Numbers, JObj).
+
+-spec assign_to_app(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_json:object()|'undefined', kz_json:object()) ->
+          {'ok', kz_json:object()} |
+          {'error', any()}.
+assign_to_app(_Number, _NewApp, 'undefined', _JObj) ->
+    {'error', 'not_found'};
+assign_to_app(Number, NewApp, Numbers, JObj) ->
+    case kz_json:get_value([Number, ?USED_BY_KEY], Numbers) of
         NewApp -> {'ok', JObj};
         _OldApp ->
-            lager:debug("assigning number ~s in port request ~s to ~s"
-                       ,[Number, kz_doc:id(JObj), NewApp]
-                       ),
-            NumberJObj = kz_json:from_list(
-                           props:filter_empty(
-                             [{?USED_BY_KEY, NewApp}
-                              | kz_json:to_proplist(
-                                  kz_json:get_value([?NUMBERS_KEY, Number], JObj)
-                                 )
-                             ])
-                          ),
-            save_doc(kz_json:set_value([?NUMBERS_KEY, Number], NumberJObj, JObj))
+            NewNumJObj = kz_json:set_value([Number, ?USED_BY_KEY]
+                                          ,NewApp
+                                          ,kz_json:delete_key([Number, ?USED_BY_KEY], Numbers)
+                                          ),
+            lager:debug("set new number app ~p", [NewNumJObj]),
+            save_doc(kzd_port_requests:set_numbers(JObj, NewNumJObj))
     end.
 
 %%------------------------------------------------------------------------------
@@ -503,8 +551,13 @@ migrate() ->
 %%------------------------------------------------------------------------------
 -spec completed_port(kz_json:object()) -> transition_response().
 completed_port(PortReq) ->
-    lager:debug("transitioning numbers to active"),
-    transition_numbers(PortReq).
+    Numbers = kz_json:get_keys(kzd_port_requests:numbers(PortReq)),
+    case transition_numbers(PortReq) of
+        {'ok', Save} ->
+            reconcile_app_used_by(Numbers, PortReq),
+            {'ok', Save};
+        Error -> Error
+    end.
 
 -spec completed_portin(kz_term:ne_binary(), kz_term:ne_binary(), transition_metadata()) -> 'ok' | {'error', any()}.
 completed_portin(Num, AccountId, #{optional_reason := OptionalReason}) ->
@@ -556,6 +609,67 @@ transition_numbers(PortReq) ->
                                ,[length(_NumsNotTransitioned), length(_OKs)]),
                     {'error', PortReq}
             end
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Apps used by in the port in document.
+%% This may not be a reliable source of used_by comparing to the callflow doc.
+%% @end
+%%------------------------------------------------------------------------------
+-spec app_used_by_portin(kz_term:ne_binaries(), kz_json:object()) -> kz_term:proplist().
+app_used_by_portin(Numbers, JObj) ->
+    NumbersObj = kzd_port_requests:numbers(JObj),
+    [{Num, kz_json:get_value([Num, ?USED_BY_KEY], NumbersObj)}
+     || Num <- Numbers,
+        kz_term:is_not_empty(kz_json:get_value([Num, ?USED_BY_KEY], NumbersObj))
+    ].
+
+-spec reconcile_app_used_by(kz_term:ne_binaries(), kz_json:object()) -> 'ok'.
+reconcile_app_used_by(Numbers, JObj) ->
+    AccountId = kz_doc:account_id(JObj),
+    AccountDb = kz_util:format_account_db(AccountId),
+    PortInUsedBy = app_used_by_portin(Numbers, JObj),
+    {AppUsedBy, NumAppUsage} = get_dids_for_app(AccountDb, Numbers),
+    lager:debug("transitioning numbers ~p to active used by apps ~p portin usage ~p"
+               ,[Numbers, AppUsedBy, PortInUsedBy]
+               ),
+    _ = [log_wrong_app_in_portin(proplists:get_value(N, PortInUsedBy), App, N) || {N, App} <- AppUsedBy],
+
+    %% app used_by carried over to phone_number document
+    lists:foreach(
+      fun({App, Nums}) ->
+              case Nums of
+                  [] -> 'ok';
+                  Nums -> knm_numbers:assign_to_app(Nums, App)
+              end
+      end
+     , NumAppUsage
+     ).
+
+-spec log_wrong_app_in_portin(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+log_wrong_app_in_portin(App, App, _Num) -> 'ok';
+log_wrong_app_in_portin(PortInApp, App, Num) ->
+    lager:debug("port in number ~p has an incorrect app ~p, the correct app is ~p", [Num, PortInApp, App]).
+
+%%------------------------------------------------------------------------------
+%% @doc Get numbers' app used_by from app's database in different format
+%% to be processed 1) detect missing apps in port in number
+%% 2) ensure app used_by carried to phone_number when port in is complete
+%% @end
+%%------------------------------------------------------------------------------
+-spec get_dids_for_app(kz_term:ne_binary(), kz_term:ne_binaries()) -> {kz_term:proplist(), kz_term:proplist()}.
+get_dids_for_app(AccountDb, Numbers) ->
+    CfDIDs = get_dids_for_app(AccountDb, Numbers, ?CALLFLOW_LIST),
+    TsDIDs = get_dids_for_app(AccountDb, Numbers, ?TRUNKSTORE_LIST),
+    NumApps = [{N, <<"callflow">>} || N <- CfDIDs] ++ [{N, <<"trunkstore">>} || N <- TsDIDs],
+    {NumApps, [{<<"callflow">>, CfDIDs}, {<<"trunkstore">>, TsDIDs}]}.
+
+-spec get_dids_for_app(kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary()) ->
+          kz_term:ne_binaries().
+get_dids_for_app(AccountDb, Numbers, View) ->
+    case kz_datamgr:get_result_keys(AccountDb, View, [{'keys', Numbers}]) of
+        {'ok', DIDs} -> DIDs;
+        {'error', _} -> []
     end.
 
 numbers_not_in_account_nor_in_service(AccountId, Nums) ->
@@ -692,7 +806,7 @@ fetch_and_send(Url, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec send_attachment(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), binary()) ->
-                             'error' | 'ok'.
+          'error' | 'ok'.
 send_attachment(Url, Id, Name, Options, Attachment) ->
     ContentType = kz_json:get_value(<<"content_type">>, Options),
     Headers = [{"Content-Type", kz_term:to_list(ContentType)}
@@ -765,7 +879,7 @@ migrate_doc(PortRequest) ->
     lists:foldl(fun migrate_doc/2, {PortRequest, 'false'}, MigrateFuns).
 
 -spec migrate_doc(fun((kz_json:object()) -> kz_term:api_object()), {kz_json:object(), boolean()}) ->
-                         {kz_json:object(), boolean()}.
+          {kz_json:object(), boolean()}.
 migrate_doc(Fun, {Doc, IsUpdated}) ->
     case Fun(Doc) of
         'undefined' -> {Doc, IsUpdated};
@@ -845,6 +959,7 @@ fetch_docs(StartKey, Limit) ->
     kz_datamgr:get_results(?KZ_PORT_REQUESTS_DB, <<"port_requests/listing_by_state">>,  ViewOptions).
 
 -spec save_doc(kz_json:object()) -> {'ok', kz_json:object()} |
-                                    {'error', any()}.
+          {'error', any()}.
 save_doc(JObj) ->
     kz_datamgr:save_doc(?KZ_PORT_REQUESTS_DB, JObj).
+

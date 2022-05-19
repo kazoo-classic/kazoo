@@ -25,6 +25,8 @@ api_get(Url) ->
 -spec api_get(nonempty_string(), knm_search:options()) -> api_res().
 api_get(Url, Options) ->
     HTTPOptions = [auth(Options)
+                  ,{'timeout', 180 * ?MILLISECONDS_IN_SECOND}
+                  ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ],
     ?DEBUG_APPEND("Request:~n~s ~s~n~p~n", ['get', Url, HTTPOptions]),
     Response = kz_http:get(Url, [], HTTPOptions),
