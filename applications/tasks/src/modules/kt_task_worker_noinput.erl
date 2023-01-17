@@ -155,7 +155,7 @@ store_return(#state{task_id = TaskId
                    }
             ,Reason
             ) ->
-    Data = [reason(OutputHeader, Reason), $\n],
+    Data = reason(OutputHeader, Reason),
     kz_util:write_file(?OUT(TaskId), Data, ['append']),
     NewColumns = columns(OutputHeader, Reason),
     {NewColumns, 1}.
@@ -185,7 +185,7 @@ columns(_, _) ->
 
 -spec write_output_csv_header(kz_tasks:id(), kz_csv:row()) -> ok | {error, any()}.
 write_output_csv_header(TaskId, Header) ->
-    Data = [kz_csv:row_to_iolist(Header), $\n],
+    Data = kz_csv:row_to_iolist(Header),
     file:write_file(?OUT(TaskId), Data).
 
 %%% End of Module.
