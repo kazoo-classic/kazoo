@@ -195,7 +195,7 @@ acquire_number(Number, Options) ->
                 {'ok', Results} -> 
                     OrderId = kz_json:get_value(<<"id">>, Results),
                     OrderStatus = kz_json:get_value(<<"status">>, Results),
-                    complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number, []),
+                    complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number, Options),
                     maybe_activate_sms(Number, Options);
                 {'error', Reason} -> 
                     Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
