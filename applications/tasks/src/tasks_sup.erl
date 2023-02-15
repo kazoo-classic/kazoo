@@ -26,8 +26,6 @@
                   ,?WORKER('kz_account_crawler')
                    %% Standalone tasks
                   ,?WORKER('kz_notify_resend')
-                   %% Compaction jobs reporter
-                  ,?WORKER('kt_compaction_reporter')
                   ]).
 
 %%==============================================================================
