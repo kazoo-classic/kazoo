@@ -53,28 +53,10 @@ delete_modbs(Year, Month, ShouldArchive) when is_integer(Year),
             io:format("request to delete the current MODB (~p~p) denied~n", [Year, Month]);
         {CurrYear, CurrMonth, _} when (CurrYear * 12 + CurrMonth) > (Year * 12 + Month) ->
             io:format("deleting all MODBs equal to or older than ~p/~p~n", [Year, Month]),
-            delete_older_modbs(Year, Month, get_all_account_modbs(), ShouldArchive);
+            delete_older_modbs(Year, Month, kapps_util:get_all_account_mods(), ShouldArchive);
         {_CurrYear, _CurrMonth, _} ->
             io:format("request to delete future MODBs (~p~p) denied~n", [Year, Month])
     end.
-
-get_all_account_modbs() ->
-    [{'generic', Props}] = kz_config:get(couchdb3),
-    {ok, 200, _, Body} = kz_http:get(<<"http://"
-                                      ,(props:get_binary_value(username, Props))/binary
-                                      ,":"
-                                      ,(props:get_binary_value(password, Props))/binary
-                                      ,"@"
-                                      ,(props:get_binary_value(ip, Props))/binary
-                                      ,":"
-                                      ,(props:get_binary_value(modb_port, Props, <<"5984">>))/binary
-                                      ,"/_all_dbs">>),
-    Databases = kz_json:decode(Body),
-    [kz_util:format_account_modb(Db, 'encoded')
-     || Db <- Databases,
-        kapps_util:is_account_mod(Db)
-    ].
-
 
 -spec delete_older_modbs(kz_time:year(), kz_time:month(), kz_term:ne_binaries(), boolean()) -> 'no_return'.
 delete_older_modbs(Year, Month, AccountModbs, ShouldArchive) ->
@@ -105,7 +87,7 @@ delete_modb(?MATCH_MODB_SUFFIX_ENCODED(_,_,_) = AccountModb, ShouldArchive) ->
 %%------------------------------------------------------------------------------
 -spec archive_modbs() -> 'no_return'.
 archive_modbs() ->
-    do_archive_modbs(get_all_account_modbs(), 'undefined').
+    do_archive_modbs(kapps_util:get_all_account_mods(), 'undefined').
 
 %%------------------------------------------------------------------------------
 %% @doc
