@@ -48,7 +48,7 @@ urlsplit_test_() ->
     ,?_assertEqual({<<"http">>, <<"host">>, <<"">>, <<"">>, <<"">>}, kz_http_util:urlsplit(<<"http://host">>))
     ,?_assertEqual({<<"">>, <<"">>, <<"/wiki/Category:Fruit">>, <<"">>, <<"">>}, kz_http_util:urlsplit(<<"/wiki/Category:Fruit">>))
     ,?_assertEqual({<<"https">>, {{<<"client.host">>, 1234}, <<"username">>, <<"password">>}, <<>>, <<>>, <<>>}
-                  ,kz_http_util:urlsplit(<<"https://username@password:client.host:1234">>)
+                  ,kz_http_util:urlsplit(<<"https://username:password@client.host:1234">>)
                   )
     ].
 
