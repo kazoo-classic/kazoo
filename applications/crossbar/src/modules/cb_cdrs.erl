@@ -93,6 +93,8 @@
 -define(COLUMNS_RESELLER
        ,[{<<"reseller_cost">>, fun col_reseller_cost/3}
         ,{<<"reseller_call_type">>, fun col_reseller_call_type/3}
+        ,{<<"reseller_id">>, fun col_reseller_id/3}
+        ,{<<"account_id">>, fun col_account_id/3}
         ]).
 
 -define(CONTEXT_COLUMNS
@@ -553,6 +555,8 @@ col_call_priority(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<
 
 col_reseller_cost(JObj, _Timestamp, _Context) -> kz_term:to_binary(reseller_cost(JObj)).
 col_reseller_call_type(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"reseller_billing">>], JObj, <<>>).
+col_reseller_id(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"reseller_id">>], JObj, <<>>).
+col_account_id(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"account_id">>], JObj, <<>>).
 
 col_interaction_id(JObj, _Timestamp, _Context) -> kzd_cdrs:interaction_id(JObj, <<>>).
 
