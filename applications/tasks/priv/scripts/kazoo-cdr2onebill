@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# This is a post processor task script for the kt_cdrs.erl apps server module.
+# Copy this script into the /opt/kazoo/lib/tasks-{version}/priv/scripts directory.
+# e.g., cp /opt/cdr2onebill/bin/kazoo-cdr2onebill /opt/kazoo-4.3.142.itlevel3-p3/lib/tasks-4.3.142.itlevel3-p3/priv/scripts/
+# You must define the script in the system_config/tasks.cdrs couchdb document to enable it.
+# e.g., {
+#           ...
+#           "default": {
+#               "post_process_script": "kazoo-cdr2onebill",
+#               ...
+#           },
+#           ...
+#       }
+# NOTE: Ensure the $APP_DIR configuration variable is set to the correct path.
+
+#------------------------------------------------------------------------------#
+#                               CONFIGURATION                                  #
+#------------------------------------------------------------------------------#
+# The path to the cdr2onebill root directory (required)
+# NOTE: do not add a trailing slash.
+#       [CORRECT]      /opt/cdr2onebill
+#       [INCORRECT]    /opt/cdr2onebill/
+APP_DIR="/opt/cdr2onebill"
+
+# The path to the post processing script you want to execute (optional)
+# e.g., POST_SCRIPT="$APP_DIR/bin/scripts/sftp-upload"
+POST_SCRIPT="$APP_DIR/bin/scripts/sftp-upload"
+
+#------------------------------------------------------------------------------#
+#                              RUN CDR2ONEBILL                                 #
+#------------------------------------------------------------------------------#
+if [ -z "$POST_SCRIPT" ]
+then
+    sh "$APP_DIR/bin/cdr2onebill" -s -f $1
+else
+    sh "$APP_DIR/bin/cdr2onebill" -s -f $1 -P $POST_SCRIPT
+fi
