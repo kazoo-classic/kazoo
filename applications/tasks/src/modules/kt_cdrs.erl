@@ -49,7 +49,7 @@
 %%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
-    _ = tasks_bindings:bind(?TRIGGER_DAILY, ?MODULE, 'dump_reseller_cdrs'),
+    _ = tasks_bindings:bind(?TRIGGER_DAILY, ?MODULE, 'dump_resellers_cdrs'),
     _ = tasks_bindings:bind(<<"tasks.help">>, ?MODULE, 'help'),
     _ = tasks_bindings:bind(<<"tasks."?CATEGORY".output_header">>, ?MODULE, 'output_header'),
     _ = tasks_bindings:bind(<<"tasks."?CATEGORY".cleanup">>, ?MODULE, 'cleanup'),
@@ -99,7 +99,8 @@ output_header(<<"dump">>) ->
 
 -spec dump(kz_tasks:extra_args(), kz_tasks:iterator()) -> kz_tasks:iterator().
 dump(#{'account_id' := AccountId}=_ExtraArgs, 'init') ->
-    AccountDb = kz_util:format_account_mod_id(AccountId),
+    {Yr,Mn,_Dy} = yesterday(),
+    AccountDb = kz_util:format_account_mod_id(AccountId, Yr, Mn),
     lager:info("starting dump of ~s", [AccountDb]),
 
     process_rows(AccountDb, 'undefined');
@@ -117,13 +118,15 @@ dump_reseller_cdrs(ResellerId) ->
     Header = [K || {K, _} <- kzd_cdrs:csv_headers('true')],
     'ok' = file:write_file(OutputPath, row_to_iolist(Header), ['append']),
     Descendants = [{OutputPath, kz_doc:id(JObj)} || JObj <- JObjs],
-    lists:foreach(fun dump_descendant_cdrs/1, Descendants).
+    lists:foreach(fun dump_descendant_cdrs/1, Descendants),
+    maybe_post_process_csv(OutputPath).
  
 dump_descendant_cdrs({OutputPath, AccountId}) ->
-    AccountDb = kz_util:format_account_mod_id(AccountId),
+    {Yr,Mn,_Dy} = yesterday(),
+    AccountDb = kz_util:format_account_mod_id(AccountId, Yr, Mn),
     lager:info("starting dump of ~s", [AccountDb]),
     Data = dump_descendant_cdrs(AccountDb, 'init', []),
-    'ok' = file:write_file(OutputPath, row_to_iolist(Data), ['append']).
+    'ok' = file:write_file(OutputPath, rows_to_iolist(Data), ['append']).
 
 dump_descendant_cdrs(AccountDb, 'init', Rows) ->
     {CDRRows, NewState} =  process_rows(AccountDb, 'undefined'),
@@ -139,21 +142,21 @@ dump_descendant_cdrs(AccountDb, State, Rows) ->
 process_rows(AccountDb, 'undefined') ->
     case get_page(AccountDb, 'undefined') of
         {'ok', Rows, NextStartKey} ->
-            lager:info("got ~p rows (next:~s)", [length(Rows), NextStartKey]),
+            lager:info("got ~p rows (next:~p)", [length(Rows), NextStartKey]),
             CDRRows = [kzd_cdrs:to_public_csv(CDR, 'true') || CDR <- rows_to_cdrs(Rows)],
             {CDRRows, {AccountDb, NextStartKey}};
         {'error', E} ->
             lager:error("error getting first page: ~p", [E]),
-            {E, []}
+            {[], {AccountDb, 'undefined'}}
     end;
 process_rows(AccountDb, {AccountDb, StartKey}) ->
     case get_page(AccountDb, StartKey) of
         {'ok', Rows, NextStartKey} ->
-            lager:info("got ~p rows from ~s (next:~s)", [length(Rows), StartKey, NextStartKey]),
+            lager:info("got ~p rows from ~p (next:~p)", [length(Rows), StartKey, NextStartKey]),
             {[kzd_cdrs:to_public_csv(CDR, 'true') || CDR <- rows_to_cdrs(Rows)], {AccountDb, NextStartKey}};
         {'error', E} ->
             lager:error("error getting page from ~p: ~p", [E, StartKey]),
-            {E, []}
+            {[], {AccountDb, 'undefined'}}
     end.
 
 rows_to_cdrs(Rows) ->
@@ -173,7 +176,7 @@ query(AccountDb, ViewOptions) ->
               ,'ascending'
                | ViewOptions
               ],
-    lager:info("kz_datamgr:paginate_results(~p, ~p, ~p)."
+    lager:debug("kz_datamgr:paginate_results(~p, ~p, ~p)."
               ,[AccountDb, <<"cdrs/crossbar_listing">>, Options]
               ),
     kz_datamgr:paginate_results(AccountDb
@@ -186,6 +189,21 @@ output_path(AccountId) ->
     {Yr,Mn,Dy} = yesterday(),
     D = list_to_binary(io_lib:format("~p-~p-~p", [Yr,Mn,Dy])),
     <<"/tmp/cdrs.", AccountId/binary, ".", D/binary, ".csv">>.
+
+maybe_post_process_csv(OutputPath) ->
+    Script = kapps_config:get_binary(?MOD_CAT, <<"post_process_script">>),
+    maybe_post_process_csv(Script, OutputPath).
+
+maybe_post_process_csv('undefined', _OutputPath) ->
+    lager:info("No cdr csv post process script defined, skippin"),
+    'ok';
+maybe_post_process_csv(Exe, OutputPath) ->
+    Tmp = binary_to_list(OutputPath) ++ "_pps.log",
+    Cmd = code:priv_dir(?APP) ++ "/scripts/" ++ binary_to_list(Exe) ++ " " ++ binary_to_list(OutputPath) ++ " > " ++ Tmp,
+    lager:info("executing ~s", [Cmd]),
+    Return = os:cmd(Cmd),
+    lager:info("post process cmd returned: ~p", [Return]),
+    'ok'.
 
 start_key() ->
     Yesterday = yesterday(),
@@ -203,3 +221,6 @@ row_to_iolist([]) ->
     <<>>;
 row_to_iolist(Row) ->
     kz_csv:row_to_iolist(Row).
+
+rows_to_iolist(Rows) ->
+    [row_to_iolist(Row) || Row <- Rows].
