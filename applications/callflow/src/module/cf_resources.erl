@@ -323,8 +323,17 @@ get_hunt_account_id(Data, Call) ->
         'false' -> 'undefined';
         'true' ->
             AccountId = kapps_call:account_id(Call),
-            kz_json:get_ne_binary_value(<<"hunt_account_id">>, Data, AccountId)
+            HuntAccountId = kz_json:get_ne_binary_value(<<"hunt_account_id">>, Data, 'undefined'),
+            get_hunt_account_id(AccountId, HuntAccountId, Call)
     end.
+
+-spec get_hunt_account_id(kz_term:api_binary(), kz_term:api_binary(), kapps_call:call()) -> kz_term:api_binary().
+get_hunt_account_id(AccountId, 'undefined', _Call) ->
+    AccountId;
+get_hunt_account_id(_AccountId, HuntAccountId, Call) ->
+    {ok, HuntFlow, 'true'} = cf_flow:lookup(<<"no_match">>, HuntAccountId),
+    NextHuntAccountId = kz_json:get_ne_value([<<"flow">>, <<"data">>, <<"hunt_account_id">>], HuntFlow, 'undefined'),
+    get_hunt_account_id(HuntAccountId, NextHuntAccountId, Call).
 
 -spec get_to_did(kz_json:object(), kapps_call:call()) -> kz_term:ne_binary().
 get_to_did(Data, Call) ->
