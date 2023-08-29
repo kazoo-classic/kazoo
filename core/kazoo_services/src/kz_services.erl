@@ -802,7 +802,8 @@ summary_reseller(Services) ->
 -spec summary_quantities(services()) -> kz_json:object().
 summary_quantities(Services) ->
     kz_json:from_list(
-      [{<<"account">>, account_quantities(Services)}
+      [{<<"account">>, account_billing_summary(
+                            account_quantities(Services))}
       ,{<<"cascade">>, cascade_quantities(Services)}
       ,{<<"manual">>, manual_quantities(Services)}
       ]
@@ -845,6 +846,19 @@ summary_billing_cycle(_Services) ->
       ,{<<"unit">>, <<"month">>}
       ]
      ).
+
+
+account_billing_summary(JObj) ->
+    case kz_json:get_value([<<"call_recording">>, <<"account_enabled">>], JObj, 0) > 0 of
+        'true' ->
+            Users = kz_json:get_integer_value([<<"users">>, <<"user">>], JObj, 0) 
+                        + kz_json:get_integer_value([<<"users">>, <<"admin">>], JObj, 0)
+                        - kz_json:get_value([<<"call_recording">>, <<"user_disabled">>], JObj, 0),
+            kz_json:set_value([<<"call_recording">>, <<"billable_users">>], Users, JObj);
+        'false' ->
+            Users = kz_json:get_value([<<"call_recording">>, <<"user_enabled">>], JObj, 0),
+            kz_json:set_value([<<"call_recording">>, <<"billable_users">>], Users, JObj)
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Fetch the services doc for a give account from the services database
