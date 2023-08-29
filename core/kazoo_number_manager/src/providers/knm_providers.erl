@@ -31,17 +31,6 @@
 -export([setup_account_context/1, setup_account_context/2]).
 -export([setup_number_context/1, setup_number_context/2]).
 
--define(DEFAULT_E911_PROVIDER, <<"knm_dash_e911">>).
--define(E911_PROVIDER(AccountId, ResellerId)
-       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_CONFIG_CAT, <<"e911_provider">>, ?E911_PROVIDER(ResellerId))
-       ).
--define(E911_PROVIDER(AccountId)
-       ,kapps_account_config:get_ne_binary(AccountId, ?KNM_CONFIG_CAT, <<"e911_provider">>, ?E911_PROVIDER)
-       ).
--define(E911_PROVIDER
-       ,kapps_config:get_binary(?KNM_CONFIG_CAT, <<"e911_provider">>, ?DEFAULT_E911_PROVIDER)
-       ).
-
 -define(DEFAULT_CNAM_PROVIDER, <<"knm_cnam_notifier">>).
 -define(CNAM_PROVIDER(AccountId, ResellerId)
        ,kapps_account_config:get_ne_binary(AccountId, ?KNM_CONFIG_CAT, <<"cnam_provider">>, ?CNAM_PROVIDER(ResellerId))
@@ -113,7 +102,7 @@ settings(PhoneNumber) ->
 settings(PhoneNumber, Features) ->
     AccountId = knm_phone_number:assigned_to(PhoneNumber),
     Fun = fun(Feature) ->
-                  Module = provider_module(Feature, AccountId),
+                  Module = provider_module(Feature, PhoneNumber, AccountId),
                   JObj = knm_gen_provider:settings(Module, PhoneNumber),
                   case kz_json:is_empty(JObj) of
                       true -> false;
@@ -149,8 +138,6 @@ service_name(?FEATURE_CNAM, _AccountId) ->
 service_name(Feature, _) ->
     service_name(Feature).
 -else.
-service_name(?FEATURE_E911, AccountId) ->
-    service_name(?E911_PROVIDER(AccountId));
 service_name(?FEATURE_CNAM, AccountId) ->
     service_name(?CNAM_PROVIDER(AccountId));
 service_name(Feature, _) ->
@@ -421,65 +408,93 @@ requested_modules(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     AccountId = knm_phone_number:assigned_to(PhoneNumber),
     Doc = knm_phone_number:doc(PhoneNumber),
-    RequestedFeatures = [Key || Key <- ?FEATURES_ROOT_KEYS,
+    RequestedFeatures = lists:flatten([fixup_cnam_key(Key, Doc) || Key <- ?FEATURES_ROOT_KEYS,
                                 'undefined' =/= kz_json:get_value(Key, Doc)
-                        ],
+                        ]),
     ?LOG_DEBUG("asked on public fields: ~s", [?PP(RequestedFeatures)]),
     ExistingFeatures = knm_phone_number:features_list(PhoneNumber),
     ?LOG_DEBUG("previously allowed: ~s", [?PP(ExistingFeatures)]),
     %% ?FEATURE_LOCAL is never user-writable thus must not be included.
     Features = (RequestedFeatures ++ ExistingFeatures) -- [?FEATURE_LOCAL],
-    provider_modules(Features, AccountId).
+    provider_modules(Features, PhoneNumber, AccountId).
+
+fixup_cnam_key(<<"cnam">>, Doc) ->
+    Value = kz_json:get_value(<<"cnam">>, Doc),
+    Routines = [fun maybe_cnam_outbound/2
+                ,fun maybe_cnam_inbound/2
+                ],
+    lists:foldl(fun(F, Acc) -> F(Value, Acc) end
+    ,[]
+    ,Routines
+    );
+fixup_cnam_key(Key, _Doc) ->
+    Key.
+
+maybe_cnam_outbound(Value, Acc) ->
+    case kz_json:get_value(<<"display_name">>, Value) of
+        'undefined' -> Acc;
+        _Else -> [?FEATURE_CNAM_OUTBOUND|Acc]
+    end.
+
+maybe_cnam_inbound(Value, Acc) ->
+    case  kz_json:get_boolean_value(<<"inbound_lookup">>, Value, 'false') of
+        'true' ->  [?FEATURE_CNAM_INBOUND|Acc];
+        'false' -> Acc
+    end.
 
 -spec allowed_modules(knm_number:knm_number()) -> kz_term:ne_binaries().
 allowed_modules(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     AccountId = knm_phone_number:assigned_to(PhoneNumber),
-    provider_modules(available_features(PhoneNumber), AccountId).
+    provider_modules(available_features(PhoneNumber), PhoneNumber, AccountId).
 
--spec provider_modules(kz_term:ne_binaries(), kz_term:api_ne_binary()) -> kz_term:ne_binaries().
-provider_modules(Features, MaybeAccountId) ->
+-spec provider_modules(kz_term:ne_binaries(), knm_number:knm_number(), kz_term:api_ne_binary()) -> kz_term:ne_binaries().
+provider_modules(Features, PhoneNumber, MaybeAccountId) ->
     lists:usort(
-      [provider_module(Feature, MaybeAccountId)
+      [provider_module(Feature, PhoneNumber, MaybeAccountId)
        || Feature <- Features
       ]).
 
--spec provider_module(kz_term:ne_binary(), kz_term:api_ne_binary()) -> kz_term:ne_binary().
-provider_module(?FEATURE_CNAM, ?MATCH_ACCOUNT_RAW(AccountId)) ->
-    cnam_provider(AccountId);
-provider_module(?FEATURE_CNAM_INBOUND, AccountId) ->
-    provider_module(?FEATURE_CNAM, AccountId);
-provider_module(?FEATURE_CNAM_OUTBOUND, AccountId) ->
-    provider_module(?FEATURE_CNAM, AccountId);
-provider_module(?FEATURE_E911, ?MATCH_ACCOUNT_RAW(AccountId)) ->
-    e911_provider(AccountId);
-provider_module(?FEATURE_PREPEND, _) ->
+-spec provider_module(kz_term:ne_binary(), knm_number:knm_number(), kz_term:api_ne_binary()) -> kz_term:ne_binary().
+provider_module(?FEATURE_CNAM, _PhoneNumber, ?MATCH_ACCOUNT_RAW(AccountId)) ->
+    cnam_inbound_provider(AccountId);
+provider_module(?FEATURE_CNAM_INBOUND, PhoneNumber, AccountId) ->
+    provider_module(?FEATURE_CNAM, PhoneNumber, AccountId);
+provider_module(?FEATURE_CNAM_OUTBOUND, PhoneNumber, AccountId) ->
+    cnam_outbound_provider(PhoneNumber, AccountId);
+provider_module(?FEATURE_E911, PhoneNumber, ?MATCH_ACCOUNT_RAW(AccountId)) ->
+    e911_provider(PhoneNumber, AccountId);
+provider_module(?FEATURE_PREPEND, _, _) ->
     <<"knm_prepend">>;
-provider_module(?FEATURE_PORT, _) ->
+provider_module(?FEATURE_PORT, _, _) ->
     <<"knm_port_notifier">>;
-provider_module(?FEATURE_FAILOVER, _) ->
+provider_module(?FEATURE_FAILOVER, _, _) ->
     <<"knm_failover">>;
-provider_module(?FEATURE_RENAME_CARRIER, _) ->
+provider_module(?FEATURE_RENAME_CARRIER, _, _) ->
     ?PROVIDER_RENAME_CARRIER;
-provider_module(?FEATURE_FORCE_OUTBOUND, _) ->
+provider_module(?FEATURE_FORCE_OUTBOUND, _, _) ->
     ?PROVIDER_FORCE_OUTBOUND;
-provider_module(Other, _) ->
+provider_module(Other, _, _) ->
     ?LOG_DEBUG("unmatched feature provider ~p, allowing", [Other]),
     Other.
 
--ifdef(TEST).
-e911_provider(?RESELLER_ACCOUNT_ID) -> <<"knm_telnyx_e911">>;
-e911_provider(AccountId) -> ?E911_PROVIDER(AccountId).
--else.
-e911_provider(AccountId) -> ?E911_PROVIDER(AccountId, kzd_accounts:get_parent_account_id(AccountId)).
--endif.
+e911_provider(PhoneNumber, _AccountId) -> 
+  Module = knm_phone_number:module_name(PhoneNumber),
+  e911_provider(Module).
 
--ifdef(TEST).
-cnam_provider(?RESELLER_ACCOUNT_ID) -> <<"knm_telnyx_cnam">>;
-cnam_provider(AccountId) -> ?CNAM_PROVIDER(AccountId).
--else.
-cnam_provider(AccountId) -> ?CNAM_PROVIDER(AccountId, kzd_accounts:get_parent_account_id(AccountId)).
--endif.
+e911_provider(<<"knm_bandwidth2">>) ->
+    <<"knm_dash_e911">>;
+e911_provider(Module) ->
+    <<Module/binary, "_e911">>.
+
+cnam_outbound_provider(PhoneNumber, _AccountId) ->
+  Module = knm_phone_number:module_name(PhoneNumber),
+  cnam_outbound_provider(Module).
+
+cnam_outbound_provider(Module) ->
+    <<Module/binary, "_cnam">>.
+
+cnam_inbound_provider(AccountId) -> ?CNAM_PROVIDER(AccountId, kzd_accounts:get_parent_account_id(AccountId)).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -626,7 +641,7 @@ setup_account_context(AccountId, Admin) ->
      ,admin_only => ?ADMIN_ONLY_FEATURES
      ,with_available => ?PROVIDERS_WITH_AVAILABLE
      ,is_admin => Admin
-     ,modules => maps:from_list([{Feature, provider_module(Feature, AccountId)} || Feature <- Allowed])
+     ,modules => []
      ,account_id => AccountId
      }.
 
