@@ -435,7 +435,7 @@ move_account(AccountId, JObj, ToAccount, ToTree) ->
             lager:info("moved account ~s (~s)", [AccountId, kz_doc:revision(_AccountDoc)]),
             NewResellerId = kz_services_reseller:get_id(ToAccount),
             {'ok', _} = move_descendants(AccountId, ToTree, NewResellerId),
-            Services = kazoo_services_maintenance:update_tree(AccountId, ToTree, NewResellerId),
+            Services = kazoo_services_maintenance:update_tree(AccountId, ToTree, ToAccount),
             {'ok', kz_services:services_jobj(Services)}
     end.
 
