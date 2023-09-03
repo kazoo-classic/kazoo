@@ -59,10 +59,11 @@
                                )
        ).
 
+-define(DASH_DEBUG_FILE, "/tmp/dash_e911.log").
 -define(DEBUG, kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"debug">>, 'false')).
 -define(DEBUG(Fmt, Args),
         ?DEBUG
-        andalso file:write_file("/tmp/dash_e911.xml", io_lib:format(Fmt, Args))
+        andalso file:write_file(?DASH_DEBUG_FILE, io_lib:format(Fmt, Args), ['append'])
        ).
 
 %%------------------------------------------------------------------------------
@@ -346,7 +347,7 @@ emergency_provisioning_request(Verb, Props, Number) ->
                   ,{'basic_auth', {?AUTH_USERNAME(Number), ?AUTH_PASSWORD(Number)}}
                   ],
     lager:debug("making ~s request to upstream ~s", [Verb, URL]),
-    ?DEBUG("Request:~n~s ~s~n~s~n", ['post', URL, Body]),
+    ?DEBUG("Request:~n~s ~s~n~s~n~p~n~p~n", ['post', URL, Body, Headers, HTTPOptions]),
     case kz_http:post(kz_term:to_list(URL), Headers, Body, HTTPOptions) of
         {'ok', 401, _, _Response} ->
             ?DEBUG("Response:~n401~n~s~n", [_Response]),
