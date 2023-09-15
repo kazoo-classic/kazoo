@@ -881,24 +881,23 @@ send_fax(JobId, JObj, Q, ToDID) ->
     lager:debug("sending fax originate request ~s with call-id ~s", [JobId, CallId]),
     kapi_offnet_resource:publish_req(Request).
 
+
+
 -spec get_hunt_account_id(kz_term:ne_binary()) -> kz_term:api_binary().
 get_hunt_account_id(AccountId) ->
-    AccountDb = kz_util:format_account_db(AccountId),
-    Options = [{'key', <<"no_match">>}, 'include_docs'],
-    case kz_datamgr:get_results(AccountDb, ?CALLFLOW_LIST, Options) of
-        {'ok', [JObj]} -> maybe_hunt_account_id(kz_json:get_value([<<"doc">>, <<"flow">>], JObj), AccountId);
-        _ -> 'undefined'
-    end.
+    {ok, HuntFlow, 'true'} = cf_flow:lookup(<<"no_match">>, AccountId),
+    HuntAccountId = kz_json:get_ne_value([<<"flow">>, <<"data">>, <<"hunt_account_id">>], HuntFlow, 'undefined'),
+    get_hunt_account_id(AccountId, HuntAccountId).
 
--spec maybe_hunt_account_id(kz_term:api_object(), kz_term:ne_binary()) -> kz_term:api_binary().
-maybe_hunt_account_id('undefined', _) -> 'undefined';
-maybe_hunt_account_id(JObj, AccountId) ->
-    case kz_json:get_value(<<"module">>, JObj) of
-        <<"resources">> ->
-            kz_json:get_value([<<"data">>, <<"hunt_account_id">>], JObj, AccountId);
-        _ ->
-            maybe_hunt_account_id(kz_json:get_value([<<"children">>, <<"_">>], JObj), AccountId)
-    end.
+-spec get_hunt_account_id(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:api_binary().
+get_hunt_account_id(AccountId, 'undefined') ->
+    AccountId;
+get_hunt_account_id(AccountId, AccountId) ->
+    AccountId;
+get_hunt_account_id(_AccountId, HuntAccountId) ->
+    {ok, HuntFlow, 'true'} = cf_flow:lookup(<<"no_match">>, HuntAccountId),
+    NextHuntAccountId = kz_json:get_ne_value([<<"flow">>, <<"data">>, <<"hunt_account_id">>], HuntFlow, 'undefined'),
+    get_hunt_account_id(HuntAccountId, NextHuntAccountId).
 
 -spec resource_ccvs(kz_term:ne_binary()) -> kz_json:object().
 resource_ccvs(JobId) ->
