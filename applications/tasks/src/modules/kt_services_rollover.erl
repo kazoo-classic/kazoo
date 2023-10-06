@@ -24,7 +24,12 @@ init() ->
 
 -spec handle_req() -> 'ok'.
 handle_req() ->
-    handle_req(erlang:date()).
+    MasterZone = kapps_config:get(?MOD_CAT, <<"master_zone">>, 'undefined'),
+    MyZone = kz_term:to_binary(kz_nodes:local_zone()),
+    case MasterZone == 'undefined' orelse MyZone == MasterZone of
+        'true' -> handle_req(erlang:date());
+        'false' -> lager:info("~s is not master zone (~s), skipping", [MyZone, MasterZone])
+    end.
 
 -spec handle_req(kz_time:date()) -> 'ok'.
 handle_req({Year, Month, 1}) ->
