@@ -92,7 +92,7 @@ do_store_file(Tries, Timeout, API, Msg, #{media_server := Node}=Map) ->
                       ,kz_term:ne_binary(), kz_term:ne_binary(), map()) ->
           'ok' | {'error', any()}.
 retry_store_file(0, _Timeout, _API, Msg, Error, Map) ->
-    lager:critical("~s : ~s", [Msg, Error]),
+    lager:error("~s : ~s", [Msg, Error]),
     kz_notify:detailed_alert(kz_term:to_binary(Msg)
                             ,kz_term:to_binary(Error)
                             ,maps:to_list(Map#{store_error => Error})
@@ -100,7 +100,7 @@ retry_store_file(0, _Timeout, _API, Msg, Error, Map) ->
                             ),
     {'error', Error};
 retry_store_file(Tries, Timeout, API, Msg, Error, Map) ->
-    lager:critical("~s : ~s", [Msg, Error]),
+    lager:warning("~s : ~s", [Msg, Error]),
     timer:sleep(5 * ?MILLISECONDS_IN_SECOND),
     do_store_file(Tries, Timeout, API, Msg, Map).
 
