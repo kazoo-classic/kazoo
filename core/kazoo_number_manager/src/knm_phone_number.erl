@@ -606,7 +606,7 @@ to_json(PN=#knm_phone_number{doc=JObj}) ->
           props:filter_empty(
             [{<<"_rev">>, rev(PN)}
             ,{?PVT_ASSIGNED_TO, assigned_to(PN)}
-            ,{?PVT_PREVIOUSLY_ASSIGNED_TO, prev_assigned_to(PN)}
+%%            ,{?PVT_PREVIOUSLY_ASSIGNED_TO, prev_assigned_to(PN)}
             ,{?PVT_USED_BY, used_by(PN)}
             ,{?PVT_FEATURES, features(PN)}
             ,{?PVT_FEATURES_ALLOWED, features_allowed(PN)}
