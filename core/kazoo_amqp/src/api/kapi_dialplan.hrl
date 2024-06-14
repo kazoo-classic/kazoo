@@ -15,6 +15,7 @@
                               ,<<"npan">>, <<"1npan">>
                               ,<<"route">>, <<"loopback">>
                               ,<<"contact">>
+                              ,<<"strip_plus">>
                               ]
                              }).
 

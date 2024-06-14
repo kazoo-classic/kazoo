@@ -35,7 +35,6 @@ DEPS = amqp_client \
 	plists \
 	poolboy \
 	proper \
-    pqueue \
 	ranch \
 	recon \
 	reloader \
@@ -62,10 +61,8 @@ dep_apns = git https://github.com/2600hz/erlang-apns4erl.git 2600hz-2.4.2
 
 
 dep_amqp_client = hex 3.7.8
-dep_apns = git https://github.com/2600hz/erlang-apns4erl.git 2600hz-2.4.2
 dep_certifi = hex 0.3.0
 dep_chatterbox = hex 0.7.0
-dep_cowboy = git https://github.com/ninenines/cowboy 2.2.0
 dep_eflame = git https://github.com/slfritchie/eflame 7b0bb1a7e8c8482a59421a3a50ae69d49af59d52
 dep_eiconv = git https://github.com/zotonic/eiconv
 dep_escalus = git https://github.com/esl/escalus 0de0463c345a1ade6fccfb9aadad719b58a1cef5
@@ -95,7 +92,7 @@ dep_lager = git https://github.com/erlang-lager/lager 3.5.2
 dep_trie = git https://github.com/okeuday/trie v1.5.4
 dep_fs_event = git https://github.com/jamhed/fs_event 783400da08c2b55c295dbec81df0d926960c0346
 dep_fs_sync = git https://github.com/jamhed/fs_sync 2cf85cf5861221128f020c453604d509fd37cd53
-dep_inet_cidr = git https://github.com/icehess/inet_cidr.git
+dep_inet_cidr = git https://github.com/2600hz/erlang-inet_cidr.git 1.0.2
 ### PR opened upstream ###
 dep_erlang_localtime = git https://github.com/2600hz/erlang-localtime 2600hz
 
@@ -113,8 +110,6 @@ dep_parse_trans = git https://github.com/lazedo/parse_trans
 dep_horse = git https://github.com/ninenines/horse
 
 dep_proper = git https://github.com/manopapad/proper v1.2
-
-dep_pqueue = hex 1.7.2
 
 dep_syslog = git https://github.com/2600hz/erlang-syslog bbad537a1cb5e4f37e672d2e2665659e850662d0
 

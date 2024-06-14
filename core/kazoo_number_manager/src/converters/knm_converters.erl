@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2022, 2600Hz
 %%% @doc
 %%% @author Peter Defebvre
 %%% @end
@@ -12,12 +12,17 @@
         ,is_normalized/1
         ,is_npan/1, to_npan/1
         ,is_1npan/1, to_1npan/1
+        ,is_strip_plus/1, to_strip_plus/1
         ,to_db/1
         ,is_reconcilable/1, is_reconcilable/2, are_reconcilable/1
         ,classify/1, available_classifiers/0
         ,available_converters/0
         ,default_converter/0
         ]).
+
+-ifdef(TEST).
+-export([available_classifiers/1]).
+-endif.
 
 -define(DEFAULT_CONVERTER_B, <<"regex">>).
 -define(DEFAULT_CONVERTERS, [?DEFAULT_CONVERTER_B]).
@@ -38,7 +43,7 @@
                           ])).
 
 -define(CLASSIFIER_EMERGENCY,
-        kz_json:from_list([{<<"regex">>, <<"^(911|922|933|833|811|711|999)\$">>}
+        kz_json:from_list([{<<"regex">>, <<"^(911|922|933|988|833|811|711|999)\$">>}
                           ,{<<"emergency">>, 'true'}
                           ,{<<"friendly_name">>, <<"Emergency Dispatcher">>}
                           ])).
@@ -98,8 +103,6 @@
 %%------------------------------------------------------------------------------
 -spec normalize(kz_term:ne_binary()) -> kz_term:ne_binary();
                (kz_term:ne_binaries()) -> kz_term:ne_binaries().
-normalize('undefined') ->
-    'undefined';
 normalize(Num=?NE_BINARY) ->
     (?CONVERTER_MOD):normalize(Num);
 normalize(Nums)
@@ -168,6 +171,22 @@ to_1npan(Num) ->
     (?CONVERTER_MOD):to_1npan(Num).
 
 %%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec is_strip_plus(kz_term:ne_binary()) -> boolean().
+is_strip_plus(Num) ->
+    to_strip_plus(Num) =:= Num.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec to_strip_plus(kz_term:ne_binary()) -> kz_term:ne_binary().
+to_strip_plus(Num) ->
+    (?CONVERTER_MOD):to_strip_plus(Num).
+
+%%------------------------------------------------------------------------------
 %% @doc Given a number determine the database name it belongs to..
 %% @end
 %%------------------------------------------------------------------------------
@@ -222,7 +241,11 @@ classify(Number) ->
 %%------------------------------------------------------------------------------
 -spec available_classifiers() -> kz_json:object().
 available_classifiers() ->
-    kz_json:foldl(fun correct_depreciated_classifiers/3, kz_json:new(), ?CLASSIFIERS).
+    available_classifiers(?CLASSIFIERS).
+
+-spec available_classifiers(kz_json:object()) -> kz_json:object().
+available_classifiers(Cs) ->
+    kz_json:foldl(fun correct_depreciated_classifiers/3, kz_json:new(), Cs).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -275,16 +298,16 @@ get_classifier_regex(JObj) ->
 %%------------------------------------------------------------------------------
 -spec correct_depreciated_classifiers(kz_json:key(), kz_json:json_term(), kz_json:object()) ->
                                                  kz_json:object().
-correct_depreciated_classifiers(Classifier, ?NE_BINARY=Regex, JObj) ->
-    J = kz_json:from_list([{<<"regex">>, Regex}
-                          ,{<<"friendly_name">>, Classifier}
-                          ]),
-    kz_json:set_value(Classifier, J, JObj);
-correct_depreciated_classifiers(Classifier, J, JObj) ->
-    case kz_json:get_value(<<"friendly_name">>, J) of
+correct_depreciated_classifiers(ClassifierName, <<Regex/binary>>, CorrectedClassifiers) ->
+    ClassifierSettings = kz_json:from_list([{<<"regex">>, Regex}
+                                           ,{<<"friendly_name">>, ClassifierName}
+                                           ]),
+    kz_json:set_value(ClassifierName, ClassifierSettings, CorrectedClassifiers);
+correct_depreciated_classifiers(ClassifierName, ClassifierSettings, CorrectedClassifiers) ->
+    case kz_json:get_value(<<"friendly_name">>, ClassifierSettings) of
         'undefined' ->
-            Updated = kz_json:set_value(<<"friendly_name">>, Classifier, JObj),
-            kz_json:set_value(Classifier, Updated, JObj);
+            UpdatedSettings = kz_json:set_value(<<"friendly_name">>, ClassifierName, ClassifierSettings),
+            kz_json:set_value(ClassifierName, UpdatedSettings, CorrectedClassifiers);
         _Else ->
-            kz_json:set_value(Classifier, J, JObj)
+            kz_json:set_value(ClassifierName, ClassifierSettings, CorrectedClassifiers)
     end.

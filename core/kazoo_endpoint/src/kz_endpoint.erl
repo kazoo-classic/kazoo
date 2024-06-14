@@ -1280,8 +1280,9 @@ create_push_endpoint(Endpoint, Properties, Call) ->
         ,{<<"Ignore-Early-Media">>, get_ignore_early_media(Endpoint)}
         ,{<<"Bypass-Media">>, get_bypass_media(Endpoint)}
         ,{<<"Endpoint-Progress-Timeout">>, get_progress_timeout(Endpoint)}
+        ,{<<"Endpoint-Timeout">>, get_timeout(Properties)}
         ,{<<"Endpoint-ID">>, kz_doc:id(Endpoint)}
-        ,{<<"Endpoint-Delay">>, 5}
+        ,{<<"Endpoint-Delay">>, get_delay(Properties)}
         ,{<<"Codecs">>, get_codecs(Endpoint)}
         ,{<<"Hold-Media">>, kz_attributes:moh_attributes(Endpoint, <<"media_id">>, Call)}
         ,{<<"Presence-ID">>, kz_attributes:presence_id(Endpoint, Call)}

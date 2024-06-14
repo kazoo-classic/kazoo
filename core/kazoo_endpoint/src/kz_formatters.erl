@@ -270,6 +270,7 @@ maybe_match_invite_format(JObj, Formatter) ->
         <<"route">> -> 'false';
         <<"username">> -> 'false';
         <<"e164">> -> 'true';
+        <<"strip_plus">> -> 'true';
         <<"npan">> -> 'true';
         <<"1npan">> -> 'true'
     end.
@@ -289,7 +290,8 @@ invite_format_fun(JObj) ->
     case kz_json:get_ne_binary_value(<<"Invite-Format">>, JObj) of
         <<"e164">> -> fun knm_converters:normalize/1;
         <<"1npan">> -> fun knm_converters:to_1npan/1;
-        <<"npan">> -> fun knm_converters:to_npan/1
+        <<"npan">> -> fun knm_converters:to_npan/1;
+        <<"strip_plus">> -> fun knm_converters:to_strip_plus/1
     end.
 
 -spec maybe_match(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
