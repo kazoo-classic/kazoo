@@ -67,13 +67,13 @@ account_id(Doc, Default) ->
 set_account_id(Doc, AccountId) ->
     kz_json:set_value([<<"account_id">>], AccountId, Doc).
 
--spec caller_id_numbers(doc()) -> kz_term:api_ne_binary().
+-spec caller_id_numbers(doc()) -> kz_term:api_list().
 caller_id_numbers(Doc) ->
     caller_id_numbers(Doc, 'undefined').
 
--spec caller_id_numbers(doc(), Default) -> kz_term:ne_binary() | Default.
+-spec caller_id_numbers(doc(), Default) -> kz_term:api_list() | Default.
 caller_id_numbers(Doc, Default) ->
-    kz_json:get_ne_binary_value([<<"caller_id_numbers">>], Doc, Default).
+    kz_json:get_list_value([<<"caller_id_numbers">>], Doc, Default).
 
 -spec set_caller_id_numbers(doc(), kz_term:ne_binary()) -> doc().
 set_caller_id_numbers(Doc, <<CallerIdNumbers/binary>>) ->
