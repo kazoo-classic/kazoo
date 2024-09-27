@@ -1,69 +1,133 @@
-# INSTALLATION NOTES
+# INSTALLATION NOTES ALMA LINUX 8
 
-## on aio:
-###   Install Erlang OTP
-```
-    curl -O https://raw.githubusercontent.com/kerl/kerl/master/kerl  
-    chmod +x kerl
-    mv kerl /usr/bin
-    kerl list releases
-    kerl build 19.2 19.2 # this takes a while
-    kerl install 19.2 /usr/local/otp-19.2
-    . /usr/local/otp-19.2/activate
+Kazoo-Applications needs to be built from source using erlang OTP 19.3
+
+Special thanks to;
+
+- [ruhnet](https://github.com/ruhnet/kazoo)
+- [itlevel3](https://github.com/itlevel3/kazoo)
+- [voxter](https://github.com/voxter/kazoo)
+
+
+## Install Erlang OTP
+
+```bash
+​##kerl install
+## This helps us install the erlan otp version we want
+curl -O https://raw.githubusercontent.com/kerl/kerl/master/kerl
+chmod +x kerl
+mv kerl /usr/bin
+
+#Deps for build/making
+dnf groupinstall -y "Development Tools"
+dnf install -y ncurses-devel gcc gcc-c++ make glibc-devel git \
+               java-1.8.0-openjdk-devel unixODBC-devel wxGTK3-devel \
+               wget ncurses-devel python2 python2-yaml
+
+#link python 2.7 to command python, required for make command later
+ln -s /usr/bin/python2.7 /usr/sbin/python
+
+#openssl 1.0 requirement for erl 19.3
+curl https://www.openssl.org/source/openssl-1.0.2r.tar.gz | tar xfz - && cd openssl-1.0.2r && ./config --prefix=/usr/local/openssl-1.0.2r -fpic && make && sudo make install && cd .. && rm -rf openssl-1.0.2r creates=/usr/local/openssl-1.0.2r
+
+###FOP, used to generate docs.
+mkdir /opt/fop
+cd /opt/fop
+wget https://dlcdn.apache.org/xmlgraphics/fop/binaries/fop-2.9-bin.tar.gz
+tar -zxvf fop-2.9-bin.tar.gz
+ln -s  /opt/fop/fop-2.9/fop/fop /usr/bin/fop
+cd /opt
+
+### Build ERL OTP 19.3
+export KERL_CONFIGURE_OPTIONS="--with-ssl=/usr/local/openssl-1.0.2r"
+kerl build 19.3 19.3
+kerl install 19.3 /usr/local/otp-19.3
+. /usr/local/otp-19.3/activate
 ```
 
-### Clone github
-```
-    git clone https://github.com/itlevel3/kazoo.git kazoo.itlevel3
-    cd kazoo.itlevel3
-    git remote add upstream https://github.com/2600hz/kazoo.git
-    git pull upstream
-    git checkout 4.3.58-acdc
-```
-###   Build the release 
-```
-	cd kazoo.itlevel3
-    . /usr/local/otp-19.2/activate
-	make
-	make build-release
-	make sup_completion
-	mkdir _rel/kazoo/log
-	cd _rel
-	mv kazoo kazoo.itlevel3-4.3.58
-        chown -R kazoo:daemon kazoo.itlevel3-4.3.58
-	tar cvzf kazoo-itlevel3-4.3.58.tgz kazoo.itlevel3-4.3.58
-```
-###   copy release tarball and sup completion to production servers 
-```
-    scp kazoo-itlevel3-4.3.58.tgz root@aio.sipengines.com:
-    scp kazoo-itlevel3-4.3.58.tgz root@aio2.sipengines.com:
-    scp kazoo-itlevel3-4.3.58.tgz root@aio3.sipengines.com:
-	scp sup.bash aio:/etc/bash_completion.d/
-	scp sup.bash aio2:/etc/bash_completion.d/
-   	scp sup.bash aio3:/etc/bash_completion.d/
+## Build Kazoo-Applications
+
+```bash
+cd /opt
+git clone https://github.com/kazoo-classic/kazoo/
+
+### Dependencies for this fork, pqueue for acdc and elixir
+#### ELIXIR
+cd /tmp
+wget https://github.com/elixir-lang/elixir/archive/v1.5.3.tar.gz
+tar -xzvf v1.5.3.tar.gz
+cd elixir-1.5.3
+make clean
+mkdir -p /usr/local/otp-19.3/elixir
+make install PREFIX=/usr/local/otp-19.3/elixir
+export PATH=/usr/local/otp-193/elixir/bin:$PATH
+source ~/.bashrc
+
+#### PQUEUE
+cd /opt/kazoo/deps
+git clone https://github.com/okeuday/pqueue.git
+cd /opt/kazoo/deps/pqueue
+git checkout v1.7.0
+wget https://github.com/rebar/rebar/archive/refs/tags/2.6.4.tar.gz
+tar -zxvf 2.6.4.tar.gz
+cd rebar-2.6.4/
+make
+cd ..
+./rebar-2.6.4/rebar --version
+./rebar-2.6.4/rebar get-deps
+./rebar-2.6.4/rebar compile
+​
+### Build Kazoo
+cd /opt/kazoo
+make
+make install
 ```
 
-### On production server:
-####  Pre-flight:
-*	yum info kazoo-freeswitch
-	make sure installed version of freeswitch is  kazoo-freeswitch-4.3-4.el7.centos (NOTE 4.3-6.el7.centos doesn't work with 4.3.58)
-*	Installation makes changes to the bigcouch DB so backup the DB before you start
-*	yum info kazoo-kamailio
-		make sure installed version of kamialio is kazoo-kamailio-4.3-25.el7.centos
+## Get Configs
 
-####  This release only 4.3.59.rc3 ############
-1) Need to manually delete acdc queue in rabbitmq, these should have been auto deleted when kazoo was stopped
-2) Need to delete system_data/account-acdc-queues and system_data/account-acdc-agents as we now use system_data/multi_db-acdc-queues and system_data/multi_db-acdc-agents
+```bash
+useradd -G daemon kazoo
+cd /opt/kazoo
+#​## Use 4.3 from 2600hz or the kazoo-classic repo
+git https://github.com/kazoo-classic/kazoo-configs-core.git
+mkdir /etc/kazoo -p
+\cp -R /opt/kazoo/kazoo-configs-core/core /etc/kazoo/core
+chown kazoo:daemon -R /etc/kazoo/core
+# move files to appropriate locations.
+\cp /opt/kazoo/kazoo-configs-core/system/systemd/* /usr/lib/systemd/system/
+\cp /opt/kazoo/kazoo-configs-core/system/init.d/* /etc/init.d/
+\cp /opt/kazoo/kazoo-configs-core/system/logrotate.d/* /etc/logrotate.d/
+\cp /opt/kazoo/kazoo-configs-core/system/security/limits.d/* /etc/security/limits.d/
+\cp /opt/kazoo/kazoo-configs-core/system/sbin/* /usr/sbin/
+systemctl daemon-reload
+systemctl enable kazoo-applications
+### optionally run ecallmgr if you're not running it inside of kazoo-applications itself
+#systemctl enable kazoo-ecallmgr
 
-####  Flight:
+# link the sup command
+ln -s /opt/kazoo/bin/sup /usr/sbin/sup
 ```
-	systemctl stop kazoo-applications
-	cd /opt
-	mv kazoo kazoo-4.3.18
-	tar -xvzf ~/kazoo-itlevel3-4.3.58.tgz
-	rm ~/kazoo.itlevel3-4.3.58.tgz
-	ln -s kazoo.itlevel3-4.3.58 kazoo
+
+## Edit configuration
+
+Go set your elang cookie in /opt/kazoo/.erlang.cookie
+
+Go configure /etc/kazoo/core/config.ini
+
+## RsyslogD
+
+```bash
+cat <<EOF>/etc/rsyslog.d/90-kazoo-core.conf
+local0.*                                                /var/log/kazoo/kazoo.log
+& ~
+EOF
+
+systemctl restart rsyslogd
+```
+##  Flight:
+```
 	systemctl start kazoo-applications
+	systemctl enable kazoo-applications
 	
 	sup crossbar_maintenance start_module cb_queues 
 	sup crossbar_maintenance start_module cb_agents 
@@ -72,21 +136,11 @@
 	sup acdc_maintenance migrate
 	sup acdc_maintenance refresh
 
-	sup kapps_controller start_app acdc  <-- how do we make it permanent
+	sup kapps_controller start_app acdc
 
 	sup blackhole_maintenance start_module bh_acdc_agent
 	sup blackhole_maintenance start_module bh_acdc_queue 
 ```
-####  Rollback:
-```
-	systemctl stop kazoo-applications
-	cd /opt
-	rm kazoo
-	ln -s kazoo-4.3.18 kazoo
-	systemctl start kazoo-applications
-```
-If still experiencing problems then restore DB from backup
-	
 
 # SANITY TESTING VOXTER ACDC FEATURES 
 in commit https://github.com/voxter/kazoo/commit/db5e7c83f5b26f35428721f4dae08f05067c8625
