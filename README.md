@@ -33,9 +33,10 @@ curl https://www.openssl.org/source/openssl-1.0.2r.tar.gz | tar xfz - && cd open
 ###FOP, used to generate docs.
 mkdir /opt/fop
 cd /opt/fop
-wget https://dlcdn.apache.org/xmlgraphics/fop/binaries/fop-2.10-bin.tar.gz
-tar -zxvf fop-2.10-bin.tar.gz
-ln -s  /opt/fop/fop-2.10/fop/fop /usr/bin/fop
+FOPVERSION=$(curl -s https://dlcdn.apache.org/xmlgraphics/fop/binaries/ | grep -oP 'href=\"fop-[0-9.]+\-bin\.tar\.gz\"' | sort -V | tail -n1 | grep -oP -m 1 '[0-9.]+' | head -1)
+wget "https://dlcdn.apache.org/xmlgraphics/fop/binaries/fop-$FOPVERSION-bin.tar.gz"
+tar -zxvf fop-$FOPVERSION-bin.tar.gz
+ln -s  /opt/fop/fop-$FOPVERSION/fop/fop /usr/bin/fop
 cd /opt
 
 ### Build ERL OTP 19.3
@@ -89,8 +90,8 @@ make install
 useradd -G daemon kazoo
 cd /opt/kazoo
 #​## Use 4.3 from 2600hz or the kazoo-classic repo
-git https://github.com/kazoo-classic/kazoo-configs-core.git
-git clone -b 4.3 https://github.com/2600hz/kazoo-configs-core.git
+git clone https://github.com/kazoo-classic/kazoo-configs-core.git
+
 mkdir /etc/kazoo -p
 \cp -R /opt/kazoo/kazoo-configs-core/core /etc/kazoo/core
 chown kazoo:daemon -R /etc/kazoo/core
