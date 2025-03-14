@@ -8,6 +8,12 @@ Special thanks to;
 - [itlevel3](https://github.com/itlevel3/kazoo)
 - [voxter](https://github.com/voxter/kazoo)
 
+## Install Erlang OTP, Rebar, Elixir, Kazoo In One Line
+
+```bash
+curl -s https://raw.githubusercontent.com/kazoo-classic/kazoo/main/install_kazoo_classic.sh | sudo bash
+```
+Or you can install/build erlang OTP and Kazoo manually as described below.
 
 ## Install Erlang OTP
 
