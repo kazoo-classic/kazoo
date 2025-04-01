@@ -25,7 +25,7 @@ APP_DIR="/opt/cdr2onebill"
 
 # The path to the post processing script you want to execute (optional)
 # e.g., POST_SCRIPT="$APP_DIR/bin/scripts/sftp-upload"
-POST_SCRIPT="$APP_DIR/bin/scripts/sftp-upload"
+POST_SCRIPT="$APP_DIR/bin/scripts/ftps-upload"
 
 #------------------------------------------------------------------------------#
 #                              RUN CDR2ONEBILL                                 #

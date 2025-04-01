@@ -101,11 +101,21 @@ authorize_nouns(Context
                 ]
                ,?HTTP_PUT
                ) ->
-    case cb_context:auth_account_id(Context) =/= 'undefined'
-        andalso cb_context:auth_user_id(Context) =/= 'undefined'
-        andalso cb_context:auth_account_id(Context) =/= AccountId
-        andalso cb_context:is_superduper_admin(Context)
-        andalso cb_context:is_account_admin(Context)
+    AuthAccountId = cb_context:auth_account_id(Context),
+    case (
+		AuthAccountId =/= 'undefined'
+        	andalso cb_context:auth_user_id(Context) =/= 'undefined'
+        	andalso AuthAccountId =/= AccountId
+        	andalso kz_services_reseller:is_reseller(AuthAccountId)
+		andalso account_is_descendant(AuthAccountId, AccountId)
+        	andalso cb_context:is_account_admin(Context)
+         )
+	orelse
+	 (
+		kz_json:get_value(<<"method">>, cb_context:auth_doc(Context)) == <<"cb_api_auth">>
+                andalso kz_services_reseller:is_reseller(AuthAccountId)
+		andalso account_is_descendant(AuthAccountId, AccountId)
+	 )
     of
         'true' ->
             lager:debug("authorizing request"),
@@ -652,4 +662,39 @@ consume_tokens(Context) ->
     case kz_buckets:consume_tokens_until(?APP_NAME, BucketName, TokenCost) of
         'true' -> cb_context:set_resp_status(Context, 'success');
         'false' -> cb_context:add_system_error('too_many_requests', Context)
+    end.
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns true if the requested account id is a descendant or the same
+%% as the account id that has been authorized to make the request.
+%% @end
+%%------------------------------------------------------------------------------
+-spec account_is_descendant(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
+account_is_descendant('undefined', _AccountId) ->
+    lager:debug("not authorizing, auth account id is undefined"),
+    'false';
+account_is_descendant(AuthAccountId, AccountId) ->
+    case AccountId =:= AuthAccountId
+         orelse kzd_accounts:fetch(AccountId)
+      of
+         'true' ->
+             lager:debug("authorizing, requested account is the same as the auth token account"),
+             'true';
+         %% if the requested account exists, the second component of the key
+         %% is the parent tree, make sure the authorized account id is in that tree
+         {'ok', JObj} ->
+             Tree = kzd_accounts:tree(JObj),
+             case lists:member(AuthAccountId, Tree) of
+                 'true' ->
+                      lager:info("authorizing requested account is a descendant of the auth token"),
+                      'true';
+                  'false' ->
+                      lager:error("not authorizing, requested account is not a descendant of the auth token"),
+                      'false'
+             end;
+         %% anything else and they are not allowed
+         {'error', _E} ->
+             lager:debug("not authorizing, error during lookup: ~p", [_E]),
+             'false'
     end.
