@@ -64,6 +64,24 @@
                 "  }",
                 "}"
             ]
+        },
+        "search_by_service": {
+            "map": [
+              "function(doc) {",
+                "  if (doc.pvt_deleted || !doc.pvt_type || doc.pvt_type !== 'number') return;",
+                "  const services = [];",
+                "  if (doc.inbound_spam) services.push('inbound_spam');",
+                "  if (doc.inbound_cnam) services.push('inbound_cnam');",
+                "  if (doc.inbound_spoof) services.push('inbound_spoof');",
+                "  if (doc.inbound_shield) services.push('inbound_shield');",
+                "  for (var i in services) {",
+                "    emit([doc.pvt_type, services[i].replace(/[^a-z0-9]/g, '')], {",
+                "      'number': doc._id,",
+                "      'service': services[i]",
+                "    });",
+                "  }",
+                "}"
+            ]
         }
     }
 }
