@@ -23,7 +23,7 @@
 ###   Build the release 
 ```
 	cd kazoo.itlevel3
-    . /usr/local/otp-19.2/activate
+    . /usr/local/otp-19.3/activate
 	make
 	make build-release
 	make sup_completion
