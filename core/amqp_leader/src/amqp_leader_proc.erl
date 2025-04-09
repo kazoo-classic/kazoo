@@ -417,7 +417,7 @@ call_elected(#state{callback_module = Mod, leader = Leader} = State, Node) when 
 
 -spec call_handle_info(state(), any()) -> routine_ret().
 call_handle_info(State, Info) ->
-    case exec_callback(State, {'handle_info', [Info]}) of
+    case exec_call_info(State, {'handle_info', [Info]}) of
         {'noreply', ModState} ->
             set_callback_state(State, ModState);
         {'stop', Reason, ModState} ->
@@ -511,6 +511,11 @@ call_handle_DOWN(State, Node) when ?is_leader ->
 exec_callback(#state{callback_module = Mod} = State, {Callback, Args}) ->
     ModState = callback_state(State),
     erlang:apply(Mod, Callback, Args ++ [ModState, leader(State)]).
+
+-spec exec_call_info(state(), {atom(), list()}) -> callback_ret().
+exec_call_info(#state{callback_module = Mod} = State, {Callback, Args}) ->
+    ModState = callback_state(State),
+    erlang:apply(Mod, Callback, Args ++ [ModState]).
 
 -spec noreply(state(), routines()) -> state() | {'stop', any(), state()}.
 noreply(#state{} = State, []) ->

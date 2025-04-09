@@ -114,6 +114,7 @@ is_voicemail_cf(JObj) ->
     IsFlow = kz_json:is_json_object(FlowJObj)
         andalso not kz_json:is_empty(FlowJObj),
     case {IsFlow
+          andalso kz_json:get_value([<<"doc">>, <<"numbers">>], JObj, []) /= []
          ,IsFlow
           andalso kz_json:get_value(<<"module">>, FlowJObj) =:= <<"voicemail">>
               andalso kz_json:get_value([<<"data">>, <<"action">>], FlowJObj) =:= <<"check">>
