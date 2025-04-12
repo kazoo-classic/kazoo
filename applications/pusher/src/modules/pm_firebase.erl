@@ -100,17 +100,14 @@ get_fcm(App, ETS) ->
 -spec maybe_load_fcm(kz_term:api_binary(), ets:tid()) -> push_app().
 maybe_load_fcm(App, ETS) ->
     lager:debug("loading fcm secret for ~s", [App]),
-    FCMSecret = kapps_config:get_binary(?CONFIG_CAT, [<<"firebase">>, <<"api_key">>], 'undefined', App),
+    Path = filename:join(code:priv_dir(?APP_NAME), <<"google_service_file.json">>),
     EnvelopeJObj = kapps_config:get_json(?CONFIG_CAT, [<<"firebase">>, <<"headers">>], kz_json:new(), App),
     Envelope = kz_json:to_map(EnvelopeJObj),
-    maybe_load_fcm(App, ETS, FCMSecret, Envelope).
+    maybe_load_fcm(App, ETS, Path, Envelope).
 
 -spec maybe_load_fcm(kz_term:api_binary(), ets:tid(), kz_term:api_binary(), map()) -> push_app().
-maybe_load_fcm(App, _, 'undefined', _) ->
-    lager:debug("firebase pusher api_key for app ~s not found", [App]),
-    'undefined';
-maybe_load_fcm(App, ETS, APIKey, Envelope) ->
-    case fcm:start(kz_term:to_atom(<<"fcm_", App/binary>>, 'true'), kz_term:to_list(APIKey)) of
+maybe_load_fcm(App, ETS, Path, Envelope) ->
+    case fcm:start_pool_with_json_service_file(<<"fcm_", App/binary>>, Path) of
         {'ok', Pid} ->
             ets:insert(ETS, {App, {Pid, Envelope}}),
             {Pid, Envelope};

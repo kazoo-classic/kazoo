@@ -113,7 +113,9 @@ dep_proper = git https://github.com/manopapad/proper v1.2
 
 dep_syslog = git https://github.com/2600hz/erlang-syslog bbad537a1cb5e4f37e672d2e2665659e850662d0
 
-dep_fcm = git https://github.com/softwarejoint/fcm-erlang.git b2f68a4c6f0f59475597a35e2dc9be13d9ba2910
+## dep_fcm = git https://github.com/softwarejoint/fcm-erlang.git b2f68a4c6f0f59475597a35e2dc9be13d9ba2910
+## dep_fcm = git https://github.com/softwarejoint/fcm-erlang.git 1.2.1
+dep_fcm = git https://github.com/2600hz/erlang-fcm.git f1f86b01a197173406959404508c05a52131373f
 
 dep_gen_smtp = git https://github.com/2600hz/erlang-gen_smtp 3f80bfcd4fd8704739d264eb4d5005d4392f2a35
 ## pinning gen_smtp because upstream made some breaking changes (using maps in some options)
