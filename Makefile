@@ -90,27 +90,19 @@ clean-deps:
 
 .erlang.mk:
 	@if [ -d .erlang.mk.build ] && [ -f .erlang.mk.build/erlang.mk ]; then \
-		echo "Using local .erlang.mk.build to generate erlang.mk..."; \
-		cp -f .erlang.mk.build/erlang.mk $(ROOT)/erlang.mk; \
-	elif [ -f $(ROOT)/erlang.mk ]; then \
-		echo "Using existing erlang.mk (skipping download)"; \
+		echo "Using vendored erlang.mk from .erlang.mk.build"; \
+		cp -f .erlang.mk.build/erlang.mk ./erlang.mk; \
 	else \
-		echo "Fetching erlang.mk..."; \
-		wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk || exit 1; \
+		wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk; \
+		@ERLANG_MK_COMMIT=$(ERLANG_MK_COMMIT) $(MAKE) -f erlang.mk erlang-mk
 	fi
-
-
 
 deps: deps/Makefile
 	@$(MAKE) -C deps/ all
 
 deps/Makefile: .erlang.mk
 	mkdir -p deps
-	if [ -f erlang.mk ]; then \
-		$(MAKE) -f erlang.mk deps; \
-	else \
-		echo "Missing erlang.mk; skipping deps generation"; \
-	fi
+	$(MAKE) -f erlang.mk deps
 	cp $(ROOT)/make/Makefile.deps deps/Makefile
 
 
