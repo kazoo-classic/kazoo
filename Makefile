@@ -3,7 +3,7 @@ RELX = $(ROOT)/deps/relx
 ELVIS = $(ROOT)/deps/elvis
 FMT = $(ROOT)/make/erlang-formatter/fmt.sh
 TAGS = $(ROOT)/TAGS
-ERLANG_MK_COMMIT = d30dda39b08e6ed9e12b44533889eaf90aba86de
+ERLANG_MK_COMMIT = 9d5831d19e7ea61595ac065803873269c739072f
 
 BASE_BRANCH := $(shell cat $(ROOT)/.base_branch)
 
@@ -93,7 +93,7 @@ clean-deps:
 		echo "Using vendored erlang.mk from .erlang.mk.build"; \
 		cp -f .erlang.mk.build/erlang.mk ./erlang.mk; \
 	else \
-		wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk; \
+		wget 'https://raw.githubusercontent.com/kazoo-classic/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk; \
 		@ERLANG_MK_COMMIT=$(ERLANG_MK_COMMIT) $(MAKE) -f erlang.mk erlang-mk
 	fi
 
