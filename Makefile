@@ -89,19 +89,16 @@ clean-deps:
 	$(if $(wildcard .erlang.mk/), rm -r .erlang.mk/)
 
 .erlang.mk:
-	@if [ -f $(ROOT)/erlang.mk ]; then \
+	@if [ -d .erlang.mk.build ] && [ -f .erlang.mk.build/erlang.mk ]; then \
+		echo "Using local .erlang.mk.build to generate erlang.mk..."; \
+		cp -f .erlang.mk.build/erlang.mk $(ROOT)/erlang.mk; \
+	elif [ -f $(ROOT)/erlang.mk ]; then \
 		echo "Using existing erlang.mk (skipping download)"; \
 	else \
 		echo "Fetching erlang.mk..."; \
 		wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk || exit 1; \
-	fi; \
-	if [ -d .erlang.mk.build ]; then \
-		echo "Using local .erlang.mk.build to generate erlang.mk..."; \
-		cp -f .erlang.mk.build/erlang.mk ./erlang.mk; \
-	else \
-		echo "No local clone found, bootstrapping..."; \
-		ERLANG_MK_COMMIT=$(ERLANG_MK_COMMIT) $(MAKE) -f erlang.mk erlang-mk; \
 	fi
+
 
 
 deps: deps/Makefile
