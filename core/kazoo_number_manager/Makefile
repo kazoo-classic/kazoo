@@ -43,7 +43,13 @@ clean-generated:
 	$(if $(wildcard $(ITU)), @rm $(ITU))
 
 $(ITU_FILE):
-	wget -qO $@ $(ITU_URL)
+	@if [ -f $@ ]; then \
+		echo "$@ already exists. Skipping download."; \
+	else \
+		echo "Downloading $@..."; \
+		wget -qO $@ $(ITU_URL) || { echo "Failed to fetch $@"; exit 1; }; \
+	fi
+
 
 $(ITU_SRC): $(ITU_FILE)
 

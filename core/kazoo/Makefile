@@ -28,7 +28,13 @@ clean-generated:
 	$(if $(wildcard $(GEN_ERL)), @rm $(GEN_ERL))
 
 $(GEN_FILE):
-	wget -qO $@ $(GEN_URL)
+	@if [ -f $@ ]; then \
+		echo "$@ already exists. Skipping download."; \
+	else \
+		echo "Downloading $@..."; \
+		wget -qO $@ $(GEN_URL) || { echo "Failed to fetch $@"; exit 1; }; \
+	fi
+
 
 $(GEN_ERL): $(GEN_FILE) $(GEN_ERL_SRC)
 	@head -n `grep -n '%% GENERATED' $(GEN_ERL_SRC) | cut -d: -f1` $(GEN_ERL_SRC) > $(GEN_ERL)

@@ -89,20 +89,33 @@ clean-deps:
 	$(if $(wildcard .erlang.mk/), rm -r .erlang.mk/)
 
 .erlang.mk:
-	@if [ ! -f $(ROOT)/erlang.mk ]; then \
-		echo "Fetching erlang.mk..."; \
-		wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk && \
-		ERLANG_MK_COMMIT=$(ERLANG_MK_COMMIT) $(MAKE) -f erlang.mk erlang-mk; \
-	else \
+	@if [ -f $(ROOT)/erlang.mk ]; then \
 		echo "Using existing erlang.mk (skipping download)"; \
+	else \
+		echo "Fetching erlang.mk..."; \
+		wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk || exit 1; \
+	fi; \
+	if [ -d .erlang.mk.build ]; then \
+		echo "Using local .erlang.mk.build to generate erlang.mk..."; \
+		cp -f .erlang.mk.build/erlang.mk ./erlang.mk; \
+	else \
+		echo "No local clone found, bootstrapping..."; \
+		ERLANG_MK_COMMIT=$(ERLANG_MK_COMMIT) $(MAKE) -f erlang.mk erlang-mk; \
 	fi
+
 
 deps: deps/Makefile
 	@$(MAKE) -C deps/ all
+
 deps/Makefile: .erlang.mk
 	mkdir -p deps
-	@$(MAKE) -f erlang.mk deps
+	if [ -f erlang.mk ]; then \
+		$(MAKE) -f erlang.mk deps; \
+	else \
+		echo "Missing erlang.mk; skipping deps generation"; \
+	fi
 	cp $(ROOT)/make/Makefile.deps deps/Makefile
+
 
 core:
 	@$(MAKE) -j$(JOBS) -C core/ all
@@ -121,8 +134,11 @@ clean-tags:
 	$(if $(wildcard $(TAGS)), rm $(TAGS))
 
 $(RELX):
-	wget 'https://github.com/erlware/relx/releases/download/v3.23.0/relx' -O $@
-	chmod +x $@
+	@if [ -f $@ ]; then \
+		echo "relx already present. Skipping download." && chmod +x $@;  \
+	else \
+		wget 'https://github.com/erlware/relx/releases/download/v3.23.0/relx' -O $@ && chmod +x $@; \
+	fi
 
 clean-release:
 	$(if $(wildcard _rel/), rm -r _rel/)
