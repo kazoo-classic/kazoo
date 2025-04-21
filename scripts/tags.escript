@@ -32,5 +32,16 @@ add_app_dirs(_App, Dirs, _Else) ->
     Dirs.
 
 app_path(App) ->
-    {'ok', [M | _]} = application:get_key(App, 'modules'),
-    filename:dirname(filename:dirname(code:which(M))).
+    case application:get_key(App, 'modules') of
+        {'ok', [M | _]} -> 
+            filename:dirname(filename:dirname(code:which(M)));
+        {'ok', []} ->
+            io:format("Warning: Application ~p has empty modules list, skipping~n", [App]),
+            ".";
+        undefined ->
+            io:format("Warning: Application ~p has no modules key, assuming empty modules list~n", [App]),
+            ".";
+        Other ->
+            io:format("Warning: Unexpected result for modules of application ~p: ~p~n", [App, Other]),
+            "."
+    end.
