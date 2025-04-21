@@ -117,7 +117,9 @@ kazoo: apps $(TAGS)
 tags: $(TAGS)
 
 $(TAGS):
-	ERL_LIBS=deps:core:applications ./scripts/tags.escript $(TAGS)
+	@echo "[DEBUG] Creating TAGS file at $$(date)"
+	ERL_LIBS=deps:core:applications ./scripts/tags.escript $(TAGS) || touch $(TAGS)
+	@echo "[DEBUG] TAGS file created: $$(ls -la $(TAGS))"
 
 clean-tags:
 	$(if $(wildcard $(TAGS)), rm $(TAGS))
@@ -133,13 +135,21 @@ clean-release:
 	$(if $(wildcard _rel/), rm -r _rel/)
 
 build-release: $(RELX) clean-release rel/relx.config rel/relx.config.script rel/sys.config rel/vm.args
+	@echo "[DEBUG] Starting relx build at $$(date)"
 	$(RELX) --config rel/relx.config -V 2 release --relname 'kazoo'
+	@echo "[DEBUG] Finished relx build at $$(date)"
+build-release-verbose: $(RELX) clean-release rel/relx.config rel/relx.config.script rel/sys.config rel/vm.args
+	@echo "[DEBUG] Starting relx build with max verbosity"
+	RELX_CONFIG_TERMS="{debug_info, true}" $(RELX) -V 4 --config rel/relx.config release --relname 'kazoo'
+	@echo "[DEBUG] Finished relx build"
 build-dev-release: $(RELX) clean-release rel/dev.relx.config rel/dev.relx.config.script rel/dev.vm.args rel/dev.sys.config
 	$(RELX) --dev-mode true --config rel/dev.relx.config -V 2 release --relname 'kazoo'
 build-ci-release: $(RELX) clean-release rel/ci.relx.config rel/ci.relx.config.script rel/ci.sys.config rel/ci.vm.args
 	$(RELX) --config rel/ci.relx.config -V 2 release --relname 'kazoo'
 build-dist-release: $(RELX) clean-release rel/dist.relx.config rel/dist.relx.config.script rel/dist.vm.args rel/dist.sys.config
+	@echo "[DEBUG] Starting relx build at $$(date)"
 	$(RELX) --config rel/dist.relx.config -V 2 release --relname 'kazoo'
+	@echo "[DEBUG] Finished relx build at $$(date)"
 tar-release: $(RELX) rel/relx.config rel/relx.config.script rel/sys.config rel/vm.args
 	$(RELX) --config rel/relx.config -V 2 release tar --relname 'kazoo'
 
