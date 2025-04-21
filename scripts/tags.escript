@@ -42,6 +42,7 @@ app_path(App) ->
         {'ok', [M | _]} -> 
             filename:dirname(filename:dirname(code:which(M)));
             io:format("Info: Application ~p has modules added to TAGS~n", [App]),
+            ".";
         {'ok', []} ->
             io:format("Warning: Application ~p has empty modules list, skipping~n", [App]),
             ".";
