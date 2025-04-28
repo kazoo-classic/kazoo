@@ -320,9 +320,9 @@ apply_task(Exec) ->
     try
         case Exec of
             {M, F, A} ->
-                apply(M, F, A);
+                erlang:apply(M, F, A);
             {F, A} ->
-                apply(F, A)
+                erlang:apply(F, A)
         end
     catch
         Error:Reason ->
