@@ -81,7 +81,9 @@
 -define(FEATURE_RENAME_CARRIER, <<"carrier_name">>).
 -define(FEATURE_RINGBACK, <<"ringback">>).
 -define(FEATURE_SMS, <<"sms">>).
+-define(FEATURE_ATTRIBUTES, <<"attributes">>).
 
+-define(PROVIDER_ATTRIBUTES, <<"knm_", (?FEATURE_ATTRIBUTES)/binary>>).
 -define(PROVIDER_RENAME_CARRIER, <<"knm_rename_carrier">>).
 -define(PROVIDER_FORCE_OUTBOUND, <<"knm_", (?FEATURE_FORCE_OUTBOUND)/binary>>).
 
@@ -89,7 +91,8 @@
 -define(LEGACY_TELNYX_E911, <<"telnyx_e911">>).
 -define(LEGACY_VITELITY_E911, <<"vitelity_e911">>).
 
--define(KAZOO_NUMBER_FEATURES, [?FEATURE_FAILOVER
+-define(KAZOO_NUMBER_FEATURES, [?FEATURE_ATTRIBUTES
+                               ,?FEATURE_FAILOVER
                                ,?FEATURE_FORCE_OUTBOUND
                                ,?FEATURE_PREPEND
                                ,?FEATURE_RINGBACK
@@ -108,7 +111,8 @@
 -define(ALL_KNM_FEATURES, ?KAZOO_NUMBER_FEATURES ++ ?EXTERNAL_NUMBER_FEATURES ++ ?ADMIN_ONLY_FEATURES).
 
 %% Keys on number document's root reserved to update features
--define(FEATURES_ROOT_KEYS, [?FEATURE_CNAM
+-define(FEATURES_ROOT_KEYS, [?FEATURE_ATTRIBUTES
+                            ,?FEATURE_CNAM
                             ,?FEATURE_E911
                             ,?FEATURE_FAILOVER
                             ,?FEATURE_FORCE_OUTBOUND
@@ -129,6 +133,13 @@
 -define(E911_STREET1, <<"street_address">>).
 -define(E911_STREET2, <<"extended_address">>).
 -define(E911_ZIP, <<"postal_code">>).
+
+-define(FEATURE_ENABLED, <<"enabled">>).
+
+-define(ATTRIBUTES_GROUP, <<"group">>).
+-define(ATTRIBUTES_CLASS, <<"class">>).
+-define(ATTRIBUTES_OPTIONS, <<"options">>).
+-define(ATTRIBUTES_TRAFFIC, <<"traffic">>).
 
 -define(PREPEND_ENABLED, <<"enabled">>).
 -define(PREPEND_NAME, <<"name">>).

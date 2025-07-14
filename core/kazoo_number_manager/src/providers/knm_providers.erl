@@ -1,9 +1,10 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2016-2019, 2600Hz
-%%% @doc Handle prepend feature
+%%% @copyright (C) 2016-2025, 2600Hz
+%%% @doc
 %%% @author Peter Defebvre
 %%% @author Pierre Fenoll
 %%% @author Karl Anderson
+%%% @author Ruel Tmeizeh
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(knm_providers).
@@ -474,6 +475,8 @@ provider_module(?FEATURE_RENAME_CARRIER, _, _) ->
     ?PROVIDER_RENAME_CARRIER;
 provider_module(?FEATURE_FORCE_OUTBOUND, _, _) ->
     ?PROVIDER_FORCE_OUTBOUND;
+provider_module(?FEATURE_ATTRIBUTES, _, _) ->
+    ?PROVIDER_ATTRIBUTES;
 provider_module(Other, _, _) ->
     ?LOG_DEBUG("unmatched feature provider ~p, allowing", [Other]),
     Other.

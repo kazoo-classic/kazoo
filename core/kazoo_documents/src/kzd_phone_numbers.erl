@@ -1,11 +1,16 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2022, 2600Hz
-%%% @doc
+%%% @copyright (C) 2010-2025, 2600Hz
+%%% @doc Accessors for `phone_numbers' document.
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kzd_phone_numbers).
 
 -export([new/0]).
+-export([attributes/1, attributes/2, set_attributes/2]).
+-export([attributes_class/1, attributes_class/2, set_attributes_class/2]).
+-export([attributes_enabled/1, attributes_enabled/2, set_attributes_enabled/2]).
+-export([attributes_group/1, attributes_group/2, set_attributes_group/2]).
+-export([attributes_traffic/1, attributes_traffic/2, set_attributes_traffic/2]).
 -export([carrier_name/1, carrier_name/2, set_carrier_name/2]).
 -export([cnam/1, cnam/2, set_cnam/2]).
 -export([cnam_display_name/1, cnam_display_name/2, set_cnam_display_name/2]).
@@ -56,6 +61,66 @@
 -spec new() -> doc().
 new() ->
     kz_json_schema:default_object(?SCHEMA).
+
+-spec attributes(doc()) -> kz_term:api_object().
+attributes(Doc) ->
+    attributes(Doc, 'undefined').
+
+-spec attributes(doc(), Default) -> kz_json:object() | Default.
+attributes(Doc, Default) ->
+    kz_json:get_json_value([<<"attributes">>], Doc, Default).
+
+-spec set_attributes(doc(), kz_json:object()) -> doc().
+set_attributes(Doc, Attributes) ->
+    kz_json:set_value([<<"attributes">>], Attributes, Doc).
+
+-spec attributes_class(doc()) -> kz_term:api_binary().
+attributes_class(Doc) ->
+    attributes_class(Doc, 'undefined').
+
+-spec attributes_class(doc(), Default) -> binary() | Default.
+attributes_class(Doc, Default) ->
+    kz_json:get_binary_value([<<"attributes">>, <<"class">>], Doc, Default).
+
+-spec set_attributes_class(doc(), binary()) -> doc().
+set_attributes_class(Doc, AttributesClass) ->
+    kz_json:set_value([<<"attributes">>, <<"class">>], AttributesClass, Doc).
+
+-spec attributes_enabled(doc()) -> kz_term:api_boolean().
+attributes_enabled(Doc) ->
+    attributes_enabled(Doc, 'undefined').
+
+-spec attributes_enabled(doc(), Default) -> boolean() | Default.
+attributes_enabled(Doc, Default) ->
+    kz_json:get_boolean_value([<<"attributes">>, <<"enabled">>], Doc, Default).
+
+-spec set_attributes_enabled(doc(), boolean()) -> doc().
+set_attributes_enabled(Doc, AttributesEnabled) ->
+    kz_json:set_value([<<"attributes">>, <<"enabled">>], AttributesEnabled, Doc).
+
+-spec attributes_group(doc()) -> kz_term:api_binary().
+attributes_group(Doc) ->
+    attributes_group(Doc, 'undefined').
+
+-spec attributes_group(doc(), Default) -> binary() | Default.
+attributes_group(Doc, Default) ->
+    kz_json:get_binary_value([<<"attributes">>, <<"group">>], Doc, Default).
+
+-spec set_attributes_group(doc(), binary()) -> doc().
+set_attributes_group(Doc, AttributesGroup) ->
+    kz_json:set_value([<<"attributes">>, <<"group">>], AttributesGroup, Doc).
+
+-spec attributes_traffic(doc()) -> kz_term:api_binary().
+attributes_traffic(Doc) ->
+    attributes_traffic(Doc, 'undefined').
+
+-spec attributes_traffic(doc(), Default) -> binary() | Default.
+attributes_traffic(Doc, Default) ->
+    kz_json:get_binary_value([<<"attributes">>, <<"traffic">>], Doc, Default).
+
+-spec set_attributes_traffic(doc(), binary()) -> doc().
+set_attributes_traffic(Doc, AttributesTraffic) ->
+    kz_json:set_value([<<"attributes">>, <<"traffic">>], AttributesTraffic, Doc).
 
 -spec carrier_name(doc()) -> kz_term:api_ne_binary().
 carrier_name(Doc) ->
