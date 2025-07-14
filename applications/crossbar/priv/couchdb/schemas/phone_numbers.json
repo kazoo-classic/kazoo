@@ -3,6 +3,28 @@
     "_id": "phone_numbers",
     "description": "Schema for a number",
     "properties": {
+        "attributes": {
+            "description": "Number feature that allows some attributes/options/labels to be specified on a number.",
+            "properties": {
+                "class": {
+                    "description": "An arbitrary class label for the phone number, e.g. 'clean', 'sanitization_period', 'premium', etc.",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enables/disables the attributes number feature",
+                    "type": "boolean"
+                },
+                "group": {
+                    "description": "An arbitrary group name for the phone number",
+                    "type": "string"
+                },
+                "traffic": {
+                    "description": "The traffic type that this number carries, e.g. 'fax', 'short_calls', 'conference', etc.",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "carrier_name": {
             "maxLength": 30,
             "minLength": 1,

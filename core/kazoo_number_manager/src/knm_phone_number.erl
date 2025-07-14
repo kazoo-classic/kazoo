@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2015-2019, 2600Hz
+%%% @copyright (C) 2015-2025, 2600Hz
 %%% @doc
 %%% @author Peter Defebvre
 %%% @author Pierre Fenoll
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(knm_phone_number).
@@ -52,6 +53,8 @@
 
 -export([is_state/1]).
 -export([list_attachments/2]).
+
+-export([number_attribute/2, number_group/1, number_class/1, number_traffic/1, is_fax_number/1, number_attribute_options/1]).
 
 -ifdef(TEST).
 -export([set_is_dirty/2]).
@@ -1563,10 +1566,16 @@ private_to_public() ->
     RingbackPub = [[?FEATURE_RINGBACK, ?RINGBACK_EARLY]
                   ,[?FEATURE_RINGBACK, ?RINGBACK_TRANSFER]
                   ],
+    AttributesPub = [[?FEATURE_ATTRIBUTES, ?FEATURE_ENABLED]
+                 ,[?FEATURE_ATTRIBUTES, ?ATTRIBUTES_GROUP]
+                 ,[?FEATURE_ATTRIBUTES, ?ATTRIBUTES_CLASS]
+                 ,[?FEATURE_ATTRIBUTES, ?ATTRIBUTES_TRAFFIC]
+                 ],
     #{?FEATURE_E911 => E911Pub
      ,?LEGACY_VITELITY_E911 => E911Pub
      ,?LEGACY_DASH_E911 => E911Pub
      ,?LEGACY_TELNYX_E911 => E911Pub
+     ,?FEATURE_ATTRIBUTES => AttributesPub
      ,?FEATURE_CNAM => CNAMPub
      ,?FEATURE_CNAM_INBOUND => CNAMPub
      ,?FEATURE_CNAM_OUTBOUND => CNAMPub
@@ -1643,6 +1652,47 @@ is_reserved_from_parent(#knm_phone_number{assigned_to = ?MATCH_ACCOUNT_RAW(Assig
         andalso ?LOG_DEBUG("is reserved from parent, allowing"),
     Authorized;
 is_reserved_from_parent(_) -> 'false'.
+
+%%------------------------------------------------------------------------------
+%% @doc Number attributes feature functions
+%% @end
+%%------------------------------------------------------------------------------
+-spec number_attribute(kz_term:ne_binary() | knm_phone_number(), kz_term:ne_binary()) -> kz_term:api_ne_binary() | kz_json:object() | kz_term:api_ne_binaries().
+number_attribute(DID, Attribute) when is_binary(DID) ->
+    case fetch(DID) of
+        {'ok', Number} -> number_attribute(Number, Attribute);
+        _Err -> lager:debug("failed to fetch number ~s: ~p", [DID, _Err])
+    end;
+number_attribute(Number, Attribute) ->
+    case feature(Number, ?FEATURE_ATTRIBUTES) of
+        'undefined' -> 'undefined';
+        Feature -> kz_json:get_value(Attribute, Feature)
+    end.
+
+-spec number_group(kz_term:ne_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
+number_group(Number) ->
+    number_attribute(Number, ?ATTRIBUTES_GROUP).
+
+-spec number_class(kz_term:ne_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
+number_class(Number) ->
+    number_attribute(Number, ?ATTRIBUTES_CLASS).
+
+-spec number_attribute_options(kz_term:ne_binary() | knm_phone_number()) -> kz_term:ne_binaries().
+number_attribute_options(Number) ->
+    OptsList = number_attribute(Number, ?ATTRIBUTES_OPTIONS),
+    case OptsList of %% only non-empty binaries are returned
+        [_|_] ->
+            lists:filter(fun(X) -> is_binary(X) andalso X =/= <<>> end, OptsList);
+        _ -> []
+    end.
+
+-spec number_traffic(kz_term:ne_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
+number_traffic(Number) ->
+    number_attribute(Number, ?ATTRIBUTES_TRAFFIC).
+
+-spec is_fax_number(kz_term:ne_binary() | knm_phone_number()) -> boolean().
+is_fax_number(Number) ->
+    number_traffic(Number) =:= <<"fax">>.
 
 %%%=============================================================================
 %%% Internal functions
