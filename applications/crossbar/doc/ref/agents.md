@@ -28,6 +28,16 @@ curl -v -X GET \
 
 ## Fetch
 
+> GET /v2/accounts/{ACCOUNT_ID}/agents/stats_summary
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/agents/stats_summary
+```
+
+## Fetch
+
 > GET /v2/accounts/{ACCOUNT_ID}/agents/stats
 
 ```shell
@@ -74,6 +84,46 @@ curl -v -X GET \
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/agents/{USER_ID}/queue_status
+```
+
+## Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/agents/{USER_ID}/stats_summary
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/agents/{USER_ID}/stats_summary
+```
+
+## Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/agents/stats_summary/{USER_ID}
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/agents/stats_summary/{USER_ID}
+```
+
+## Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/agents/{USER_ID}/stats
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/agents/{USER_ID}/stats
+```
+
+## Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/agents/stats/{USER_ID}
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/agents/stats/{USER_ID}
 ```
 
 ## Fetch

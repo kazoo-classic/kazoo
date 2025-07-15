@@ -288,20 +288,3 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/fix/{PHONE_NUMBER}
 ```
 
-
-## Number Attributes Feature
-
-> POST /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
-
-```shell
-curl -v -X POST \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{"id":"{NUMBER}", "used_by":"callflow", "attributes":{"enabled":true, "group":"cust_support", "class":"clean", "traffic":"fax"}}}' \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
-```
-
-The attributes feature can be used for setting some labels on a number, so that it can be treated differently than the default by internal or external systems. The `group` and `class` parameters are arbitrary, the `options` parameter is a list of arbitrary strings, and the `traffic` parameter is used for different processing when this number is used as source or destination. When `traffic` is set to `fax`, calls to/from the number passing through Trunkstore will force media processing, add the `fax` flag to the call (if outbound), and enable T.38 variables.
-
-Also, two config parameters are available, which will enable similar fax call handling for Callflows (outbound A-leg) and Kazoo Endpoint (inbound B-leg) (overriding the `media.fax_option` setting):
-- `system_config.callflows.number_attributes_lookup`
-- `system_config.kazoo_endpoint.number_attributes_lookup`

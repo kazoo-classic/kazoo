@@ -1,11 +1,13 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2022, 2600Hz
-%%% @doc
+%%% @copyright (C) 2010-2025, 2600Hz
+%%% @doc Accessors for `users' document.
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kzd_users).
 
 -export([new/0]).
+-export([acdc_agent_priority/1, acdc_agent_priority/2, set_acdc_agent_priority/2]).
+-export([acdc_skills/1, acdc_skills/2, set_acdc_skills/2]).
 -export([call_forward/1, call_forward/2, set_call_forward/2]).
 -export([call_forward_direct_calls_only/1, call_forward_direct_calls_only/2, set_call_forward_direct_calls_only/2]).
 -export([call_forward_enabled/1, call_forward_enabled/2, set_call_forward_enabled/2]).
@@ -19,6 +21,8 @@
 -export([call_restriction/1, call_restriction/2, set_call_restriction/2]).
 -export([call_waiting/1, call_waiting/2, set_call_waiting/2]).
 -export([caller_id/1, caller_id/2, set_caller_id/2]).
+-export([caller_id_options/1, caller_id_options/2, set_caller_id_options/2]).
+-export([caller_id_options_outbound_privacy/1, caller_id_options_outbound_privacy/2, set_caller_id_options_outbound_privacy/2]).
 -export([contact_list/1, contact_list/2, set_contact_list/2]).
 -export([contact_list_exclude/1, contact_list_exclude/2, set_contact_list_exclude/2]).
 -export([dial_plan/1, dial_plan/2, set_dial_plan/2]).
@@ -98,6 +102,30 @@
 -spec new() -> doc().
 new() ->
     kz_doc:set_type(kz_json_schema:default_object(?SCHEMA), type()).
+
+-spec acdc_agent_priority(doc()) -> kz_term:api_integer().
+acdc_agent_priority(Doc) ->
+    acdc_agent_priority(Doc, 'undefined').
+
+-spec acdc_agent_priority(doc(), Default) -> integer() | Default.
+acdc_agent_priority(Doc, Default) ->
+    kz_json:get_integer_value([<<"acdc_agent_priority">>], Doc, Default).
+
+-spec set_acdc_agent_priority(doc(), integer()) -> doc().
+set_acdc_agent_priority(Doc, AcdcAgentPriority) ->
+    kz_json:set_value([<<"acdc_agent_priority">>], AcdcAgentPriority, Doc).
+
+-spec acdc_skills(doc()) -> kz_term:api_ne_binaries().
+acdc_skills(Doc) ->
+    acdc_skills(Doc, 'undefined').
+
+-spec acdc_skills(doc(), Default) -> kz_term:ne_binaries() | Default.
+acdc_skills(Doc, Default) ->
+    kz_json:get_list_value([<<"acdc_skills">>], Doc, Default).
+
+-spec set_acdc_skills(doc(), kz_term:ne_binaries()) -> doc().
+set_acdc_skills(Doc, AcdcSkills) ->
+    kz_json:set_value([<<"acdc_skills">>], AcdcSkills, Doc).
 
 -spec call_forward(doc()) -> kz_term:api_object().
 call_forward(Doc) ->
@@ -254,6 +282,30 @@ caller_id(Doc, Default) ->
 -spec set_caller_id(doc(), kz_json:object()) -> doc().
 set_caller_id(Doc, CallerId) ->
     kz_json:set_value([<<"caller_id">>], CallerId, Doc).
+
+-spec caller_id_options(doc()) -> kz_term:api_object().
+caller_id_options(Doc) ->
+    caller_id_options(Doc, 'undefined').
+
+-spec caller_id_options(doc(), Default) -> kz_json:object() | Default.
+caller_id_options(Doc, Default) ->
+    kz_json:get_json_value([<<"caller_id_options">>], Doc, Default).
+
+-spec set_caller_id_options(doc(), kz_json:object()) -> doc().
+set_caller_id_options(Doc, CallerIdOptions) ->
+    kz_json:set_value([<<"caller_id_options">>], CallerIdOptions, Doc).
+
+-spec caller_id_options_outbound_privacy(doc()) -> kz_term:api_binary().
+caller_id_options_outbound_privacy(Doc) ->
+    caller_id_options_outbound_privacy(Doc, 'undefined').
+
+-spec caller_id_options_outbound_privacy(doc(), Default) -> binary() | Default.
+caller_id_options_outbound_privacy(Doc, Default) ->
+    kz_json:get_binary_value([<<"caller_id_options">>, <<"outbound_privacy">>], Doc, Default).
+
+-spec set_caller_id_options_outbound_privacy(doc(), binary()) -> doc().
+set_caller_id_options_outbound_privacy(Doc, CallerIdOptionsOutboundPrivacy) ->
+    kz_json:set_value([<<"caller_id_options">>, <<"outbound_privacy">>], CallerIdOptionsOutboundPrivacy, Doc).
 
 -spec contact_list(doc()) -> kz_json:object().
 contact_list(Doc) ->

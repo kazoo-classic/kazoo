@@ -26,6 +26,22 @@
             "description": "acdc archive window in seconds",
             "type": "integer"
         },
+        "call_info_fields": {
+            "default": [
+                "call_id",
+                "queue_id",
+                "entered_timestamp",
+                "entered_position",
+                "caller_id_name",
+                "caller_id_number",
+                "required_skills"
+            ],
+            "description": "acdc call_info_fields",
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
         "cleanup_period_ms": {
             "default": 360000,
             "description": "acdc cleanup period in milliseconds",

@@ -20,6 +20,9 @@
                 "agent_cur_status_req"
             ],
             "type": "string"
+        },
+        "Status": {
+            "type": "string"
         }
     },
     "required": [
