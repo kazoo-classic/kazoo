@@ -1404,7 +1404,7 @@
             "type": "object"
         },
         "callflows.acdc_agent": {
-            "description": "Validator for the acdc_agent callflow data object",
+            "description": "Validator for the acdc_agent callflow's data object",
             "properties": {
                 "action": {
                     "description": "Set which action to perform",
@@ -1432,10 +1432,6 @@
                     ],
                     "type": "string"
                 },
-                "skip_module": {
-                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
-                    "type": "boolean"
-                },
                 "timeout": {
                     "description": "Time, in seconds, for 'paused' state",
                     "type": "integer"
@@ -1443,9 +1439,26 @@
             },
             "type": "object"
         },
-        "callflows.acdc_member": {
-            "description": "Validator for the acdc_member callflow data object",
+        "callflows.acdc_agent_availability": {
+            "description": "Validator for the acdc_agent_availability callflow's data object",
             "properties": {
+                "id": {
+                    "description": "ID of the ACDc Queue",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "id"
+            ],
+            "type": "object"
+        },
+        "callflows.acdc_member": {
+            "description": "Validator for the acdc_member callflow's data object",
+            "properties": {
+                "enter_as_callback": {
+                    "description": "Immediately register the call as a callback and hang up",
+                    "type": "boolean"
+                },
                 "id": {
                     "description": "ID of the ACDc Queue",
                     "type": "string"
@@ -1453,16 +1466,12 @@
                 "priority": {
                     "description": "assign a priority to the caller",
                     "type": "integer"
-                },
-                "skip_module": {
-                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
-                    "type": "boolean"
                 }
             },
             "type": "object"
         },
         "callflows.acdc_queue": {
-            "description": "Validator for the acdc_queue callflow data object",
+            "description": "Validator for the acdc_queue callflow's data object",
             "properties": {
                 "action": {
                     "description": "What action to perform on the agent for this queue",
@@ -1475,24 +1484,36 @@
                 "id": {
                     "description": "Queue ID",
                     "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "callflows.acdc_required_skills": {
+            "description": "Validator for the acdc_required_skills callflow's data object",
+            "properties": {
+                "add": {
+                    "default": [],
+                    "description": "Skills to add to the required skills on the call",
+                    "type": "array"
                 },
-                "skip_module": {
-                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
-                    "type": "boolean"
+                "remove": {
+                    "default": [],
+                    "description": "Skills to remove from the required skills on the call",
+                    "type": "array"
                 }
             },
             "type": "object"
         },
         "callflows.acdc_wait_time": {
-            "description": "Validator for the acdc_wait_time callflow data object",
+            "description": "Validator for the acdc_wait_time callflow's data object",
             "properties": {
                 "id": {
                     "description": "Queue ID",
                     "type": "string"
                 },
-                "skip_module": {
-                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
-                    "type": "boolean"
+                "var": {
+                    "description": "Custom KV whose value to use instead of \"id\"",
+                    "type": "string"
                 },
                 "window": {
                     "description": "Window over which average wait time is calculated (in seconds)",
@@ -6720,6 +6741,12 @@
                     ],
                     "type": "string"
                 },
+                "Pause-Alias": {
+                    "type": "string"
+                },
+                "Pause-Time": {
+                    "type": "integer"
+                },
                 "Presence-ID": {
                     "type": "string"
                 },
@@ -6735,6 +6762,9 @@
                     "type": "string"
                 },
                 "Queue-ID": {
+                    "type": "string"
+                },
+                "Timestamp": {
                     "type": "string"
                 }
             },
@@ -6922,6 +6952,12 @@
                 "Call": {
                     "type": "object"
                 },
+                "Callback-Details": {
+                    "type": "string"
+                },
+                "Caller-Exit-Key": {
+                    "type": "string"
+                },
                 "Event-Category": {
                     "enum": [
                         "member"
@@ -7052,6 +7088,9 @@
                 },
                 "Queue-ID": {
                     "type": "string"
+                },
+                "Time-Limit": {
+                    "type": "integer"
                 }
             },
             "required": [
@@ -7182,6 +7221,9 @@
                 "Agent-ID": {
                     "type": "string"
                 },
+                "Call-ID": {
+                    "type": "string"
+                },
                 "Event-Category": {
                     "enum": [
                         "agent"
@@ -7204,6 +7246,9 @@
             "description": "AMQP API for acdc_agent.stats_resp",
             "properties": {
                 "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-Call-IDs": {
                     "type": "string"
                 },
                 "Current-Calls": {
@@ -7327,6 +7372,21 @@
                 "Agent-ID": {
                     "type": "string"
                 },
+                "Call-Direction": {
+                    "type": "string"
+                },
+                "Callee-ID-Name": {
+                    "type": "string"
+                },
+                "Callee-ID-Number": {
+                    "type": "string"
+                },
+                "Caller-ID-Name": {
+                    "type": "string"
+                },
+                "Caller-ID-Number": {
+                    "type": "string"
+                },
                 "Change": {
                     "enum": [
                         "available",
@@ -7348,10 +7408,16 @@
                     ],
                     "type": "string"
                 },
+                "Priority": {
+                    "type": "string"
+                },
                 "Process-ID": {
                     "type": "string"
                 },
                 "Queue-ID": {
+                    "type": "string"
+                },
+                "Skills": {
                     "type": "string"
                 }
             },
@@ -7394,6 +7460,72 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_queue.agents_available_req": {
+            "description": "AMQP API for acdc_queue.agents_available_req",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "queue"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agents_available_req"
+                    ],
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                },
+                "Skills": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_queue.agents_available_resp": {
+            "description": "AMQP API for acdc_queue.agents_available_resp",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-Count": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "queue"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agents_available_resp"
+                    ],
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Agent-Count",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_queue.member_call": {
             "description": "AMQP API for acdc_queue.member_call",
             "properties": {
@@ -7402,6 +7534,12 @@
                 },
                 "Call": {
                     "type": "object"
+                },
+                "Callback-Number": {
+                    "type": "string"
+                },
+                "Enter-As-Callback": {
+                    "type": "boolean"
                 },
                 "Event-Category": {
                     "enum": [
@@ -7542,6 +7680,75 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_queue.member_callback_accepted": {
+            "description": "AMQP API for acdc_queue.member_callback_accepted",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-ID": {
+                    "type": "string"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "member"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "callback_accepted"
+                    ],
+                    "type": "string"
+                },
+                "Process-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Call-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_queue.member_callback_reg": {
+            "description": "AMQP API for acdc_queue.member_callback_reg",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "member"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "callback_reg"
+                    ],
+                    "type": "string"
+                },
+                "Number": {
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Call-ID",
+                "Number",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_queue.member_connect_accepted": {
             "description": "AMQP API for acdc_queue.member_connect_accepted",
             "properties": {
@@ -7564,6 +7771,9 @@
                     "enum": [
                         "connect_accepted"
                     ],
+                    "type": "string"
+                },
+                "Old-Call-ID": {
                     "type": "string"
                 },
                 "Process-ID": {
@@ -7670,6 +7880,106 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_queue.member_connect_satisfied": {
+            "description": "AMQP API for acdc_queue.member_connect_satisfied",
+            "properties": {
+                "Accept-Agent-ID": {
+                    "type": "string"
+                },
+                "Agent-ID": {
+                    "type": "string"
+                },
+                "Agent-Process-IDs": {
+                    "type": "string"
+                },
+                "Call": {
+                    "type": "object"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "member"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "connect_satisfied"
+                    ],
+                    "type": "string"
+                },
+                "Process-ID": {
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Accept-Agent-ID",
+                "Agent-ID",
+                "Call",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_queue.member_connect_win": {
+            "description": "AMQP API for acdc_queue.member_connect_win",
+            "properties": {
+                "Agent-Process-IDs": {
+                    "type": "string"
+                },
+                "CDR-Url": {
+                    "type": "string"
+                },
+                "Call": {
+                    "type": "object"
+                },
+                "Callback-Details": {
+                    "type": "string"
+                },
+                "Caller-Exit-Key": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "member"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "connect_win"
+                    ],
+                    "type": "string"
+                },
+                "Notifications": {
+                    "type": "object"
+                },
+                "Process-ID": {
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                },
+                "Record-Caller": {
+                    "type": "boolean"
+                },
+                "Recording-URL": {
+                    "type": "string"
+                },
+                "Ring-Timeout": {
+                    "type": "integer"
+                },
+                "Wrapup-Timeout": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "Call",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_queue.member_hungup": {
             "description": "AMQP API for acdc_queue.member_hungup",
             "properties": {
@@ -7706,6 +8016,12 @@
                 "Call": {
                     "type": "object"
                 },
+                "Callback-Number": {
+                    "type": "string"
+                },
+                "Enter-As-Callback": {
+                    "type": "boolean"
+                },
                 "Event-Category": {
                     "enum": [
                         "queue"
@@ -7717,6 +8033,9 @@
                         "member_add"
                     ],
                     "type": "string"
+                },
+                "Member-Priority": {
+                    "type": "integer"
                 },
                 "Queue-ID": {
                     "type": "string"
@@ -7791,6 +8110,249 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_queue.sync_req": {
+            "description": "AMQP API for acdc_queue.sync_req",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "queue"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "sync_req"
+                    ],
+                    "type": "string"
+                },
+                "Process-ID": {
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_queue.sync_resp": {
+            "description": "AMQP API for acdc_queue.sync_resp",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Current-Strategy": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "queue"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "sync_resp"
+                    ],
+                    "type": "string"
+                },
+                "Process-ID": {
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                },
+                "Strategy-State": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Current-Strategy",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.agent_calls_err": {
+            "description": "AMQP API for acdc_stats.agent_calls_err",
+            "properties": {
+                "Error-Reason": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agent_calls_err"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Error-Reason"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.agent_calls_req": {
+            "description": "AMQP API for acdc_stats.agent_calls_req",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-ID": {
+                    "type": "string"
+                },
+                "End-Range": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agent_calls_req"
+                    ],
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                },
+                "Start-Range": {
+                    "type": "string"
+                },
+                "Status": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.agent_calls_resp": {
+            "description": "AMQP API for acdc_stats.agent_calls_resp",
+            "properties": {
+                "Data": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agent_calls_resp"
+                    ],
+                    "type": "string"
+                },
+                "Missed": {
+                    "type": "string"
+                },
+                "Processed": {
+                    "type": "string"
+                },
+                "Query-Time": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "Query-Time"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.agent_cur_status_err": {
+            "description": "AMQP API for acdc_stats.agent_cur_status_err",
+            "properties": {
+                "Error-Reason": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agent_cur_status_err"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Error-Reason"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.agent_cur_status_req": {
+            "description": "AMQP API for acdc_stats.agent_cur_status_req",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agent_cur_status_req"
+                    ],
+                    "type": "string"
+                },
+                "Status": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.agent_cur_status_resp": {
+            "description": "AMQP API for acdc_stats.agent_cur_status_resp",
+            "properties": {
+                "Agents": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "agent_cur_status_resp"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Agents"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_stats.average_wait_time_err": {
             "description": "AMQP API for acdc_stats.average_wait_time_err",
             "properties": {
@@ -7837,6 +8399,12 @@
                 "Queue-ID": {
                     "minLength": 1,
                     "type": "string"
+                },
+                "Skills": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
                 },
                 "Window": {
                     "type": "integer"
@@ -7910,6 +8478,41 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_stats.call_exited_position": {
+            "description": "AMQP API for acdc_stats.call_exited_position",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_call_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "exited-position"
+                    ],
+                    "type": "string"
+                },
+                "Exited-Position": {
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Call-ID",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_stats.call_flush": {
             "description": "AMQP API for acdc_stats.call_flush",
             "properties": {
@@ -7967,6 +8570,41 @@
                     "type": "string"
                 },
                 "Handled-Timestamp": {
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Call-ID",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.call_marked_callback": {
+            "description": "AMQP API for acdc_stats.call_marked_callback",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Caller-ID-Name": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_call_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "marked_callback"
+                    ],
                     "type": "string"
                 },
                 "Queue-ID": {
@@ -8062,6 +8700,114 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_stats.call_summary_err": {
+            "description": "AMQP API for acdc_stats.call_summary_err",
+            "properties": {
+                "Error-Reason": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "call_summary_err"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Error-Reason"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.call_summary_req": {
+            "description": "AMQP API for acdc_stats.call_summary_req",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-ID": {
+                    "type": "string"
+                },
+                "End-Range": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "call_summary_req"
+                    ],
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                },
+                "Start-Range": {
+                    "type": "string"
+                },
+                "Status": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.call_summary_resp": {
+            "description": "AMQP API for acdc_stats.call_summary_resp",
+            "properties": {
+                "Abandoned": {
+                    "type": "string"
+                },
+                "Data": {
+                    "type": "string"
+                },
+                "Entered-Position": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "call_summary_resp"
+                    ],
+                    "type": "string"
+                },
+                "Exited-Position": {
+                    "type": "string"
+                },
+                "Handled": {
+                    "type": "string"
+                },
+                "Processed": {
+                    "type": "string"
+                },
+                "Query-Time": {
+                    "type": "integer"
+                },
+                "Waiting": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Query-Time"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_stats.call_waiting": {
             "description": "AMQP API for acdc_stats.call_waiting",
             "properties": {
@@ -8078,6 +8824,9 @@
                     "type": "string"
                 },
                 "Caller-Priority": {
+                    "type": "string"
+                },
+                "Entered-Position": {
                     "type": "string"
                 },
                 "Entered-Timestamp": {
@@ -8097,6 +8846,12 @@
                 },
                 "Queue-ID": {
                     "type": "string"
+                },
+                "Required-Skills": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
                 }
             },
             "required": [
@@ -8175,6 +8930,9 @@
                 "Abandoned": {
                     "type": "string"
                 },
+                "Entered-Position": {
+                    "type": "string"
+                },
                 "Event-Category": {
                     "enum": [
                         "acdc_stat"
@@ -8185,6 +8943,9 @@
                     "enum": [
                         "current_calls_resp"
                     ],
+                    "type": "string"
+                },
+                "Exited-Position": {
                     "type": "string"
                 },
                 "Handled": {
@@ -8241,9 +9002,6 @@
                 "Pause-Time": {
                     "type": "integer"
                 },
-                "Queue-ID": {
-                    "type": "string"
-                },
                 "Timestamp": {
                     "type": "string"
                 },
@@ -8294,9 +9052,6 @@
                 "Pause-Time": {
                     "type": "integer"
                 },
-                "Queue-ID": {
-                    "type": "string"
-                },
                 "Timestamp": {
                     "type": "string"
                 },
@@ -8335,6 +9090,56 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_stats.status_inbound": {
+            "description": "AMQP API for acdc_stats.status_inbound",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-ID": {
+                    "type": "string"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Caller-ID-Name": {
+                    "type": "string"
+                },
+                "Caller-ID-Number": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_status_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "inbound"
+                    ],
+                    "type": "string"
+                },
+                "Pause-Alias": {
+                    "type": "string"
+                },
+                "Pause-Time": {
+                    "type": "integer"
+                },
+                "Timestamp": {
+                    "type": "string"
+                },
+                "Wait-Time": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Agent-ID",
+                "Timestamp"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_stats.status_logged_in": {
             "description": "AMQP API for acdc_stats.status_logged_in",
             "properties": {
@@ -8370,9 +9175,6 @@
                 },
                 "Pause-Time": {
                     "type": "integer"
-                },
-                "Queue-ID": {
-                    "type": "string"
                 },
                 "Timestamp": {
                     "type": "string"
@@ -8424,9 +9226,6 @@
                 "Pause-Time": {
                     "type": "integer"
                 },
-                "Queue-ID": {
-                    "type": "string"
-                },
                 "Timestamp": {
                     "type": "string"
                 },
@@ -8476,9 +9275,6 @@
                 },
                 "Pause-Time": {
                     "type": "integer"
-                },
-                "Queue-ID": {
-                    "type": "string"
                 },
                 "Timestamp": {
                     "type": "string"
@@ -8530,8 +9326,55 @@
                 "Pause-Time": {
                     "type": "integer"
                 },
-                "Queue-ID": {
+                "Timestamp": {
                     "type": "string"
+                },
+                "Wait-Time": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Agent-ID",
+                "Timestamp"
+            ],
+            "type": "object"
+        },
+        "kapi.acdc_stats.status_pending_logged_out": {
+            "description": "AMQP API for acdc_stats.status_pending_logged_out",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Agent-ID": {
+                    "type": "string"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Caller-ID-Name": {
+                    "type": "string"
+                },
+                "Caller-ID-Number": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_status_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "pending_logged_out"
+                    ],
+                    "type": "string"
+                },
+                "Pause-Alias": {
+                    "type": "string"
+                },
+                "Pause-Time": {
+                    "type": "integer"
                 },
                 "Timestamp": {
                     "type": "string"
@@ -8582,9 +9425,6 @@
                 },
                 "Pause-Time": {
                     "type": "integer"
-                },
-                "Queue-ID": {
-                    "type": "string"
                 },
                 "Timestamp": {
                     "type": "string"
@@ -8694,9 +9534,6 @@
                 "Pause-Time": {
                     "type": "integer"
                 },
-                "Queue-ID": {
-                    "type": "string"
-                },
                 "Timestamp": {
                     "type": "string"
                 },
@@ -8746,9 +9583,6 @@
                 },
                 "Pause-Time": {
                     "type": "integer"
-                },
-                "Queue-ID": {
-                    "type": "string"
                 },
                 "Timestamp": {
                     "type": "string"
@@ -27399,6 +28233,7 @@
                                 "Asia/Bishkek",
                                 "Asia/Brunei",
                                 "Asia/Calcutta",
+                                "Asia/Chita",
                                 "Asia/Choibalsan",
                                 "Asia/Chongqing",
                                 "Asia/Chungking",
@@ -27456,6 +28291,7 @@
                                 "Asia/Seoul",
                                 "Asia/Shanghai",
                                 "Asia/Singapore",
+                                "Asia/Srednekolymsk",
                                 "Asia/Taipei",
                                 "Asia/Tashkent",
                                 "Asia/Tbilisi",
@@ -27902,6 +28738,44 @@
                     },
                     "type": "object"
                 },
+                "breakout": {
+                    "properties": {
+                        "dtmf": {
+                            "description": "Digit that puts caller into breakout menu",
+                            "type": "string"
+                        },
+                        "media": {
+                            "description": "Media overrides for breakout menu prompts",
+                            "properties": {
+                                "call_back_at": {
+                                    "description": "You will be called back at:",
+                                    "type": "string"
+                                },
+                                "callback_registered": {
+                                    "description": "Your callback has been registered. Goodbye!",
+                                    "type": "string"
+                                },
+                                "enter_callback_number": {
+                                    "description": "Enter a callback number, followed by the pound sign.",
+                                    "type": "string"
+                                },
+                                "number_correct": {
+                                    "description": "If this is correct, press 1. Otherwise, press 2.",
+                                    "type": "string"
+                                },
+                                "prompt": {
+                                    "description": "Press 1 to receive a callback.",
+                                    "type": "string"
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "dtmf"
+                    ],
+                    "type": "object"
+                },
                 "caller_exit_key": {
                     "default": "#",
                     "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
@@ -27979,7 +28853,9 @@
                     "description": "The queue strategy for connecting agents to callers",
                     "enum": [
                         "round_robin",
-                        "most_idle"
+                        "most_idle",
+                        "skills_based_round_robin",
+                        "ring_all"
                     ],
                     "type": "string"
                 }
@@ -29505,6 +30381,22 @@
                     "description": "acdc archive window in seconds",
                     "type": "integer"
                 },
+                "call_info_fields": {
+                    "default": [
+                        "call_id",
+                        "queue_id",
+                        "entered_timestamp",
+                        "entered_position",
+                        "caller_id_name",
+                        "caller_id_number",
+                        "required_skills"
+                    ],
+                    "description": "acdc call_info_fields",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
                 "cleanup_period_ms": {
                     "default": 360000,
                     "description": "acdc cleanup period in milliseconds",
@@ -29524,6 +30416,10 @@
                         "integer",
                         "string"
                     ]
+                },
+                "default_queue_max_priority": {
+                    "description": "Maximum Call-Priority level supported by queues unless overridden on a per-queue basis",
+                    "type": "integer"
                 },
                 "max_connect_failures": {
                     "default": 3,
@@ -31556,6 +32452,10 @@
                     "default": {},
                     "description": "ecallmgr acls",
                     "type": "object"
+                },
+                "aleg_callid_header": {
+                    "description": "ecallmgr aleg_callid_header",
+                    "type": "string"
                 },
                 "allow_endless_recording": {
                     "default": false,
@@ -34074,6 +34974,11 @@
                     "description": "regular expressions & billing names for numbers",
                     "type": "object"
                 },
+                "cnam_provider": {
+                    "default": "knm_cnam_notifier",
+                    "description": "number_manager cnam_provider",
+                    "type": "string"
+                },
                 "converters": {
                     "default": [
                         "regex"
@@ -34189,6 +35094,14 @@
                     "default": false,
                     "description": "when disconnecting numbers, if this flag is true they will be deleted otherwise they will go back to a pool. Local numbers are not affected by this flag",
                     "type": "boolean"
+                },
+                "tf_carrier_modules": {
+                    "default": [],
+                    "description": "number_manager tf_carrier_modules",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
                 },
                 "time_between_accounts_ms": {
                     "default": 1000,
@@ -34444,6 +35357,68 @@
                 },
                 "user": {
                     "description": "number_manager.telnyx user",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.number_manager.thinq": {
+            "description": "Schema for number_manager.thinq system_config",
+            "properties": {
+                "account_id": {
+                    "default": "",
+                    "description": "number_manager thinq account_id",
+                    "type": "string"
+                },
+                "api_password": {
+                    "default": "",
+                    "description": "number_manager thinq api_password",
+                    "type": "string"
+                },
+                "api_username": {
+                    "default": "",
+                    "description": "number_manager thinq api_username",
+                    "type": "string"
+                },
+                "debug": {
+                    "default": false,
+                    "description": "number_manager thinq debug",
+                    "type": "boolean"
+                },
+                "enable_provisioning": {
+                    "default": true,
+                    "description": "number_manager thinq enable_provisioning",
+                    "type": "boolean"
+                },
+                "enable_sms": {
+                    "default": false,
+                    "description": "number_manager thinq enable_sms",
+                    "type": "string"
+                },
+                "enable_upstream_inbound_cnam": {
+                    "default": false,
+                    "description": "number_manager thinq enable_upstream_inbound_cnam",
+                    "type": "boolean"
+                },
+                "max_search_quantity": {
+                    "default": 500,
+                    "description": "number_manager thinq max_search_quantity",
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "sandbox_provisioning": {
+                    "default": true,
+                    "description": "number_manager thinq sandbox_provisioning",
+                    "type": "boolean"
+                },
+                "site_id": {
+                    "default": "",
+                    "description": "number_manager thinq site_id",
+                    "type": "string"
+                },
+                "tf_enable_sms": {
+                    "default": false,
+                    "description": "number_manager thinq tf_enable_sms",
                     "type": "string"
                 }
             },
@@ -35765,6 +36740,21 @@
             },
             "type": "object"
         },
+        "system_config.tasks.cdrs": {
+            "description": "Schema for tasks.cdrs system_config",
+            "properties": {
+                "post_process_script": {
+                    "description": "tasks cdrs post_process_script",
+                    "type": "string"
+                },
+                "reseller_ids": {
+                    "default": [],
+                    "description": "tasks cdrs reseller_ids",
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
         "system_config.tasks.cleanup": {
             "description": "Schema for tasks.cleanup system_config",
             "properties": {
@@ -35940,6 +36930,12 @@
         "system_config.tasks.services_rollover": {
             "description": "Schema for tasks.services_rollover system_config",
             "properties": {
+                "master_node": {
+                    "description": "tasks services_rollover master_node"
+                },
+                "master_zone": {
+                    "description": "tasks services_rollover master_zone"
+                },
                 "rollover_in_parallel": {
                     "default": 10,
                     "description": "How many accounts to rollover services for per pass (in parallel)",
@@ -36207,6 +37203,11 @@
                 "enabled": {
                     "description": "Whether the rule is enabled",
                     "type": "boolean"
+                },
+                "end_date": {
+                    "default": 0,
+                    "description": "The date that the rule ends. Zero means no end date",
+                    "type": "integer"
                 },
                 "flags": {
                     "description": "Flags set by external applications",
@@ -36697,6 +37698,20 @@
         "users": {
             "description": "Schema for a user",
             "properties": {
+                "acdc_agent_priority": {
+                    "description": "A call distribution priority for this agent from -128 to 128",
+                    "maximum": 128,
+                    "minimum": -128,
+                    "type": "integer"
+                },
+                "acdc_skills": {
+                    "description": "Skills this agent has, to consider when distributing calls (requires a supporting queue strategy)",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                },
                 "call_forward": {
                     "description": "The device call forward parameters",
                     "properties": {
@@ -38466,6 +39481,63 @@
                 }
             }
         },
+        "/accounts/{ACCOUNT_ID}/agents/stats/{USER_ID}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/USER_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/agents/stats_summary": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/agents/stats_summary/{USER_ID}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/USER_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/accounts/{ACCOUNT_ID}/agents/status": {
             "get": {
                 "parameters": [
@@ -38581,6 +39653,46 @@
         },
         "/accounts/{ACCOUNT_ID}/agents/{USER_ID}/restart": {
             "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/USER_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/agents/{USER_ID}/stats": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/USER_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/agents/{USER_ID}/stats_summary": {
+            "get": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header"
@@ -44604,6 +45716,23 @@
                 }
             }
         },
+        "/accounts/{ACCOUNT_ID}/queues/stats_summary": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}": {
             "delete": {
                 "parameters": [
@@ -44761,6 +45890,46 @@
                             "$ref": "#/definitions/queues"
                         }
                     },
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/QUEUE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/stats": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/QUEUE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/stats_summary": {
+            "get": {
+                "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header"
                     },
@@ -46460,6 +47629,23 @@
                     },
                     {
                         "$ref": "#/parameters/STORAGE_PLAN_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/system_status": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"

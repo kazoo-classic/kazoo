@@ -27,6 +27,20 @@
         "Pause-Time": {
             "type": "integer"
         },
+        "Presence-ID": {
+            "type": "string"
+        },
+        "Presence-State": {
+            "enum": [
+                "trying",
+                "online",
+                "offline",
+                "early",
+                "confirmed",
+                "terminated"
+            ],
+            "type": "string"
+        },
         "Queue-ID": {
             "type": "string"
         },

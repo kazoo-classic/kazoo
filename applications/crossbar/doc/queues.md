@@ -24,6 +24,14 @@ Key | Description | Type | Default | Required | Support Level
 `announcements.position_announcements_enabled` | Whether announcements of the caller's position in the queue should be played | `boolean()` |   | `false` |  
 `announcements.wait_time_announcements_enabled` | Whether announcements of the estimated wait time in the queue should be played | `boolean()` |   | `false` |  
 `announcements` | Configuration for periodic announcements to callers waiting in the queue | `object()` |   | `false` |  
+`breakout.dtmf` | Digit that puts caller into breakout menu | `string()` |   | `true` |  
+`breakout.media.call_back_at` | You will be called back at: | `string()` |   | `false` |  
+`breakout.media.callback_registered` | Your callback has been registered. Goodbye! | `string()` |   | `false` |  
+`breakout.media.enter_callback_number` | Enter a callback number, followed by the pound sign. | `string()` |   | `false` |  
+`breakout.media.number_correct` | If this is correct, press 1. Otherwise, press 2. | `string()` |   | `false` |  
+`breakout.media.prompt` | Press 1 to receive a callback. | `string()` |   | `false` |  
+`breakout.media` | Media overrides for breakout menu prompts | `object()` |   | `false` |  
+`breakout` |   | `object()` |   | `false` |  
 `caller_exit_key` | Key caller can press while on hold to exit the queue and continue in the callflow | `string('1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '*' | '0' | '#')` | `#` | `false` |  
 `cdr_url` | An optional HTTP URL to POST the CDR | `string()` |   | `false` |  
 `connection_timeout` | In seconds, how long to try to connect the caller before progressing past the queue callflow action | `integer()` | `3600` | `false` |  
@@ -35,7 +43,7 @@ Key | Description | Type | Default | Required | Support Level
 `record_caller` | When enabled, a caller's audio will be recorded | `boolean()` | `false` | `false` |  
 `recording_url` | An optional HTTP URL to PUT the call recording after the call ends (and should respond to GET for retrieving the audio data) | `string()` |   | `false` |  
 `ring_simultaneously` | The number of agents to try in parallel when connecting a caller | `integer()` | `1` | `false` |  
-`strategy` | The queue strategy for connecting agents to callers | `string('round_robin' | 'most_idle')` | `round_robin` | `false` |  
+`strategy` | The queue strategy for connecting agents to callers | `string('round_robin' | 'most_idle' | 'skills_based_round_robin' | 'ring_all')` | `round_robin` | `false` |  
 
 
 

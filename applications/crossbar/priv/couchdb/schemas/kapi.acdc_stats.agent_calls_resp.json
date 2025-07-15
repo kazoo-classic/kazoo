@@ -18,6 +18,12 @@
             ],
             "type": "string"
         },
+        "Missed": {
+            "type": "string"
+        },
+        "Processed": {
+            "type": "string"
+        },
         "Query-Time": {
             "type": "integer"
         }

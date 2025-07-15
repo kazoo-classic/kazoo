@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2022, 2600Hz
+%%% @copyright (C) 2010-2025, 2600Hz
 %%% @doc Accessors for `queues' document.
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -18,6 +18,14 @@
 -export([announcements_media_you_are_at_position/1, announcements_media_you_are_at_position/2, set_announcements_media_you_are_at_position/2]).
 -export([announcements_position_announcements_enabled/1, announcements_position_announcements_enabled/2, set_announcements_position_announcements_enabled/2]).
 -export([announcements_wait_time_announcements_enabled/1, announcements_wait_time_announcements_enabled/2, set_announcements_wait_time_announcements_enabled/2]).
+-export([breakout/1, breakout/2, set_breakout/2]).
+-export([breakout_dtmf/1, breakout_dtmf/2, set_breakout_dtmf/2]).
+-export([breakout_media/1, breakout_media/2, set_breakout_media/2]).
+-export([breakout_media_call_back_at/1, breakout_media_call_back_at/2, set_breakout_media_call_back_at/2]).
+-export([breakout_media_callback_registered/1, breakout_media_callback_registered/2, set_breakout_media_callback_registered/2]).
+-export([breakout_media_enter_callback_number/1, breakout_media_enter_callback_number/2, set_breakout_media_enter_callback_number/2]).
+-export([breakout_media_number_correct/1, breakout_media_number_correct/2, set_breakout_media_number_correct/2]).
+-export([breakout_media_prompt/1, breakout_media_prompt/2, set_breakout_media_prompt/2]).
 -export([caller_exit_key/1, caller_exit_key/2, set_caller_exit_key/2]).
 -export([cdr_url/1, cdr_url/2, set_cdr_url/2]).
 -export([connection_timeout/1, connection_timeout/2, set_connection_timeout/2]).
@@ -186,6 +194,102 @@ announcements_wait_time_announcements_enabled(Doc, Default) ->
 -spec set_announcements_wait_time_announcements_enabled(doc(), boolean()) -> doc().
 set_announcements_wait_time_announcements_enabled(Doc, AnnouncementsWaitTimeAnnouncementsEnabled) ->
     kz_json:set_value([<<"announcements">>, <<"wait_time_announcements_enabled">>], AnnouncementsWaitTimeAnnouncementsEnabled, Doc).
+
+-spec breakout(doc()) -> kz_term:api_object().
+breakout(Doc) ->
+    breakout(Doc, 'undefined').
+
+-spec breakout(doc(), Default) -> kz_json:object() | Default.
+breakout(Doc, Default) ->
+    kz_json:get_json_value([<<"breakout">>], Doc, Default).
+
+-spec set_breakout(doc(), kz_json:object()) -> doc().
+set_breakout(Doc, Breakout) ->
+    kz_json:set_value([<<"breakout">>], Breakout, Doc).
+
+-spec breakout_dtmf(doc()) -> kz_term:api_binary().
+breakout_dtmf(Doc) ->
+    breakout_dtmf(Doc, 'undefined').
+
+-spec breakout_dtmf(doc(), Default) -> binary() | Default.
+breakout_dtmf(Doc, Default) ->
+    kz_json:get_binary_value([<<"breakout">>, <<"dtmf">>], Doc, Default).
+
+-spec set_breakout_dtmf(doc(), binary()) -> doc().
+set_breakout_dtmf(Doc, BreakoutDtmf) ->
+    kz_json:set_value([<<"breakout">>, <<"dtmf">>], BreakoutDtmf, Doc).
+
+-spec breakout_media(doc()) -> kz_term:api_object().
+breakout_media(Doc) ->
+    breakout_media(Doc, 'undefined').
+
+-spec breakout_media(doc(), Default) -> kz_json:object() | Default.
+breakout_media(Doc, Default) ->
+    kz_json:get_json_value([<<"breakout">>, <<"media">>], Doc, Default).
+
+-spec set_breakout_media(doc(), kz_json:object()) -> doc().
+set_breakout_media(Doc, BreakoutMedia) ->
+    kz_json:set_value([<<"breakout">>, <<"media">>], BreakoutMedia, Doc).
+
+-spec breakout_media_call_back_at(doc()) -> kz_term:api_binary().
+breakout_media_call_back_at(Doc) ->
+    breakout_media_call_back_at(Doc, 'undefined').
+
+-spec breakout_media_call_back_at(doc(), Default) -> binary() | Default.
+breakout_media_call_back_at(Doc, Default) ->
+    kz_json:get_binary_value([<<"breakout">>, <<"media">>, <<"call_back_at">>], Doc, Default).
+
+-spec set_breakout_media_call_back_at(doc(), binary()) -> doc().
+set_breakout_media_call_back_at(Doc, BreakoutMediaCallBackAt) ->
+    kz_json:set_value([<<"breakout">>, <<"media">>, <<"call_back_at">>], BreakoutMediaCallBackAt, Doc).
+
+-spec breakout_media_callback_registered(doc()) -> kz_term:api_binary().
+breakout_media_callback_registered(Doc) ->
+    breakout_media_callback_registered(Doc, 'undefined').
+
+-spec breakout_media_callback_registered(doc(), Default) -> binary() | Default.
+breakout_media_callback_registered(Doc, Default) ->
+    kz_json:get_binary_value([<<"breakout">>, <<"media">>, <<"callback_registered">>], Doc, Default).
+
+-spec set_breakout_media_callback_registered(doc(), binary()) -> doc().
+set_breakout_media_callback_registered(Doc, BreakoutMediaCallbackRegistered) ->
+    kz_json:set_value([<<"breakout">>, <<"media">>, <<"callback_registered">>], BreakoutMediaCallbackRegistered, Doc).
+
+-spec breakout_media_enter_callback_number(doc()) -> kz_term:api_binary().
+breakout_media_enter_callback_number(Doc) ->
+    breakout_media_enter_callback_number(Doc, 'undefined').
+
+-spec breakout_media_enter_callback_number(doc(), Default) -> binary() | Default.
+breakout_media_enter_callback_number(Doc, Default) ->
+    kz_json:get_binary_value([<<"breakout">>, <<"media">>, <<"enter_callback_number">>], Doc, Default).
+
+-spec set_breakout_media_enter_callback_number(doc(), binary()) -> doc().
+set_breakout_media_enter_callback_number(Doc, BreakoutMediaEnterCallbackNumber) ->
+    kz_json:set_value([<<"breakout">>, <<"media">>, <<"enter_callback_number">>], BreakoutMediaEnterCallbackNumber, Doc).
+
+-spec breakout_media_number_correct(doc()) -> kz_term:api_binary().
+breakout_media_number_correct(Doc) ->
+    breakout_media_number_correct(Doc, 'undefined').
+
+-spec breakout_media_number_correct(doc(), Default) -> binary() | Default.
+breakout_media_number_correct(Doc, Default) ->
+    kz_json:get_binary_value([<<"breakout">>, <<"media">>, <<"number_correct">>], Doc, Default).
+
+-spec set_breakout_media_number_correct(doc(), binary()) -> doc().
+set_breakout_media_number_correct(Doc, BreakoutMediaNumberCorrect) ->
+    kz_json:set_value([<<"breakout">>, <<"media">>, <<"number_correct">>], BreakoutMediaNumberCorrect, Doc).
+
+-spec breakout_media_prompt(doc()) -> kz_term:api_binary().
+breakout_media_prompt(Doc) ->
+    breakout_media_prompt(Doc, 'undefined').
+
+-spec breakout_media_prompt(doc(), Default) -> binary() | Default.
+breakout_media_prompt(Doc, Default) ->
+    kz_json:get_binary_value([<<"breakout">>, <<"media">>, <<"prompt">>], Doc, Default).
+
+-spec set_breakout_media_prompt(doc(), binary()) -> doc().
+set_breakout_media_prompt(Doc, BreakoutMediaPrompt) ->
+    kz_json:set_value([<<"breakout">>, <<"media">>, <<"prompt">>], BreakoutMediaPrompt, Doc).
 
 -spec caller_exit_key(doc()) -> binary().
 caller_exit_key(Doc) ->

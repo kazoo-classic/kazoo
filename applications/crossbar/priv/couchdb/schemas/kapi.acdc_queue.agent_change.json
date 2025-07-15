@@ -9,6 +9,21 @@
         "Agent-ID": {
             "type": "string"
         },
+        "Call-Direction": {
+            "type": "string"
+        },
+        "Callee-ID-Name": {
+            "type": "string"
+        },
+        "Callee-ID-Number": {
+            "type": "string"
+        },
+        "Caller-ID-Name": {
+            "type": "string"
+        },
+        "Caller-ID-Number": {
+            "type": "string"
+        },
         "Change": {
             "enum": [
                 "available",
