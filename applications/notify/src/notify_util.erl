@@ -262,8 +262,9 @@ get_service_props(Request, Account, ConfigCat) ->
     DefaultEmail = kz_json:get_ne_value(<<"support_email">>, Request
                                        ,kapps_config:get_ne_binary(ConfigCat, <<"default_support_email">>, <<"support@2600hz.com">>)),
     UnconfiguredFrom = list_to_binary([<<"no_reply@">>, kz_term:to_binary(net_adm:localhost())]),
+    SystemWideFrom = kapps_config:get_ne_binary(?NOTIFY_CONFIG_CAT, <<"system_default_from_email">>, UnconfiguredFrom),
     DefaultFrom = kz_json:get_ne_value(<<"send_from">>, Request
-                                      ,kapps_config:get_ne_binary(ConfigCat, <<"default_from">>, UnconfiguredFrom)),
+                                      ,kapps_config:get_ne_binary(ConfigCat, <<"default_from">>, SystemWideFrom)),
     DefaultCharset = kz_json:get_ne_value(<<"template_charset">>, Request
                                          ,kapps_config:get_binary(ConfigCat, <<"default_template_charset">>, <<>>)),
     JObj = find_notification_settings(binary:split(ConfigCat, <<".">>), kzd_accounts:tree(Account)),

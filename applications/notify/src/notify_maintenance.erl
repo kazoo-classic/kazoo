@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2022, 2600Hz
+%%% @copyright (C) 2012-2025, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author Michael Dunton
+%%% @author Ruel Tmeizeh www.ruhnet.co
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(notify_maintenance).
@@ -19,7 +20,10 @@
         ,configure_smtp_password/1
         ,configure_smtp_auth/1
         ,configure_smtp_port/1
+        ,configure_smtp_ssl/1
+        ,configure_smtp_tls/1
         ]).
+-export([system_default_from_email/1]).
 
 -define(TEMPLATE_PATH, code:priv_dir(?APP)).
 -define(SYSTEM_CONFIG_DB, <<"system_config">>).
@@ -100,6 +104,48 @@ configure_smtp_auth(Value) ->
 -spec configure_smtp_port(kz_term:ne_binary()) -> 'ok' | 'failed'.
 configure_smtp_port(Value) ->
     {'ok', _} = update_smtp_client_document(<<"port">>, Value),
+    'ok'.
+
+%%------------------------------------------------------------------------------
+%% @doc Configures the ssl option---whether or not to use SSL connection
+%% @end
+%%------------------------------------------------------------------------------
+-spec configure_smtp_ssl(kz_term:ne_binary()) -> 'ok' | 'failed'.
+configure_smtp_ssl(Value) ->
+    {'ok', _} = update_smtp_client_document(<<"use_ssl">>, kz_term:to_boolean(Value)),
+    'ok'.
+
+%%------------------------------------------------------------------------------
+%% @doc Configures the tls option (STARTTLS).
+%% @end
+%%------------------------------------------------------------------------------
+-spec configure_smtp_tls(kz_term:ne_binary()) -> 'ok' | 'failed'.
+configure_smtp_tls(Value) ->
+    TLS = case Value of
+              <<"true">> -> <<"always">>;
+              <<"always">> -> <<"always">>;
+              <<"false">> -> <<"never">>;
+              <<"never">> -> <<"never">>;
+              <<"if_available">> -> <<"if_available">>;
+              _ -> 'invalid'
+          end,
+    case TLS of
+        'invalid' ->
+            io:format("valid options are one of: [always, if_available, never]~n"),
+            'failed';
+        _ ->
+            {'ok', _} = update_smtp_client_document(<<"tls">>, TLS),
+            'ok'
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Configures the system wide default from email---used when there is no
+%% more specific email specified on particular notify modules or on the request.
+%% @end
+%%------------------------------------------------------------------------------
+-spec system_default_from_email(kz_term:ne_binary()) -> 'ok' | 'failed'.
+system_default_from_email(Value) ->
+    {'ok', _} = kapps_config:set(?NOTIFY_CONFIG_CAT, <<"system_default_from_email">>, Value),
     'ok'.
 
 %%------------------------------------------------------------------------------
@@ -337,6 +383,6 @@ open_system_config(Id) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec update_smtp_client_document(kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_json:object()}.
+-spec update_smtp_client_document(kz_term:ne_binary(), kz_term:ne_binary() | boolean()) -> {'ok', kz_json:object()}.
 update_smtp_client_document(Key, Value) ->
     kapps_config:set(?SMTP_CLIENT_DOC, Key, Value).
