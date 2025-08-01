@@ -1,7 +1,8 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2014-2022, 2600Hz
+%%% @copyright (C) 2014-2025, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh www.ruhnet.co
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(teletype_util).
@@ -451,7 +452,8 @@ maybe_add_parent_params(AccountId, AccountJObj) ->
 
 -spec default_from_address() -> kz_term:ne_binary().
 default_from_address() ->
-    list_to_binary([<<"no_reply@">>, net_adm:localhost()]).
+    UnconfiguredFrom = list_to_binary([<<"no_reply@">>, net_adm:localhost()]),
+    kapps_config:get_ne_binary(?NOTIFY_CONFIG_CAT, <<"system_default_from_email">>, UnconfiguredFrom).
 
 -spec default_reply_to() -> kz_term:api_ne_binary().
 default_reply_to() -> 'undefined'.

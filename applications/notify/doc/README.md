@@ -20,7 +20,12 @@ sup notify_maintenance configure_smtp_username username
 sup notify_maintenance configure_smtp_password password
 sup notify_maintenance configure_smtp_auth always
 sup notify_maintenance configure_smtp_port 123
+sup notify_maintenance configure_smtp_tls always # STARTTLS (commonly used on submission port 587)
+sup notify_maintenance configure_smtp_ssl false  # SSL Connection (commonly used on SMTPS port 465 instead of STARTTLS)
+
+sup notify_maintenance system_default_from_email no_reply@example.com
 ```
+If `system_config/notify.system_default_from_email` isn't set, then an auto-generated `no_reply@{fqdn_hostname_of_server}` will be used when there is no override of the from address at template or notification category level.
 
 ### Couch document
 Update your the smtp_client document via couch manually. Should look like this.
@@ -33,6 +38,7 @@ Example:
        "username": "username",
        "password": "password",
        "auth": "always",
+       "tls": "if_available",
        "port": "587",
    },
    "pvt_account_id": "system_config",
