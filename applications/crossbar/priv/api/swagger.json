@@ -1412,12 +1412,18 @@
                         "login",
                         "logout",
                         "paused",
-                        "resume"
+                        "resume",
+                        "toggle",
+                        "toggle_paused"
                     ],
                     "type": "string"
                 },
                 "presence_id": {
                     "description": "Static presence ID to send BLF updates to",
+                    "type": "string"
+                },
+                "presence_prefix_agent": {
+                    "description": "prefix for presence event, agent ID is added as suffix to this",
                     "type": "string"
                 },
                 "presence_state": {
