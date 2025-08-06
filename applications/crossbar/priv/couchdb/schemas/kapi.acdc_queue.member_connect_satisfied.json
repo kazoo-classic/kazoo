@@ -1,1 +1,44 @@
-{"type":"object","required":["Accept-Agent-ID","Agent-ID","Call","Queue-ID"],"properties":{"Queue-ID":{"type":"string"},"Process-ID":{"type":"string"},"Event-Name":{"type":"string","enum":["connect_satisfied"]},"Event-Category":{"type":"string","enum":["member"]},"Call":{"type":"object"},"Agent-Process-IDs":{"type":"string"},"Agent-ID":{"type":"string"},"Accept-Agent-ID":{"type":"string"}},"description":"AMQP API for acdc_queue.member_connect_satisfied","_id":"kapi.acdc_queue.member_connect_satisfied","$schema":"http://json-schema.org/draft-04/schema#"}
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "kapi.acdc_queue.member_connect_satisfied",
+    "description": "AMQP API for acdc_queue.member_connect_satisfied",
+    "properties": {
+        "Accept-Agent-ID": {
+            "type": "string"
+        },
+        "Agent-ID": {
+            "type": "string"
+        },
+        "Agent-Process-IDs": {
+            "type": "string"
+        },
+        "Call": {
+            "type": "object"
+        },
+        "Event-Category": {
+            "enum": [
+                "member"
+            ],
+            "type": "string"
+        },
+        "Event-Name": {
+            "enum": [
+                "connect_satisfied"
+            ],
+            "type": "string"
+        },
+        "Process-ID": {
+            "type": "string"
+        },
+        "Queue-ID": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "Accept-Agent-ID",
+        "Agent-ID",
+        "Call",
+        "Queue-ID"
+    ],
+    "type": "object"
+}

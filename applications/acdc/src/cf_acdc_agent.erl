@@ -203,6 +203,21 @@ maybe_pause_agent(Call, _AgentId, FromStatus, _Data) ->
     lager:info("unable to go from ~s to paused", [FromStatus]),
     play_agent_invalid(Call).
 
+%%------------------------------------------------------------------------------
+%% @doc Resume an agent if the action is valid for the current status.
+%% @end
+%%------------------------------------------------------------------------------
+-spec maybe_resume_agent(kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+          kapps_call:kapps_api_std_return().
+maybe_resume_agent(Call, AgentId, Status, Data) ->
+    case lists:member(Status, [<<"paused">>, <<"outbound">>, <<"ready">>, <<"wrapup">>]) of
+        'true' ->
+            resume_agent(Call, AgentId, Data);
+        'false' ->
+            lager:info("agent ~s cannot resume when status is ~s", [AgentId, Status]),
+            play_agent_invalid(Call)
+    end.
+
 -spec login_agent(kapps_call:call(), kz_term:ne_binary()) -> api_kz_term:ne_binary().
 login_agent(Call, AgentId) ->
     login_agent(Call, AgentId, kz_json:new()).

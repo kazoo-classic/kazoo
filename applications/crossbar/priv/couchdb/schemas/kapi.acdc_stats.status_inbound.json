@@ -1,1 +1,52 @@
-{"type":"object","required":["Account-ID","Agent-ID","Timestamp"],"properties":{"Wait-Time":{"type":"integer"},"Timestamp":{"type":"string"},"Pause-Time":{"type":"integer"},"Pause-Alias":{"type":"string"},"Event-Name":{"type":"string","enum":["inbound"]},"Event-Category":{"type":"string","enum":["acdc_status_stat"]},"Caller-ID-Number":{"type":"string"},"Caller-ID-Name":{"type":"string"},"Call-ID":{"type":"string"},"Agent-ID":{"type":"string"},"Account-ID":{"type":"string"}},"description":"AMQP API for acdc_stats.status_inbound","_id":"kapi.acdc_stats.status_inbound","$schema":"http://json-schema.org/draft-04/schema#"}
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "kapi.acdc_stats.status_inbound",
+    "description": "AMQP API for acdc_stats.status_inbound",
+    "properties": {
+        "Account-ID": {
+            "type": "string"
+        },
+        "Agent-ID": {
+            "type": "string"
+        },
+        "Call-ID": {
+            "type": "string"
+        },
+        "Caller-ID-Name": {
+            "type": "string"
+        },
+        "Caller-ID-Number": {
+            "type": "string"
+        },
+        "Event-Category": {
+            "enum": [
+                "acdc_status_stat"
+            ],
+            "type": "string"
+        },
+        "Event-Name": {
+            "enum": [
+                "inbound"
+            ],
+            "type": "string"
+        },
+        "Pause-Alias": {
+            "type": "string"
+        },
+        "Pause-Time": {
+            "type": "integer"
+        },
+        "Timestamp": {
+            "type": "string"
+        },
+        "Wait-Time": {
+            "type": "integer"
+        }
+    },
+    "required": [
+        "Account-ID",
+        "Agent-ID",
+        "Timestamp"
+    ],
+    "type": "object"
+}

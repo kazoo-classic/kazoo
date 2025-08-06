@@ -67,7 +67,7 @@
         },
         "search_by_service": {
             "map": [
-              "function(doc) {",
+                "function(doc) {",
                 "  if (doc.pvt_deleted || !doc.pvt_type || doc.pvt_type !== 'number') return;",
                 "  const services = [];",
                 "  if (doc.inbound_spam) services.push('inbound_spam');",

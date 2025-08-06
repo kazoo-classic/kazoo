@@ -1,1 +1,17 @@
-{"type":"object","properties":{"reseller_ids":{"type":"array","description":"tasks cdrs reseller_ids","default":[]},"post_process_script":{"type":"string","description":"tasks cdrs post_process_script"}},"description":"Schema for tasks.cdrs system_config","_id":"system_config.tasks.cdrs","$schema":"http://json-schema.org/draft-04/schema#"}
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.tasks.cdrs",
+    "description": "Schema for tasks.cdrs system_config",
+    "properties": {
+        "post_process_script": {
+            "description": "tasks cdrs post_process_script",
+            "type": "string"
+        },
+        "reseller_ids": {
+            "default": [],
+            "description": "tasks cdrs reseller_ids",
+            "type": "array"
+        }
+    },
+    "type": "object"
+}

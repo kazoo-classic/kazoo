@@ -1,1 +1,64 @@
-{"type":"object","properties":{"tf_enable_sms":{"type":"string","description":"number_manager thinq tf_enable_sms","default":false},"site_id":{"type":"string","description":"number_manager thinq site_id","default":""},"sandbox_provisioning":{"type":"boolean","description":"number_manager thinq sandbox_provisioning","default":true},"max_search_quantity":{"type":"integer","minimum":1,"description":"number_manager thinq max_search_quantity","default":500},"enable_upstream_inbound_cnam":{"type":"boolean","description":"number_manager thinq enable_upstream_inbound_cnam","default":false},"enable_sms":{"type":"string","description":"number_manager thinq enable_sms","default":false},"enable_provisioning":{"type":"boolean","description":"number_manager thinq enable_provisioning","default":true},"debug":{"type":"boolean","description":"number_manager thinq debug","default":false},"api_username":{"type":"string","description":"number_manager thinq api_username","default":""},"api_password":{"type":"string","description":"number_manager thinq api_password","default":""},"account_id":{"type":"string","description":"number_manager thinq account_id","default":""}},"description":"Schema for number_manager.thinq system_config","_id":"system_config.number_manager.thinq","$schema":"http://json-schema.org/draft-04/schema#"}
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.number_manager.thinq",
+    "description": "Schema for number_manager.thinq system_config",
+    "properties": {
+        "account_id": {
+            "default": "",
+            "description": "number_manager thinq account_id",
+            "type": "string"
+        },
+        "api_password": {
+            "default": "",
+            "description": "number_manager thinq api_password",
+            "type": "string"
+        },
+        "api_username": {
+            "default": "",
+            "description": "number_manager thinq api_username",
+            "type": "string"
+        },
+        "debug": {
+            "default": false,
+            "description": "number_manager thinq debug",
+            "type": "boolean"
+        },
+        "enable_provisioning": {
+            "default": true,
+            "description": "number_manager thinq enable_provisioning",
+            "type": "boolean"
+        },
+        "enable_sms": {
+            "default": false,
+            "description": "number_manager thinq enable_sms",
+            "type": "string"
+        },
+        "enable_upstream_inbound_cnam": {
+            "default": false,
+            "description": "number_manager thinq enable_upstream_inbound_cnam",
+            "type": "boolean"
+        },
+        "max_search_quantity": {
+            "default": 500,
+            "description": "number_manager thinq max_search_quantity",
+            "minimum": 1,
+            "type": "integer"
+        },
+        "sandbox_provisioning": {
+            "default": true,
+            "description": "number_manager thinq sandbox_provisioning",
+            "type": "boolean"
+        },
+        "site_id": {
+            "default": "",
+            "description": "number_manager thinq site_id",
+            "type": "string"
+        },
+        "tf_enable_sms": {
+            "default": false,
+            "description": "number_manager thinq tf_enable_sms",
+            "type": "string"
+        }
+    },
+    "type": "object"
+}

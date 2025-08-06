@@ -94,6 +94,10 @@
             "description": "notify should_persist_for_retry",
             "type": "boolean"
         },
+        "system_default_from_email": {
+            "description": "notify system_default_from_email",
+            "type": "string"
+        },
         "use_federated_listener": {
             "default": false,
             "description": "notify use federated listener",
