@@ -93,7 +93,12 @@ configure_smtp_password(Value) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec configure_smtp_auth(kz_term:ne_binary()) -> 'ok' | 'failed'.
-configure_smtp_auth(Value) ->
+configure_smtp_auth(<<"always">>) -> config_smtp_auth(<<"always">>);
+configure_smtp_auth(<<"never">>) -> config_smtp_auth(<<"never">>);
+configure_smtp_auth(<<"if_available">>) -> config_smtp_auth(<<"if_available">>).
+
+-spec config_smtp_auth(kz_term:ne_binary()) -> 'ok' | 'failed'.
+config_smtp_auth(Value) ->
     {'ok', _} = update_smtp_client_document(<<"auth">>, Value),
     'ok'.
 
@@ -102,8 +107,8 @@ configure_smtp_auth(Value) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec configure_smtp_port(kz_term:ne_binary()) -> 'ok' | 'failed'.
-configure_smtp_port(Value) ->
-    {'ok', _} = update_smtp_client_document(<<"port">>, Value),
+configure_smtp_port(PortNumber) ->
+    {'ok', _} = update_smtp_client_document(<<"port">>, PortNumber),
     'ok'.
 
 %%------------------------------------------------------------------------------
@@ -111,8 +116,8 @@ configure_smtp_port(Value) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec configure_smtp_ssl(kz_term:ne_binary()) -> 'ok' | 'failed'.
-configure_smtp_ssl(Value) ->
-    {'ok', _} = update_smtp_client_document(<<"use_ssl">>, kz_term:to_boolean(Value)),
+configure_smtp_ssl(Boolean) ->
+    {'ok', _} = update_smtp_client_document(<<"use_ssl">>, kz_term:to_boolean(Boolean)),
     'ok'.
 
 %%------------------------------------------------------------------------------
@@ -120,7 +125,12 @@ configure_smtp_ssl(Value) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec configure_smtp_tls(kz_term:ne_binary()) -> 'ok' | 'failed'.
-configure_smtp_tls(Value) ->
+configure_smtp_tls(<<"always">>) -> config_smtp_tls(<<"always">>);
+configure_smtp_tls(<<"if_available">>) -> config_smtp_tls(<<"if_available">>);
+configure_smtp_tls(<<"never">>) -> config_smtp_tls(<<"never">>).
+
+-spec config_smtp_tls(kz_term:ne_binary()) -> 'ok' | 'failed'.
+config_smtp_tls(Value) ->
     TLS = case Value of
               <<"true">> -> <<"always">>;
               <<"always">> -> <<"always">>;
@@ -144,8 +154,8 @@ configure_smtp_tls(Value) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec system_default_from_email(kz_term:ne_binary()) -> 'ok' | 'failed'.
-system_default_from_email(Value) ->
-    {'ok', _} = kapps_config:set(?NOTIFY_CONFIG_CAT, <<"system_default_from_email">>, Value),
+system_default_from_email(EmailAddress) ->
+    {'ok', _} = kapps_config:set(?NOTIFY_CONFIG_CAT, <<"system_default_from_email">>, EmailAddress),
     'ok'.
 
 %%------------------------------------------------------------------------------
