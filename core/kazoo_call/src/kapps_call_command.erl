@@ -2056,9 +2056,9 @@ play_and_collect_digits(MinDigits, MaxDigits, Media, Tries, Timeout, MediaInvali
           'ok'.
 play_and_collect_digits(MinDigits, MaxDigits, Media, Tries, Timeout, MediaInvalid, Regex, Terminators, Call) ->
     Command = [{<<"Application-Name">>, <<"play_and_collect_digits">>}
-              ,{<<"Minimum-Digits">>, MinDigits}
-              ,{<<"Maximum-Digits">>, MaxDigits}
-              ,{<<"Timeout">>, Timeout}
+              ,{<<"Minimum-Digits">>, integer_to_list(MinDigits)}
+              ,{<<"Maximum-Digits">>, integer_to_list(MaxDigits)}
+              ,{<<"Timeout">>, integer_to_list(Timeout)}
               ,{<<"Terminators">>, Terminators}
               ,{<<"Media-Name">>, Media}
               ,{<<"Media-Tries">>, Tries}

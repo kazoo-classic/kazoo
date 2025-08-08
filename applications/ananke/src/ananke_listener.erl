@@ -18,7 +18,7 @@
         ,code_change/3
         ]).
 
--export([load_schedules/0]).
+-export([load_schedule/2]).
 
 -include("ananke.hrl").
 
@@ -70,7 +70,6 @@ init([]) ->
     %% we should wait about 7-10 seconds before gen_leader syncronization
     %% and leader election
     %% after gen_leader syncronization this task will be scheduled only once
-    _ = kz_util:spawn(fun load_schedules/0),
     {'ok', #state{}}.
 
 %%------------------------------------------------------------------------------
@@ -90,10 +89,9 @@ handle_cast({'gen_listener', {'created_queue', _QueueNAme}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast('load_schedules', State) ->
-    Schedules = kapps_config:get_jsons(?CONFIG_CAT, <<"schedules">>, []),
-    NormalizedSchedules = [normalize_schedule(S) || S <- Schedules],
-    lists:foreach(fun schedule/1, NormalizedSchedules),
+handle_cast({'load_schedule', S}, State) ->
+    NormalizedSchedule = normalize_schedule(S),
+    schedule(NormalizedSchedule),
     {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
@@ -248,11 +246,10 @@ time_tokens_to_binary(Tokens) when is_list(Tokens) ->
 unknown_type(Type) ->
     lager:warning("no function for type ~p", [Type]).
 
--spec load_schedules() -> normal.
-load_schedules() ->
-    timer:sleep(60 * ?MILLISECONDS_IN_SECOND),
-    amqp_cron:schedule_task('load_schedules'
+-spec load_schedule(kz_term:ne_binary(), kz_json:object()) -> normal.
+load_schedule(Name, Schedule) ->
+    amqp_cron:schedule_task(<<"load_schedule_", Name/binary>> 
                            ,{'oneshot', 60000}
-                           ,{'gen_listener', 'cast', [?MODULE, 'load_schedules']}
+                           ,{'gen_listener', 'cast', [?MODULE, {'load_schedule', Schedule}]}
                            ),
     'normal'.

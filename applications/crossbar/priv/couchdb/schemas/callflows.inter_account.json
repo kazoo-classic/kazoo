@@ -1,0 +1,21 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "callflows.inter_account",
+    "description": "Validator for the inter_account callflow data object",
+    "properties": {
+        "caller_id_prefix": {
+            "description": "prefix to prepend to the caller id",
+            "type": "string"
+        },
+        "office_id": {
+            "default": {},
+            "description": "lookup digit to account map",
+            "type": "object"
+        },
+        "skip_module": {
+            "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+            "type": "boolean"
+        }
+    },
+    "type": "object"
+}

@@ -703,6 +703,18 @@ build_query_spec(JObj, CountOnly) ->
 build_query_spec_maybe_username(Realm, JObj) ->
     case kz_json:get_value(<<"Username">>, JObj) of
         'undefined' ->
+            build_query_spec_maybe_owner(Realm, JObj);
+        Username ->
+            Id = registration_id(Username, Realm),
+            {#registration{id = '$1', _ = '_'}
+            ,{'=:=', '$1', {'const', Id}}
+            }
+    end.
+
+-spec build_query_spec_maybe_owner(kz_term:ne_binary(), kz_json:object()) -> any().
+build_query_spec_maybe_owner(Realm, JObj) ->
+    case kz_json:get_value(<<"Owner">>, JObj) of
+        'undefined' ->
             {#registration{realm = '$1'
                           ,account_realm = '$2'
                           ,_ = '_'
@@ -711,10 +723,9 @@ build_query_spec_maybe_username(Realm, JObj) ->
              ,{'=:=', '$2', {'const', Realm}}
              }
             };
-        Username ->
-            Id = registration_id(Username, Realm),
-            {#registration{id = '$1', _ = '_'}
-            ,{'=:=', '$1', {'const', Id}}
+         Owner ->
+            {#registration{owner_id = '$1', _ = '_'}
+            ,{'=:=', '$1', {'const', Owner}}
             }
     end.
 

@@ -67,6 +67,14 @@
                 "  emit(parseInt(doc.mailbox, 10), null);",
                 "}"
             ]
+        },
+        "listing_by_schedule": {
+            "map": [
+                "function(doc) {",
+                "  if (doc.pvt_type != 'vmbox' || doc.pvt_deleted || !doc.schedule) return;",
+                "  emit(doc._id, doc.schedule);",
+                "}"
+            ]
         }
     }
 }

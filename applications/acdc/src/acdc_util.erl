@@ -116,7 +116,37 @@ get_endpoints(Call, ?NE_BINARY = AgentId) ->
     Params = kz_json:from_list([{<<"source">>, kz_term:to_binary(?MODULE)}
                                ,{<<"can_call_self">>, 'true'}
                                ]),
-    kz_endpoints:by_owner_id(AgentId, Params, Call).
+    EPs = kz_endpoints:by_owner_id(AgentId, Params, Call),
+    Realm = kzd_accounts:fetch_realm(kapps_call:account_id(Call)),
+
+    Req = [{<<"Owner">>, AgentId}
+          ,{<<"Realm">>, Realm}
+          ,{<<"Fields">>, [<<"Authorizing-ID">>]}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+
+    ReqResp = kz_amqp_worker:call_collect(Req
+                                         ,fun kapi_registration:publish_query_req/1
+                                         ,{'ecallmgr', 'true'}
+                                         ),
+    case ReqResp of
+        {'error', _} -> [];
+        {_, JObjs} -> 
+            AuthIDs =
+            [
+                kz_json:get_value(<<"Authorizing-ID">>, F) ||
+                J <- JObjs,
+                <<"reg_query_resp">> == kz_json:get_value(<<"Event-Name">>, J),
+                F <- kz_json:get_value(<<"Fields">>, J)
+            ],
+            [
+                EP ||
+                EP <- EPs,
+                lists:member(kz_json:get_value(<<"Endpoint-ID">>, EP),
+                      AuthIDs)
+            ]
+    end.
+
 
 %% Handles subscribing/unsubscribing from call events
 -spec bind_to_call_events(kz_term:api_binary() | {kz_term:api_binary(), any()} | kapps_call:call()) -> 'ok'.

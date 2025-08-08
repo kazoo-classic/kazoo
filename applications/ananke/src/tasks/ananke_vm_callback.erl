@@ -14,17 +14,6 @@
 
 -include("ananke.hrl").
 
--record(args, {account_id            :: kz_term:api_binary()
-              ,user_id               :: kz_term:api_binary()
-              ,vm_box_id             :: kz_term:api_binary()
-              ,callback_number       :: kz_term:api_binary()
-              ,is_callback_disabled  :: boolean()
-              ,vm_number             :: kz_term:api_binary()
-              ,schedule              :: pos_integers()
-              ,call_timeout          :: pos_integer()
-              ,realm                 :: kz_term:api_binary()
-              }).
-
 -spec init() -> 'ok'.
 init() -> 'ok'.
 
@@ -57,45 +46,38 @@ handle_req(JObj, Props) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     AccountDb = kz_json:get_value(<<"Account-DB">>, JObj),
     VMBoxId = kz_json:get_value(<<"Voicemail-Box">>, JObj),
-    lager:debug("handling new voicemail in ~p", [VMBoxId]),
+    lager:debug("handling new voicemail in ~s", [VMBoxId]),
     {'ok', VMBoxJObj} = kz_datamgr:open_cache_doc(AccountDb, VMBoxId),
-    case kzd_voicemail_box:owner_id(VMBoxJObj) of
-        'undefined' -> lager:debug("no owner");
-        UserId ->
-            lager:debug("voicemail owner is ~p", [UserId]),
-            {'ok', UserJObj} = kz_datamgr:open_cache_doc(AccountDb, UserId),
-            {'ok', AccountJObj} = kzd_accounts:fetch(AccountId),
 
-            OptionsPath = [<<"notify">>, <<"callback">>],
-            VMBoxNotifyJObj = kz_json:get_value(OptionsPath, VMBoxJObj),
-            UserNotifyJObj = kz_json:get_value([<<"voicemail">> | OptionsPath], UserJObj),
-            AccountNotifyJObj = kz_json:get_value([<<"voicemail">> | OptionsPath], AccountJObj),
+    UserId = kzd_voicemail_box:owner_id(VMBoxJObj, AccountId),
 
-            Realm = kz_json:get_value(<<"To-Realm">>, JObj),
+    OptionsPath = [<<"notify">>, <<"callback">>],
+    VMBoxNotifyList = kz_json:get_value(OptionsPath, VMBoxJObj, []),
 
-            Mailbox = kz_json:get_value(<<"mailbox">>, VMBoxJObj),
-            VMNumber = get_voicemail_number(AccountDb, Mailbox),
-            Number = get_first_defined([{<<"number">>, VMBoxNotifyJObj}
-                                       ,{<<"number">>, UserNotifyJObj}]),
-            IsDisabled = kz_term:is_true(
-                           get_first_defined([{<<"disabled">>, VMBoxNotifyJObj}
-                                             ,{<<"disabled">>, UserNotifyJObj}])),
+    {'ok', AccountDoc} = kzd_accounts:fetch(AccountId),
+    Realm = kzd_accounts:realm(AccountDoc),
 
-            Schedule = get_schedule(VMBoxNotifyJObj, UserNotifyJObj, AccountNotifyJObj),
-            CallTimeout = get_callback_timeout(VMBoxNotifyJObj, UserNotifyJObj, AccountNotifyJObj),
+    Mailbox = kz_json:get_value(<<"mailbox">>, VMBoxJObj),
+    VMNumber = get_voicemail_number(AccountDb, Mailbox),
 
-            StartArgs = #args{account_id = AccountId
-                             ,user_id = UserId
-                             ,vm_box_id = VMBoxId
-                             ,callback_number = Number
-                             ,is_callback_disabled = IsDisabled
-                             ,vm_number = VMNumber
-                             ,schedule = Schedule
-                             ,call_timeout = CallTimeout
-                             ,realm = Realm
-                             },
-            maybe_start_caller(StartArgs)
-    end.
+    Callbacks = lists:map(fun(VMBoxNotifyJObj) ->
+                  #callback{
+                            callback_number = kz_json:get_value(<<"number">>, VMBoxNotifyJObj)
+                            ,is_callback_disabled = kz_json:get_boolean_value(<<"disabled">>, VMBoxNotifyJObj)
+                            ,call_timeout = get_callback_timeout(VMBoxNotifyJObj)
+                            ,schedule = get_schedule(VMBoxNotifyJObj)
+                           }
+                  end,
+                  VMBoxNotifyList),
+
+    StartArgs = #args{account_id = AccountId
+                     ,user_id = UserId
+                     ,vm_box_id = VMBoxId
+                     ,vm_number = VMNumber
+                     ,realm = Realm
+                     ,callbacks = Callbacks
+                     },
+    maybe_start_caller(StartArgs).
 
 -spec get_voicemail_number(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_binary().
 get_voicemail_number(AccountDb, Mailbox) ->
@@ -140,105 +122,106 @@ get_callflow_number(Callflow, _Mailbox) ->
     end.
 
 -spec maybe_start_caller(#args{}) -> 'ok'.
-maybe_start_caller(#args{callback_number = 'undefined'}) ->
-    lager:debug("no callback number");
+maybe_start_caller(#args{callbacks = []
+                         ,account_id = AccountId
+                         ,vm_box_id = VMBoxId}) ->
+    lager:warning("not starting callback, no callback numbers defined in Account: ~s Mailbox: ~s", [AccountId, VMBoxId]);
 maybe_start_caller(#args{vm_number = 'undefined', account_id = AccountId}) ->
-    lager:info("cannot find voicemail number in account ~p", [AccountId]);
-maybe_start_caller(#args{is_callback_disabled = 'true', user_id = UserId}) ->
-    lager:debug("disabled for user ~p", [UserId]);
+    lager:warning("not starting callback, cannot find voicemail number in account ~p", [AccountId]);
 maybe_start_caller(StartArgs) ->
     start_caller(StartArgs).
 
 -spec start_caller(#args{}) -> 'ok'.
-start_caller(#args{callback_number = Number
-                  ,account_id = AccountId
+start_caller(#args{ account_id = AccountId
                   ,vm_box_id = VMBoxId
-                  ,schedule = Schedule
-                  } = StartArgs) ->
-    lager:info("starting caller to number ~p", [Number]),
-    OriginateReq = build_originate_req(StartArgs),
+                  ,callbacks = Callbacks
+                  } = Args) ->
+    lager:info("starting callback worker for account: ~s voicemail ~s", [AccountId, VMBoxId]),
+    OriginateReqFun = fun(A, Queue, Number, Timeout) -> build_originate_req(A, Queue, Number, Timeout) end,
     CheckFun = {?MODULE, has_unread, [AccountId, VMBoxId]},
 
-    WorkerId = {Number, VMBoxId},
-    WorkerArgs = [OriginateReq, Schedule, CheckFun],
+    WorkerId = VMBoxId,
+    WorkerArgs = [Args, Callbacks, OriginateReqFun, CheckFun],
     ananke_tasks_sup:start_task(WorkerId, 'ananke_callback_worker', WorkerArgs).
 
--spec build_originate_req(#args{}) -> kz_term:proplist().
-build_originate_req(#args{callback_number = CallbackNumber
-                         ,vm_number = VMNumber
+-spec build_originate_req(#args{},  kz_term:api_binary(), kz_term:api_binary(), pos_integer()) -> {kz_term:api_binary(), kapps_call:call(), kz_term:proplist()}.
+build_originate_req(#args{vm_number = VMNumber
                          ,account_id = AccountId
                          ,user_id = UserId
-                         ,call_timeout = Timeout
                          ,realm = Realm
-                         }) ->
+                         }, Queue, CallbackNumber, Timeout) ->
 
-    CustomChannelVars = kz_json:from_list([{<<"Account-ID">>, AccountId}
-                                          ,{<<"Owner-ID">>, UserId}
-                                          ,{<<"AutoAnswer">>, 'true'}
-                                          ,{<<"Authorizing-ID">>, UserId}
-                                          ,{<<"Inherit-Codec">>, <<"false">>}
-                                          ,{<<"Authorizing-Type">>, <<"user">>}
-                                          ,{<<"Realm">>, Realm}
-                                          ,{<<"Account-Realm">>, Realm}
-                                          ,{<<"From-Realm">>, Realm}
-                                          ,{<<"Format-From-URI">>, <<"true">>}
-                                          ,{<<"From-URI-Realm">>, Realm}
-                                          ]),
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+    TargetCallId = create_call_id(),
+    Setters = [{fun kapps_call:set_account_id/2, AccountId}
+              ,{fun kapps_call:set_account_db/2, AccountDb}
+              ,{fun kapps_call:set_call_id/2, TargetCallId}
+              ,{fun kapps_call:set_owner_id/2, UserId}
+              ,{fun kapps_call:set_authorizing_type/2, <<"ananke">>}
+              ,{fun kapps_call:set_authorizing_id/2, UserId}
+              ,{fun kapps_call:set_resource_type/2, <<"audio">>}
+              ],
 
-    Endpoint = [{<<"Invite-Format">>, <<"loopback">>}
-               ,{<<"Route">>, CallbackNumber}
-               ,{<<"Custom-Channel-Vars">>, CustomChannelVars}
-               ],
+    Call = kapps_call:exec(Setters, kapps_call:new()),
 
-    ApplicationName = <<"transfer">>,
-    ApplicationData = kz_json:from_list([{<<"Route">>, VMNumber}
-                                        ,{<<"Custom-Channel-Vars">>, CustomChannelVars}
-                                        ]),
+    MsgId = kz_binary:rand_hex(4),
 
-    props:filter_undefined(
-      [{<<"Timeout">>, Timeout}
-      ,{<<"Application-Name">>, ApplicationName}
-      ,{<<"Application-Data">>, ApplicationData}
-      ,{<<"Originate-Immediate">>, 'true'}
-      ,{<<"Ignore-Early-Media">>, 'true'}
-      ,{<<"Endpoints">>, [kz_json:from_list(Endpoint)]}
-      ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-      ,{<<"Continue-On-Fail">>, 'false'}
-      ,{<<"Custom-Channel-Vars">>, CustomChannelVars}
-      ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
-                                          ,<<"Account-Realm">>
-                                          ,<<"Authorizing-ID">>
-                                          ,<<"Authorizing-Type">>
-                                          ,<<"Owner-ID">>
-                                          ]}
-       | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
-      ]).
+    CCVs = props:filter_undefined(
+             [{<<"Account-ID">>, kapps_call:account_id(Call)}
+             ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
+             ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
+             ,{<<"Channel-Authorized">>, 'true'}
+             ,{<<"Inherit-Codec">>, <<"false">>}
+             ,{<<"Realm">>, Realm}
+             ,{<<"Account-Realm">>, Realm}
+             ,{<<"From-Realm">>, Realm}
+             ,{<<"Format-From-URI">>, <<"true">>}
+             ,{<<"From-URI-Realm">>, Realm}
+             ]),
 
--spec get_first_defined([{kz_term:ne_binary(), kz_json:object()}]) -> kz_term:api_binary().
-get_first_defined(Props) ->
-    get_first_defined(Props, 'undefined').
+    Endpoint = kz_json:from_list(
+                 props:filter_undefined(
+                   [{<<"Invite-Format">>, <<"loopback">>}
+                   ,{<<"Route">>,  CallbackNumber}
+                   ,{<<"To-DID">>, CallbackNumber}
+                   ,{<<"To-Realm">>, Realm}
+                   ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+                   ,{<<"Outbound-Call-ID">>, TargetCallId}
+                   ])),
 
--spec get_first_defined([{kz_term:ne_binary(), kz_json:object()}], Default) -> binary() | Default.
-get_first_defined([], Default) -> Default;
-get_first_defined([{Keys, JObj} | Rest], Default) ->
-    case kz_json:get_value(Keys, JObj) of
-        'undefined' -> get_first_defined(Rest, Default);
-        Val -> Val
-    end.
+    {TargetCallId, Call, props:filter_undefined(
+                [{<<"Endpoints">>, [Endpoint]}
+                ,{<<"Outbound-Call-ID">>, TargetCallId}
+                ,{<<"Dial-Endpoint-Method">>, <<"single">>}
+                ,{<<"Msg-ID">>, MsgId}
+                ,{<<"Continue-On-Fail">>, 'true'}
+                ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+                ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
+                                                     ,<<"Account-Realm">>
+                                                     ,<<"Authorizing-ID">>
+                                                     ,<<"Authorizing-Type">>
+                                                     ,<<"Owner-ID">>
+                                                    ]}
+                ,{<<"Application-Name">>, <<"park">>}
+                ,{<<"Timeout">>, Timeout}
 
--spec get_schedule(kz_json:object(), kz_json:object(), kz_json:object()) -> pos_integers().
-get_schedule(VMBoxJObj, UserJObj, AccountJObj) ->
-    case get_first_defined([{<<"schedule">>, VMBoxJObj}
-                           ,{<<"schedule">>, UserJObj}
-                           ,{<<"schedule">>, AccountJObj}
-                           ]
-                          ,[]
-                          )
+                ,{<<"Resource-Type">>, <<"originate">>}
+                ,{<<"Originate-Immediate">>, 'true'}
+                 | kz_api:default_headers(Queue, ?APP_NAME, ?APP_VERSION)
+                ])}.
+
+-spec create_call_id() -> kz_term:ne_binary().
+create_call_id() ->
+    <<"ananke-call-", (kz_binary:rand_hex(4))/binary>>.
+
+-spec get_schedule(kz_json:object()) -> pos_integers().
+get_schedule(VMBoxJObj) ->
+    case kz_json:get_value(<<"schedule">>, VMBoxJObj,[])
     of
         [_|_] = Schedule -> Schedule;
         [] ->
-            Attempts = get_attempts(VMBoxJObj, UserJObj, AccountJObj),
-            Interval = get_interval(VMBoxJObj, UserJObj, AccountJObj),
+            Attempts = get_attempts(VMBoxJObj),
+            Interval = get_interval(VMBoxJObj),
             get_schedule_from_attempts_interval(Attempts, Interval)
     end.
 
@@ -248,12 +231,9 @@ get_schedule_from_attempts_interval(Attempts, Interval)
     lists:duplicate(Attempts, Interval);
 get_schedule_from_attempts_interval(_Attempts, _Interval) -> [].
 
--spec get_interval(kz_json:object(), kz_json:object(), kz_json:object()) -> pos_integer().
-get_interval(VMBoxJObj, UserJObj, AccountJObj) ->
-    case get_first_defined([{<<"interval_s">>, VMBoxJObj}
-                           ,{<<"interval_s">>, UserJObj}
-                           ,{<<"interval_s">>, AccountJObj}
-                           ])
+-spec get_interval(kz_json:object()) -> pos_integer().
+get_interval(VMBoxJObj) ->
+    case kz_json:get_value(<<"interval_s">>, VMBoxJObj)
     of
         undefined ->
             kapps_config:get_integer(?CONFIG_CAT
@@ -263,12 +243,9 @@ get_interval(VMBoxJObj, UserJObj, AccountJObj) ->
         Interval -> kz_term:to_integer(Interval)
     end.
 
--spec get_attempts(kz_json:object(), kz_json:object(), kz_json:object()) -> pos_integer().
-get_attempts(VMBoxJObj, UserJObj, AccountJObj) ->
-    case get_first_defined([{<<"attempts">>, VMBoxJObj}
-                           ,{<<"attempts">>, UserJObj}
-                           ,{<<"attempts">>, AccountJObj}
-                           ])
+-spec get_attempts(kz_json:object()) -> pos_integer().
+get_attempts(VMBoxJObj) ->
+    case kz_json:get_value(<<"attempts">>, VMBoxJObj)
     of
         undefined ->
             kapps_config:get_integer(?CONFIG_CAT
@@ -278,12 +255,9 @@ get_attempts(VMBoxJObj, UserJObj, AccountJObj) ->
         Tries -> kz_term:to_integer(Tries)
     end.
 
--spec get_callback_timeout(kz_json:object(), kz_json:object(), kz_json:object()) -> pos_integer().
-get_callback_timeout(VMBoxJObj, UserJObj, AccountJObj) ->
-    case get_first_defined([{<<"timeout_s">>, VMBoxJObj}
-                           ,{<<"timeout_s">>, UserJObj}
-                           ,{<<"timeout_s">>, AccountJObj}
-                           ])
+-spec get_callback_timeout(kz_json:object()) -> pos_integer().
+get_callback_timeout(VMBoxJObj) ->
+    case kz_json:get_value(<<"timeout_s">>, VMBoxJObj)
     of
         undefined ->
             kapps_config:get_integer(?CONFIG_CAT

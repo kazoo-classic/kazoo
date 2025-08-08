@@ -156,6 +156,7 @@ callflow_should_respond(Call) ->
         <<"click2call">> -> 'true';
         <<"conference">> -> 'true';
         <<"resource">> -> 'true';
+        <<"ananke">> -> 'true';
         <<"sys_info">> ->
             timer:sleep(500),
             Number = kapps_call:request_user(Call),
