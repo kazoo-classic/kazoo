@@ -97,6 +97,9 @@
 
 -define(RESOURCE_TYPE_AUDIO, <<"audio">>).
 
+-define(NO_ENDPOINTS_PAUSE_TIME, kapps_config:get_integer(?CONFIG_CAT, <<"no_endpoints_pause_time">>, 15)).
+-define(NO_ENDPOINTS_PAUSE_MSG, <<"no device registered">>).
+
 -record(state, {account_id :: kz_term:ne_binary()
                ,account_db :: kz_term:ne_binary()
                ,agent_id :: kz_term:ne_binary()
@@ -625,8 +628,8 @@ ready('cast', {'member_connect_win', JObj, 'same_node'}, #state{agent_listener=A
 
     case get_endpoints(OrigEPs, Call, AgentId, QueueId) of
         {'error', 'no_endpoints'} ->
-            lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
-            agent_logout(self()),
+            lager:info("agent ~s has no endpoints; pausing agent", [AgentId]),
+            pause(self(), ?NO_ENDPOINTS_PAUSE_TIME, ?NO_ENDPOINTS_PAUSE_MSG),
             acdc_agent_listener:member_connect_retry(AgentListener, JObj),
             {'next_state', 'paused', State};
         {'error', _E} ->
@@ -2639,14 +2642,33 @@ apply_state_updates(#state{agent_state_updates=Q
                                case time_left(PRef) of
                                    N when is_integer(N), N > 0 -> 'paused';
                                    'infinity' -> 'paused';
-                                   _P -> 'ready'
+                                   _P -> ready_or_not(State)
                                end
                        end,
     lager:debug("default state for applying state updates ~s", [FoldDefaultState]),
     apply_state_updates_fold({'next_state', FoldDefaultState, State#state{agent_state_updates=[]}}, lists:reverse(Q)).
 
+ready_or_not(#state{account_id=AccountId
+                    ,account_db = AccountDb
+                    ,agent_id=AgentId
+                   }) ->
+    Setters = [{fun kapps_call:set_account_id/2, AccountId} 
+              ,{fun kapps_call:set_account_db/2, AccountDb}
+              ,{fun kapps_call:set_owner_id/2, AgentId}
+              ,{fun kapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
+              ],
+
+    Call = kapps_call:exec(Setters, kapps_call:new()),
+    case catch acdc_util:get_endpoints(Call, AgentId) of
+        [] -> 'not_ready';
+        [_|_] -> 'ready';
+        {'EXIT', E} ->
+            lager:error("failed to load endpoints: ~p", [E]),
+            'not_ready'
+    end.
+
 -spec apply_state_updates_fold({'next_state', atom(), state()}, list()) -> kz_term:handle_fsm_ret(state()).
-apply_state_updates_fold({Next, StateName, #state{account_id=AccountId
+apply_state_updates_fold({Next, StateData, #state{account_id=AccountId
                                               ,agent_id=AgentId
                                               ,agent_listener=AgentListener
                                               ,wrapup_ref=WRef
@@ -2654,24 +2676,30 @@ apply_state_updates_fold({Next, StateName, #state{account_id=AccountId
                                               ,pause_alias=Alias
                                               ,monitoring=Monitor
                                               } = State}, []) ->
-    lager:debug("resulting agent state ~s (monitoring ~p)", [StateName, Monitor]),
-    case not Monitor andalso StateName of
+    lager:debug("resulting agent state ~s (monitoring ~p)", [StateData, Monitor]),
+    case not Monitor andalso StateData of
         'ready' ->
             acdc_agent_listener:send_agent_available(AgentListener),
             acdc_agent_stats:agent_ready(AccountId, AgentId);
-        'wrapup' -> acdc_agent_stats:agent_wrapup(AccountId, AgentId, time_left(WRef));
+        'not_ready' ->
+            acdc_agent_listener:send_agent_busy(AgentListener),
+            pause(self(), ?NO_ENDPOINTS_PAUSE_TIME, ?NO_ENDPOINTS_PAUSE_MSG);
         'paused' ->
             acdc_agent_listener:send_agent_busy(AgentListener),
             acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef), Alias);
+        'wrapup' -> acdc_agent_stats:agent_wrapup(AccountId, AgentId, time_left(WRef));
         'false' -> ok
     end,
-    {Next, StateName, State#state{monitoring = 'false'}};
+    {Next, state_name(StateData), State#state{monitoring = 'false'}};
 apply_state_updates_fold({_, _, State}, [{'pause', 'infinity', Alias}|Updates]) ->
     apply_state_updates_fold(handle_pause('infinity', Alias, State), Updates);
+
 apply_state_updates_fold({_, _, State}, [{'pause', 0, Alias}|Updates]) ->
     apply_state_updates_fold(handle_pause('infinity', Alias, State), Updates);
+
 apply_state_updates_fold({_, _, State}, [{'pause', Timeout, Alias}|Updates]) ->
     apply_state_updates_fold(handle_pause(Timeout, Alias, State), Updates);
+
 apply_state_updates_fold({_, _, State}, [{'resume'}|Updates]) ->
     apply_state_updates_fold(handle_resume(State), Updates);
 apply_state_updates_fold({_, 'wrapup', State}, [{'end_wrapup'}|Updates]) ->
@@ -2691,6 +2719,9 @@ valid_state_for_logout('ready') -> 'true';
 valid_state_for_logout('wrapup') -> 'true';
 valid_state_for_logout('paused') -> 'true';
 valid_state_for_logout(_) -> 'false'.
+
+state_name('not_ready') -> 'paused';
+state_name(Other) -> Other.
 
 -spec handle_agent_logout(state()) -> kz_term:handle_fsm_ret(state()).
 handle_agent_logout(#state{account_id = AccountId

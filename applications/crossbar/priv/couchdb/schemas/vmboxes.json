@@ -101,8 +101,13 @@
         "notify": {
             "properties": {
                 "callback": {
-                    "$ref": "notify.callback"
-                }
+                    "default": [],
+                    "description": "Ordered List of callback objects",
+                    "items": {
+                        "$ref": "notify.callback"
+                    }
+                },
+                "type": "array"
             },
             "support_level": "supported",
             "type": "object"
@@ -148,6 +153,10 @@
             "description": "Move the voicemail to save folder after the notification has been sent (This setting will override delete_after_notify)",
             "support_level": "supported",
             "type": "boolean"
+        },
+        "schedule": {
+            "description": "ananke schedule",
+            "type": "object"
         },
         "seek_duration_ms": {
             "default": 10000,

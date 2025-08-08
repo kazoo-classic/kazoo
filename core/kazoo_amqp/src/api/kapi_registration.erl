@@ -74,7 +74,7 @@
 %% Query Registrations
 -define(REG_QUERY_HEADERS, []).
 -define(OPTIONAL_REG_QUERY_FIELDS, [<<"Bridge-RURI">>]).
--define(OPTIONAL_REG_QUERY_HEADERS, [<<"Username">>, <<"Realm">>
+-define(OPTIONAL_REG_QUERY_HEADERS, [<<"Username">>, <<"Realm">>, <<"Owner">>
                                     ,<<"Count-Only">>, <<"Fields">>
                                     ]).
 -define(REG_QUERY_VALUES, [{<<"Event-Category">>, <<"directory">>}

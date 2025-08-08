@@ -11,6 +11,7 @@
         ,start_task/3
         ,delete_child/1
         ,delete_child/2
+        ,reset/0
         ]).
 
 %% Supervisor callbacks
@@ -47,6 +48,15 @@ start_task(Id, Module, Args) ->
         {'error', Error} -> lager:warning("error start child: ~p", [Error])
     end.
 
+-spec reset() -> 'ok'.
+reset() ->
+    Ids = [Id || {Id, _Child, _Type, _Modules} <- supervisor:which_children(?SERVER)],
+    lists:foreach(fun(Id) -> 
+          'ok' = supervisor:terminate_child(?SERVER, Id),
+          'ok' = supervisor:delete_child(?SERVER, Id)
+        end,
+        Ids),
+    'ok'.
 
 -spec delete_child(any()) -> 'ok' | {'error', any()}.
 delete_child(Pid) when is_pid(Pid) ->
