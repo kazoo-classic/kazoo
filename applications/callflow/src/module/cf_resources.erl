@@ -428,7 +428,7 @@ get_ignore_early_media(Data) ->
 -spec get_t38_enabled(kapps_call:call()) -> kz_term:api_boolean().
 get_t38_enabled(Call) ->
     case kz_endpoint:get(Call) of
-        {'ok', JObj} -> kz_json:is_true([<<"media">>, <<"fax_option">>], JObj);
+        {'ok', JObj} -> cf_util:determine_t38(Call, JObj);
         {'error', _} -> 'undefined'
     end.
 

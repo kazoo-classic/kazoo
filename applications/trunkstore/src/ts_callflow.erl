@@ -1,7 +1,8 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc Common functionality for onnet and offnet call handling
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(ts_callflow).
@@ -80,12 +81,36 @@ send_park(#ts_callflow_state{route_req_jobj=JObj
                             ,acctid=AccountId
                             ,amqp_worker=Worker
                             }=State) ->
+    CCVsPre = kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
+    AuthType = kz_json:get_ne_binary_value(<<"Authorizing-Type">>, CCVsPre),
+    Direction = case AuthType of
+                    <<"resource">> -> 'inbound';
+                    <<"sys_info">> -> 'outbound';
+                    _DeviceOrOther -> 'inbound' % a device that calls a Trunkstore DID in same account is inbound from TS perspective
+                end,
+
+    %% DID options list is in a different place depending on whether this call is inbound
+    %% or outbound, so we try to fetch both (one will be empty) and combine them:
+    DIDOptsIn = kz_json:get_list_value(<<"Route-Options">>, State#ts_callflow_state.ep_data, []),
+    DIDOptsOut = kz_json:get_list_value(<<"DID-Options">>, JObj, []),
+    DIDOptsList = DIDOptsIn ++ DIDOptsOut,
+    DIDAttributes = kz_json:get_json_value(<<"DID-Attributes">>, JObj),
+    IsFaxNumber = ts_util:is_fax_number(DIDOptsList, DIDAttributes),
+    T38Resource = kz_json:get_boolean_value([<<"Custom-Channel-Vars">>, <<"Resource-Fax-Option">>], JObj),
+    %% We ONLY want to set fax vars on the park command for OUTBOUND, _unless_
+    %% the resource has been successfully matched and has T.38:
+    CCVs = case {Direction, IsFaxNumber, T38Resource} of
+               {'outbound', 'true', _} -> kz_json:set_value(<<"Enable-T38-Fax">>, 'true', CCVsPre);
+               {'inbound', _, 'true'} -> kz_json:set_value(<<"Enable-T38-Fax">>, 'true', CCVsPre);
+               _ -> CCVsPre
+           end,
+
     Resp = [{<<"Msg-ID">>, kz_api:msg_id(JObj)}
            ,{<<"Routes">>, []}
            ,{<<"Pre-Park">>, pre_park_action()}
            ,{<<"Method">>, <<"park">>}
            ,{<<"From-Realm">>, kzd_accounts:fetch_realm(AccountId)}
-           ,{<<"Custom-Channel-Vars">>, kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new())}
+           ,{<<"Custom-Channel-Vars">>, CCVs}
            ,{<<"Custom-Application-Vars">>, kz_json:get_json_value(<<"Custom-Application-Vars">>, JObj)}
             | kz_api:default_headers(get_worker_queue(State)
                                     ,?APP_NAME, ?APP_VERSION

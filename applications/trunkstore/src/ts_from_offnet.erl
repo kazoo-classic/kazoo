@@ -1,10 +1,11 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc Calls coming from offnet (in this case, likely stepswitch) potentially
 %%% destined for a trunkstore client, or, if the account exists and
 %%% failover is configured, to an external DID or SIP URI
 %%%
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(ts_from_offnet).
@@ -52,9 +53,15 @@ proceed_with_endpoint(State, Endpoint, JObj) ->
     CallID = ts_callflow:get_aleg_id(State),
     'true' = kapi_dialplan:bridge_endpoint_v(Endpoint),
 
+    ToDID = kz_json:get_binary_value(<<"To-DID">>, Endpoint),
+    DIDAttributes = knm_phone_number:number_attributes(ToDID),
+    DIDOptsList = kz_json:get_list_value(<<"Route-Options">>, Endpoint, []),
+    DIDDerivedMediaHandling = <<"process">> =:= ts_util:media_handling_number(DIDOptsList, DIDAttributes),
+
     InceptionAccountId = kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Inception-Account-ID">>], JObj),
     MediaHandling = case 'undefined' =/= InceptionAccountId
                         orelse kz_json:is_false(<<"Bypass-Media">>, Endpoint)
+                        orelse DIDDerivedMediaHandling
                     of
                         'true' -> <<"process">>; %% bypass media is false, process media
                         'false' -> <<"bypass">>
@@ -279,15 +286,23 @@ get_endpoint_data(State, JObj, ToDID, AccountId, NumberProps) ->
     NewCallerId = maybe_anonymize_caller_id(State, {OldCNam, OldCNum}, CidFormat),
     RoutingData = RoutingData1 ++ NewCallerId,
 
+    DIDAttributes = knm_phone_number:number_attributes(ToDID),
     AuthUser = props:get_value(<<"To-User">>, RoutingData),
     AuthRealm = props:get_value(<<"To-Realm">>, RoutingData),
     AuthzId = props:get_value(<<"Authorizing-ID">>, RoutingData),
     InFormat = props:get_value(<<"Invite-Format">>, RoutingData, <<"username">>),
     Invite = ts_util:invite_format(kz_term:to_lower_binary(InFormat), ToDID) ++ RoutingData,
     Routines = [fun(E) -> get_endpoint_ccvs(E, AuthUser, AuthRealm, AccountId, AuthzId) end
-               ,fun(E) -> get_endpoint_sip_headers(E, AuthUser, AuthRealm) end
+               ,fun(E) -> get_endpoint_sip_headers(E, AuthUser, AuthRealm, ToDID, DIDAttributes) end
                ],
-    Endpoint = lists:foldl(fun(F, E) -> F(E) end, Invite, Routines),
+    PreEndpoint = lists:foldl(fun(F, E) -> F(E) end, Invite, Routines),
+
+    DIDOptsList = props:get_value(<<"Route-Options">>, RoutingData, []),
+    IsFaxNumber = ts_util:is_fax_number(DIDOptsList, DIDAttributes),
+    T38Resource = kz_json:get_boolean_value([<<"Custom-Channel-Vars">>, <<"Resource-Fax-Option">>], JObj),
+
+    FaxVars = kapps_call_command:get_inbound_t38_settings(T38Resource, IsFaxNumber),
+    Endpoint = PreEndpoint ++ FaxVars,
     {'endpoint', kz_json:from_list(Endpoint)}.
 
 -spec get_endpoint_ccvs(kz_term:proplist(), kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
@@ -308,6 +323,19 @@ get_endpoint_sip_headers(Endpoint, AuthUser, AuthRealm) ->
     Props = [{<<"X-KAZOO-AOR">>, <<"sip:", AuthUser/binary, "@", AuthRealm/binary>>}],
     [{<<"Custom-SIP-Headers">>, kz_json:from_list(Props)} | Endpoint].
 
+-spec get_endpoint_sip_headers(kz_term:proplist(), kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary(), kz_json:object()) -> kz_term:proplist().
+get_endpoint_sip_headers(Endpoint, AuthUser, AuthRealm, ToDID, DIDAttributes) ->
+    %% maybe set attributes SIP header
+    EndpointWithHeaders = get_endpoint_sip_headers(Endpoint, AuthUser, AuthRealm),
+    Realm = case AuthRealm of
+                'undefined' -> <<"norealm">>;
+                <<>> -> <<"norealm">>;
+                _Realm -> _Realm
+            end,
+    AttributesHeader = ts_util:attributes_header(ToDID, Realm, DIDAttributes),
+    SIPHeaders = props:get_value(<<"Custom-SIP-Headers">>, EndpointWithHeaders, kz_json:new()),
+    [{<<"Custom-SIP-Headers">>, kz_json:merge(AttributesHeader, SIPHeaders)} | Endpoint].
+
 -spec routing_data(kz_term:ne_binary(), kz_term:ne_binary()) -> [{<<_:48,_:_*8>>, any()}].
 routing_data(ToDID, AccountId) ->
     case ts_util:lookup_did(ToDID, AccountId) of
@@ -326,6 +354,7 @@ routing_data(ToDID, AccountId, Settings) ->
     DIDOptions = kz_json:get_value(<<"DID_Opts">>, Settings, kz_json:new()),
     HuntAccountId = kz_json:get_value([<<"server">>, <<"hunt_account_id">>], Settings),
     RouteOpts = kz_json:get_value(<<"options">>, DIDOptions, []),
+
     NumConfig = case knm_number:get(ToDID, [{'auth_by', AccountId}]) of
                     {'ok', KNum} -> knm_number:to_public_json(KNum);
                     {'error', _} -> kz_json:new()
@@ -398,6 +427,7 @@ routing_data(ToDID, AccountId, Settings) ->
                                  ,kz_json:get_value(<<"timeout">>, AcctStuff)
                                  ]),
 
+    %% This is the routing/bridge command, NOT the park command
     [KV || {_,V}=KV <- [{<<"Invite-Format">>, InboundFormat}
                        ,{<<"Codecs">>, kz_json:find(<<"codecs">>, [SrvOptions, Srv])}
                        ,{<<"Bypass-Media">>, BypassMedia}

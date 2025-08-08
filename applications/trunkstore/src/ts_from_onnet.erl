@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc Calls coming from known clients, getting settings for caller-id and
 %%% what not, and sending the calls offnet.
 %%%
@@ -8,6 +8,7 @@
 %%% ts_from_offnet.
 %%%
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(ts_from_onnet).
@@ -57,7 +58,7 @@ maybe_onnet_data(State) ->
                     _ -> kz_json:new()
                 end
         end,
-    ServerOptions = kz_json:get_value([<<"server">>, <<"options">>], Options, kz_json:new()),
+    ServerOptions = server_options(Options),
     case knm_converters:is_reconcilable(ToDID)
         orelse knm_converters:classify(ToDID) =:= <<"emergency">>
         orelse kz_json:is_true(<<"hunt_non_reconcilable">>, ServerOptions, 'false')
@@ -70,20 +71,29 @@ maybe_onnet_data(State) ->
     end.
 
 onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
-    DIDOptions = kz_json:get_value(<<"DID_Opts">>, Options, kz_json:new()),
+    DID_Opts = kz_json:get_value(<<"DID_Opts">>, Options, kz_json:new()),
+    %% DID_Opts won't have options IF the CLI DID sent from the PBX wasn't an exact +E.164 format
+    %% match (i.e. missing the plus).
+    %% Example: call comes in from PBX with CLI of "8883334444". The DID in Kazoo on the Trunkstore
+    %% doc is "+18883334444", so although the call is already authorized and will work, DID_Opts
+    %% will be empty, since the CouchDB lookup doesn't do any normalization and just looks up the
+    %% DID as-is to populate the DID_Opts object inside the Options object.
+    %% So, we first normalize the FromUser here into a proper e164 DID, and then fetch the
+    %% normalized DID inside the object Options.server.DIDs from the Trunkstore doc, which contains
+    %% all the DIDs for the Trunkstore instance, and we merge that with DID_Opts:
+    FromDID = knm_converters:normalize(FromUser, AccountId),
+
+    DIDOptions = kz_json:merge(DID_Opts, kz_json:get_json_value([<<"server">>, <<"DIDs">>, FromDID], Options, kz_json:new())),
     AccountOptions = kz_json:get_value(<<"account">>, Options, kz_json:new()),
-    ServerOptions = kz_json:get_value([<<"server">>, <<"options">>], Options, kz_json:new()),
+    ServerOptions = server_options(Options),
     RouteReq = ts_callflow:get_request_data(State),
     CustomSIPHeaders = ts_callflow:get_custom_sip_headers(State),
-    MediaHandling = ts_util:get_media_handling([kz_json:get_value(<<"media_handling">>, DIDOptions)
-                                               ,kz_json:get_value(<<"media_handling">>, ServerOptions)
-                                               ,kz_json:get_value(<<"media_handling">>, AccountOptions)
-                                               ]),
-    SIPHeaders = ts_util:sip_headers([kz_json:get_value(<<"sip_headers">>, DIDOptions)
-                                     ,kz_json:get_value(<<"sip_headers">>, ServerOptions)
-                                     ,kz_json:get_value(<<"sip_headers">>, AccountOptions)
-                                     ,CustomSIPHeaders
-                                     ]),
+
+    SIPHeadersPre = ts_util:sip_headers([kz_json:get_value(<<"sip_headers">>, DIDOptions)
+                                        ,kz_json:get_value(<<"sip_headers">>, ServerOptions)
+                                        ,kz_json:get_value(<<"sip_headers">>, AccountOptions)
+                                        ,CustomSIPHeaders
+                                        ]),
 
     EmergencyCallerID =
         case ts_util:caller_id([kz_json:get_value(<<"emergency_caller_id">>, DIDOptions)
@@ -129,15 +139,48 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                 ]
         end,
 
+    CIDNumber = props:get_value(?KEY_OUTBOUND_CALLER_ID_NUMBER, CallerID),
+    DIDAttributes = knm_phone_number:number_attributes(CIDNumber),
+    Realm = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Realm">>], RouteReq, <<>>),
+    SIPHeaders = ts_util:sip_headers([SIPHeadersPre
+                                     ,ts_util:attributes_header(CIDNumber, Realm, DIDAttributes) % maybe set attributes SIP header
+                                     ]),
+
+    %% set the DID options list in the state so that ts_callflow can set A-leg fax variables on the park command
+    DIDOptsList = kz_json:get_list_value(<<"options">>, DIDOptions, []),
+    UpdatedRouteReq = kz_json:set_values([{<<"DID-Options">>, DIDOptsList}
+                                         ,{<<"DID-Attributes">>, DIDAttributes}
+                                         ], RouteReq),
+    NewState = State#ts_callflow_state{route_req_jobj=UpdatedRouteReq},
+
+    IsFaxNumber = ts_util:is_fax_number(DIDOptsList, DIDAttributes),
+    DIDDerivedMediaHandling = ts_util:media_handling_number(DIDOptsList, DIDAttributes),
+    MediaHandling = ts_util:get_media_handling([kz_json:get_value(<<"media_handling">>, DIDOptions)
+                                               ,DIDDerivedMediaHandling %% Trunkstore DID media_handling above should take precedence
+                                               ,kz_json:get_value(<<"media_handling">>, ServerOptions)
+                                               ,kz_json:get_value(<<"media_handling">>, AccountOptions)
+                                               ]),
+    BridgeFaxVars = case IsFaxNumber of
+                        'true' ->
+                            [{<<"Enable-T38-Fax">>, 'true'}  %% Enable-T38-Fax sets FS variable
+                            ,{<<"Fax-T38-Enabled">>, 'true'} %% Fax-T38-Enabled is used for kapi_offnet_resource:get_outbound_t38_settings
+                            ];
+                        _ -> []
+                    end,
+
+    Flags = get_flags(IsFaxNumber, DIDOptions, ServerOptions, AccountOptions, State),
+
+    %% Contrary to what it may appear, this is the bridge command here, NOT the park command, which is created in ts_callflow.erl:
     Command = [KV
                || {_,V}=KV <- CallerID
                       ++ EmergencyCallerID
+                      ++ BridgeFaxVars
                       ++ [{?KEY_CALL_ID, CallID}
                          ,{?KEY_RESOURCE_TYPE, <<"audio">>}
                          ,{?KEY_TO_DID, ToDID}
                          ,{?KEY_ACCOUNT_ID, AccountId}
                          ,{?KEY_APPLICATION_NAME, <<"bridge">>}
-                         ,{?KEY_FLAGS, get_flags(DIDOptions, ServerOptions, AccountOptions, State)}
+                         ,{?KEY_FLAGS, Flags}
                          ,{?KEY_MEDIA, MediaHandling}
                          ,{?KEY_TIMEOUT, kz_json:get_value(<<"timeout">>, DIDOptions)}
                          ,{?KEY_IGNORE_EARLY_MEDIA, kz_json:get_value(<<"ignore_early_media">>, DIDOptions)}
@@ -156,7 +199,7 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
               ],
     try
         lager:debug("we know how to route this call, sending park route response"),
-        send_park(State, Command)
+        send_park(NewState, Command)
     catch
         _A:_B ->
             ST = erlang:get_stacktrace(),
@@ -167,6 +210,12 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
         ts_callflow:cleanup_amqp(State)
     end.
 
+-spec server_options(kz_json:object()) -> kz_json:object().
+server_options(Options) ->
+    %% Server options like prefixes or media handling can be in a different object
+    %% depending on whether or not outbound CLI DID is found:
+    kz_json:get_first_defined([[<<"server">>, <<"options">>], <<"server">>], Options, kz_json:new()).
+
 -spec get_flags(kz_json:object(), kz_json:object(), kz_json:object(), ts_callflow:state()) -> kz_term:ne_binaries().
 get_flags(DIDOptions, ServerOptions, AccountOptions, State) ->
     Call = ts_callflow:get_kapps_call(State),
@@ -175,6 +224,13 @@ get_flags(DIDOptions, ServerOptions, AccountOptions, State) ->
                ,fun get_offnet_dynamic_flags/5
                ],
     lists:foldl(fun(F, A) -> F(DIDOptions, ServerOptions, AccountOptions, Call, A) end, Flags, Routines).
+
+-spec get_flags(boolean(), kz_json:object(), kz_json:object(), kz_json:object(), ts_callflow:state()) -> kz_term:ne_binaries().
+get_flags(_FaxNumber='false', DIDOptions, ServerOptions, AccountOptions, State) ->
+    get_flags(DIDOptions, ServerOptions, AccountOptions, State);
+get_flags(_FaxNumber='true', DIDOptions, ServerOptions, AccountOptions, State) ->
+    lager:debug("trunkstore source DID is a fax number"),
+    [<<"fax">>] ++ get_flags(DIDOptions, ServerOptions, AccountOptions, State).
 
 -spec get_offnet_flags(kz_json:object(), kz_json:object(), kz_json:object(), kapps_call:call(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 get_offnet_flags(DIDOptions, ServerOptions, AccountOptions, _, Flags) ->

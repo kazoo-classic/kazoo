@@ -25,6 +25,11 @@
             "description": "kazoo_endpoint default ignore completed elsewhere",
             "type": "boolean"
         },
+        "number_attributes_lookup": {
+            "default": false,
+            "description": "use phone number attributes in call processing",
+            "type": "boolean"
+        },
         "restrict_to_known_types": {
             "default": false,
             "description": "kazoo_endpoint restrict to known types",

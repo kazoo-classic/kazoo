@@ -49,7 +49,7 @@ maybe_relay_request(JObj) ->
                        ,fun maybe_set_transfer_media/2
                        ,fun maybe_lookup_cnam/2
                        ,fun maybe_add_prepend/2
-                       ,fun maybe_block_call/2
+                       ,fun maybe_block_call/2 % if not blocked here, relay_request/1 is called to send route request for this call
                        ,fun maybe_transition_port_in/2
                        ],
             _ = lists:foldl(fun(F, J) -> F(NumberProps, J) end

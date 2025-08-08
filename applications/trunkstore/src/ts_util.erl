@@ -4,8 +4,8 @@
 %%% Some functions make use of the inet_parse module. This is an undocumented
 %%% module, and as such the functions may change or be removed.
 %%%
-%%%
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(ts_util).
@@ -38,6 +38,10 @@
 -export([maybe_ensure_cid_valid/5
         ,maybe_restrict_call/2
         ]).
+
+-export([is_fax_number/2]).
+-export([media_handling_number/2]).
+-export([attributes_header/3, attributes_header/4]).
 
 -include("ts.hrl").
 -include_lib("kernel/include/inet.hrl"). %% for hostent record, used in find_ip/1
@@ -333,6 +337,7 @@ offnet_flags([]) -> 'undefined';
 offnet_flags([H|_]) when is_list(H) -> H;
 offnet_flags([_|T]) -> offnet_flags(T).
 
+%% simple_extract/1 returns the first non-empty and non-undefined binary or kz_json:object it finds in a list.
 -spec simple_extract(kz_json:objects() | kz_term:api_binaries()) ->
           kz_json:object() | kz_term:api_binary().
 simple_extract([]) -> 'undefined';
@@ -415,3 +420,46 @@ maybe_restrict_call(#ts_callflow_state{acctid=AccountId
     {'ok', Opts} = lookup_user_flags(Username, Realm, AccountId),
     lager:debug("Trunkstore lookup_user_flag results: ~p", [Opts]),
     <<"deny">> =:= kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], Opts).
+
+-spec is_fax_number(kz_term:binaries() | 'undefined', kz_json:object()) -> boolean().
+is_fax_number(DIDOptsList, DIDAttributes) when is_list(DIDOptsList) ->
+    case kz_json:get_ne_binary_value(<<"traffic">>, DIDAttributes) of
+        <<"fax">> -> 'true';
+        _ -> lists:member(<<"fax">>, DIDOptsList)
+    end;
+is_fax_number('undefined', DIDAttributes) ->
+    is_fax_number([], DIDAttributes).
+
+-spec media_handling_number(kz_term:binaries() | boolean(), kz_json:object() | kz_term:api_binary()) -> kz_term:api_ne_binary().
+media_handling_number(DIDOptsList, DIDAttributes) when is_list(DIDOptsList) ->
+    MediaCheckFunc =
+        fun(X) -> X == <<"fax">>
+            orelse
+            X == <<"process_media">>
+        end,
+    MediaOptions = lists:any(MediaCheckFunc, DIDOptsList),
+
+    NumberTrafficType = kz_json:get_ne_binary_value(<<"traffic">>, DIDAttributes),
+    media_handling_number(MediaOptions, NumberTrafficType);
+media_handling_number('true', _) -> <<"process">>;
+media_handling_number(_, <<"fax">>) -> <<"process">>;
+media_handling_number(_, <<"process_media">>) -> <<"process">>;
+media_handling_number(_, _) -> 'undefined'.
+
+%% maybe create a SIP header (usually Call-Info) that includes number atttribute parameters:
+-spec attributes_header(kz_term:binary(), kz_term:binary(), kz_json:object()) -> kz_json:object().
+attributes_header(Number, Realm, DIDAttributes) ->
+    AttrHdrName = kapps_config:get_ne_binary(?CONFIG_CAT, <<"number_attributes_header">>),
+    attributes_header(AttrHdrName, Number, Realm, DIDAttributes).
+
+-spec attributes_header(kz_term:api_binary(), kz_term:binary(), kz_term:binary(), kz_json:object()) -> kz_json:object().
+attributes_header('undefined',_,_,_) -> kz_json:new();
+attributes_header(<<>>,_,_,_) -> kz_json:new();
+attributes_header(_,'undefined',_,_) -> kz_json:new();
+attributes_header(HeaderName, Number, Realm, NumberAttributes) when is_binary(HeaderName) ->
+    Group = kz_json:get_ne_binary_value(<<"group">>, NumberAttributes),
+    Class = kz_json:get_ne_binary_value(<<"class">>, NumberAttributes),
+    Traffic = kz_json:get_ne_binary_value(<<"traffic">>, NumberAttributes),
+    Header = <<"<sip:", Number/binary, "@", Realm/binary, ">;group=", Group/binary, ";class=", Class/binary, ";traffic=", Traffic/binary>>,
+    %kz_json:set_value(<<"Call-Info">>, Header, kz_json:new());
+    kz_json:set_value(HeaderName, Header, kz_json:new()).

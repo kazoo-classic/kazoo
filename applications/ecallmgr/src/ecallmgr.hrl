@@ -237,6 +237,7 @@
                               ,{<<"Eavesdrop-Group-ID">>, <<"eavesdrop_group">>}
                               ,{<<"Enable-T38-Fax">>, <<"fax_enable_t38">>}
                               ,{<<"Enable-T38-Fax-Request">>, <<"fax_enable_t38_request">>}
+                              ,{<<"Enable-T38-Gateway">>, <<"t38_gateway">>}
                               ,{<<"Enable-T38-Passthrough">>, <<"t38_passthru">>}
                               ,{<<"Endpoint-Delay">>, <<"leg_delay_start">>}
                               ,{<<"Endpoint-Progress-Timeout">>, <<"leg_progress_timeout">>}
@@ -310,6 +311,8 @@
                               ,{<<"execute_on_answer">>, <<"execute_on_answer">>}
                               ,{<<"failure_causes">>, <<"failure_causes">>}
                               ,{<<"fax_enable_t38">>, <<"fax_enable_t38">>}
+                              ,{<<"t38_gateway">>, <<"t38_gateway">>}
+                              ,{<<"t38_passthru">>, <<"t38_passthru">>}
                               ,{<<"fax_enable_t38_request">>, <<"fax_enable_t38_request">>}
                               ,{<<"hangup_after_pickup">>, <<"hangup_after_bridge">>}
                               ,{<<"intercept_unanswered_only">>, <<"intercept_unanswered_only">>}
