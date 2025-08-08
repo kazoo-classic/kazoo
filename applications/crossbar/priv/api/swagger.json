@@ -30856,6 +30856,11 @@
                     "description": "callflow mwi send unsolicited updates",
                     "type": "boolean"
                 },
+                "number_attributes_lookup": {
+                    "default": false,
+                    "description": "use phone number attributes in call processing",
+                    "type": "boolean"
+                },
                 "operator_key": {
                     "default": "0",
                     "description": "callflow operator key",
@@ -33836,6 +33841,11 @@
                 "default_ignore_completed_elsewhere": {
                     "default": true,
                     "description": "kazoo_endpoint default ignore completed elsewhere",
+                    "type": "boolean"
+                },
+                "number_attributes_lookup": {
+                    "default": false,
+                    "description": "use phone number attributes in call processing",
                     "type": "boolean"
                 },
                 "restrict_to_known_types": {

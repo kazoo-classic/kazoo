@@ -55,6 +55,7 @@
         ,ringback/1, ringback/2
         ,timeout/1, timeout/2
         ,t38_enabled/1, t38_enabled/2
+        ,t38_key/0
         ,to_did/1, to_did/2
         ,denied_call_restrictions/1, denied_call_restrictions/2
         ,outbound_actions/1, outbound_actions/2
@@ -633,6 +634,9 @@ t38_enabled(Req) ->
 -spec t38_enabled(req(), Default) -> boolean() | Default.
 t38_enabled(?REQ_TYPE(JObj), Default) ->
     kz_json:is_true(?KEY_T38_ENABLED, JObj, Default).
+
+-spec t38_key() -> kz_term:ne_binary().
+t38_key() -> ?KEY_T38_ENABLED.
 
 -spec msg_id(req()) -> kz_term:api_binary().
 msg_id(?REQ_TYPE(JObj)) ->

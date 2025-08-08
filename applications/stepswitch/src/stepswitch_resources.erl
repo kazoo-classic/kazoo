@@ -363,6 +363,7 @@ find_account_id(Realm) ->
           {'ok', kz_term:proplist()} |
           {'error', 'not_found'}.
 maybe_find_global(IP, Port, Realm) ->
+    lager:debug("searching for global resources to match ~s:~p with realm: ~s", [IP, Port, Realm]),
     search_resources(IP, Port, Realm, get()).
 
 -spec maybe_find_local(kz_term:api_binary(), kz_term:api_integer(), kz_term:api_binary(), kz_term:api_binary()) ->
@@ -370,13 +371,14 @@ maybe_find_global(IP, Port, Realm) ->
           {'error', 'not_found'}.
 maybe_find_local(_, _, _, 'undefined') -> {'error', 'not_found'};
 maybe_find_local(IP, Port, Realm, AccountId) ->
+    lager:debug("searching for local resources in ~p to match ~s:~p with realm: ~s", [AccountId, IP, Port, Realm]),
     search_resources(IP, Port, Realm, get(AccountId)).
 
 -spec search_resources(kz_term:api_binary(), kz_term:api_integer(), kz_term:api_binary(), resources()) ->
           {'ok', kz_term:proplist()} |
           {'error', 'not_found'}.
 search_resources(_IP, _Port, _Realm, []) ->
-    lager:debug("failed to find matching resource for ~s:~p(~s)", [_IP, _Port, _Realm]),
+    lager:debug("failed to find matching resource for ~s:~p with realm: ~s", [_IP, _Port, _Realm]),
     {'error', 'not_found'};
 search_resources(IP, Port, Realm, [#resrc{id=Id
                                          ,gateways=Gateways
@@ -400,6 +402,11 @@ search_resources(IP, Port, Realm, [#resrc{id=Id
                       ,{'password', Password}
                       ,{'fax_option', FaxOption}
                       ]),
+            ResourceType = case Global of
+                               'false' -> <<"account">>;
+                               _ -> <<"global">>
+                           end,
+            lager:info("found matching ~s resource ~s for ~s:~p with realm: ~s", [ResourceType, Id, IP, Port, Realm]),
             {'ok', Props}
     end.
 

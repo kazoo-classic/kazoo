@@ -48,6 +48,8 @@
 
 -export([token_check/2]).
 
+-export([determine_t38/1, determine_t38/2]).
+
 -include("callflow.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
@@ -777,3 +779,23 @@ normalize_capture_group(CaptureGroup, <<AccountId/binary>>) ->
     knm_converters:normalize(CaptureGroup, AccountId);
 normalize_capture_group(CaptureGroup, Call) ->
     normalize_capture_group(CaptureGroup, kapps_call:account_id(Call)).
+
+%%------------------------------------------------------------------------------
+%% @doc Check if number attributes lookup is enabled for callflows, and if so,
+%% use it in addition to device T.38 setting (media.fax_option) to decide if we
+%% enable T.38 variables on this call.
+%% @end
+%%------------------------------------------------------------------------------
+-spec determine_t38(kapps_call:call()) -> boolean().
+determine_t38(Call) ->
+    determine_t38(Call, kz_json:new()).
+
+-spec determine_t38(kapps_call:call(), kz_json:object()) -> boolean().
+determine_t38(Call, JObj) -> %% JObj is usually a device but not necessarily
+    FaxOption = kz_json:is_true([<<"media">>, <<"fax_option">>], JObj),
+    CLINumber = kapps_call:caller_id_number(Call),
+    case {FaxOption, kapps_config:get_is_true(?CF_CONFIG_CAT, <<"number_attributes_lookup">>, 'false')} of
+        {'true', _} -> 'true';
+        {_, 'true'} -> knm_phone_number:is_fax_number(CLINumber);
+        {_, _} -> 'false'
+    end.

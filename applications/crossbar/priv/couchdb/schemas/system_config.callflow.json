@@ -70,6 +70,11 @@
             "description": "callflow mwi send unsolicited updates",
             "type": "boolean"
         },
+        "number_attributes_lookup": {
+            "default": false,
+            "description": "use phone number attributes in call processing",
+            "type": "boolean"
+        },
         "operator_key": {
             "default": "0",
             "description": "callflow operator key",

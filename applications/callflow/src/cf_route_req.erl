@@ -206,25 +206,47 @@ send_route_response(Flow, RouteReq, Call) ->
             lager:info("callflow didn't received a route win, exiting : ~p", [_E])
     end.
 
+-spec response_ccvs(kapps_call:call()) -> kz_json:object().
 response_ccvs(Call) ->
     response_ccvs(Call, kapps_call:authorizing_id(Call), kapps_call:authorizing_type(Call)).
 
+-spec response_ccvs(kapps_call:call(), kz_term:api_binary(), kz_term:api_binary()) -> kz_json:object().
 response_ccvs(Call, DeviceId, <<"device">>) ->
     response_ccvs_from_device(Call, kzd_devices:fetch(kapps_call:account_db(Call), DeviceId));
 response_ccvs(Call, _Id, _Type) ->
     lager:debug("ignoring authz type: ~s id: ~s", [_Type, _Id]),
     default_response_ccvs(Call).
 
+%%------------------------------------------------------------------------------
+%% @doc In response_ccvs_from_device/2 we get the T.38 setting for this device,
+%% which is needed for the device to be able to negotiate T.38 with FreeSwitch
+%% when making an outbound fax call. Otherwise, Ecallmanager will only set the
+%% fax_enable_t38 variable on the outbound B-leg on the carrier side, and will
+%% only allow T.38 from the device to Kazoo if T.38 passthrough is enabled in
+%% FS config, AND T.38 can be negotiated on the outbound B-leg. Without the
+%% fax_enable_t38 variable being set on the A-leg, Freeswitch will respond to
+%% a T.38 re-invite from the device with a 488 Not Acceptable.
+%% @end
+%%------------------------------------------------------------------------------
+-spec response_ccvs_from_device(kapps_call:call(), {'ok', kzd_devices:doc()} | {'error', any()}) -> kz_json:object().
 response_ccvs_from_device(Call, {'ok', DeviceJObj}) ->
-    kz_json:set_values([{<<"Presence-ID">>, kzd_devices:calculate_presence_id(DeviceJObj)}]
+    T38 = cf_util:determine_t38(Call, DeviceJObj),
+    kz_json:set_values([{<<"Presence-ID">>, kzd_devices:calculate_presence_id(DeviceJObj)}
+                       ,{<<"Enable-T38-Fax">>, T38}    %% sets Freeswitch variable fax_enable_t38 on A-leg
+                       ]
                       ,default_response_ccvs(Call)
                       );
 response_ccvs_from_device(Call, _E) ->
-    default_response_ccvs(Call).
+    T38 = cf_util:determine_t38(Call),
+    %% Even if we don't have a device object, we can still check the number to see if we should enable T.38:
+    kz_json:set_values([{<<"Enable-T38-Fax">>, T38}
+                       ]
+                      ,default_response_ccvs(Call)
+                      ).
 
+-spec default_response_ccvs(kapps_call:call()) -> kz_json:object().
 default_response_ccvs(Call) ->
     kapps_call:custom_channel_vars(Call).
-
 
 -spec wait_for_running(kapps_call:call(), 0..5) -> 'ok'.
 wait_for_running(_Call, 5) ->
