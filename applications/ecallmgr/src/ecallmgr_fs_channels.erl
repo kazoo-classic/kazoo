@@ -208,6 +208,12 @@ updates(UUID, Updates) ->
     lager:debug("updating channel properties: ~p", [Updates]),
     gen_server:cast(?SERVER, {'channel_updates', UUID, Updates}).
 
+-spec format_updates(channel_updates()) -> kz_term:ne_binary().
+format_updates(Updates) ->
+    Fields = record_info('fields', 'channel'),
+    Out = [io_lib:format("~s=~p", [lists:nth(Field - 1, Fields), V]) || {Field, V} <- Updates],
+    kz_binary:join(Out, <<",">>).
+
 -spec count() -> non_neg_integer().
 count() -> ets:info(?CHANNELS_TBL, 'size').
 
@@ -416,8 +422,10 @@ handle_call(_, _, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> {'noreply', state()}.
-handle_cast({'channel_updates', UUID, Update}, State) ->
-    ets:update_element(?CHANNELS_TBL, UUID, Update),
+handle_cast({'channel_updates', UUID, Updates}, State) ->
+    kz_util:put_callid(UUID),
+    lager:debug("updating channel properties: ~s", [format_updates(Updates)]),
+    ets:update_element(?CHANNELS_TBL, UUID, Updates),
     {'noreply', State};
 handle_cast({'destroy_channel', UUID, Node}, State) ->
     kz_util:put_callid(UUID),
