@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc Call-related messages, like switch events, status requests, etc AMQP API.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kapi_call).
@@ -13,6 +14,7 @@
 
 -export([channel_status_req/1, channel_status_req_v/1]).
 -export([channel_status_resp/1, channel_status_resp_v/1]).
+-export([channel_update_req/1, channel_update_req_v/1]).
 
 -export([query_auth_id_req/1, query_auth_id_req_v/1]).
 -export([query_auth_id_resp/1, query_auth_id_resp_v/1]).
@@ -36,6 +38,7 @@
 
 -export([publish_channel_status_req/1 ,publish_channel_status_req/2, publish_channel_status_req/3]).
 -export([publish_channel_status_resp/2, publish_channel_status_resp/3]).
+-export([publish_channel_update_req/1 ,publish_channel_update_req/2, publish_channel_update_req/3]).
 
 -export([publish_query_auth_id_req/1 ,publish_query_auth_id_req/2, publish_query_auth_id_req/3]).
 -export([publish_query_auth_id_resp/2, publish_query_auth_id_resp/3]).
@@ -115,6 +118,24 @@ channel_status_resp(JObj) -> channel_status_resp(kz_json:to_proplist(JObj)).
 channel_status_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CHANNEL_STATUS_RESP_HEADERS, ?CHANNEL_STATUS_RESP_VALUES, ?CHANNEL_STATUS_RESP_TYPES);
 channel_status_resp_v(JObj) -> channel_status_resp_v(kz_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
+%% @doc Update the status of a channel.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
+%% @end
+%%------------------------------------------------------------------------------
+-spec channel_update_req(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
+channel_update_req(Prop) when is_list(Prop) ->
+    case channel_update_req_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?CHANNEL_UPDATE_REQ_HEADERS, ?OPTIONAL_CHANNEL_UPDATE_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for channel update req"}
+    end;
+channel_update_req(JObj) -> channel_update_req(kz_json:to_proplist(JObj)).
+
+-spec channel_update_req_v(kz_term:api_terms()) -> boolean().
+channel_update_req_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?CHANNEL_UPDATE_REQ_HEADERS, ?CHANNEL_UPDATE_REQ_VALUES, ?CHANNEL_UPDATE_REQ_TYPES);
+channel_update_req_v(JObj) -> channel_update_req_v(kz_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
 %% @doc Inquire into the status of a call.
@@ -377,6 +398,19 @@ publish_channel_status_resp(RespQ, JObj) ->
 publish_channel_status_resp(RespQ, Resp, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?CHANNEL_STATUS_RESP_VALUES, fun channel_status_resp/1),
     kz_amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+-spec publish_channel_update_req(kz_term:api_terms()) -> 'ok'.
+publish_channel_update_req(API) ->
+    publish_channel_update_req(API, kz_api:call_id(API)).
+
+-spec publish_channel_update_req(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
+publish_channel_update_req(API, CallId) ->
+    publish_channel_update_req(API, CallId, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_channel_update_req(kz_term:api_terms(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+publish_channel_update_req(Req, CallId, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CHANNEL_UPDATE_REQ_VALUES, fun channel_update_req/1),
+    kz_amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('status_req', CallId), Payload, ContentType).
 
 -spec publish_query_auth_id_req(kz_term:api_terms()) -> 'ok'.
 publish_query_auth_id_req(API) ->

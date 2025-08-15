@@ -125,6 +125,14 @@
                                    ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
                                    ]).
 
+%% Channel Update Request
+-define(CHANNEL_UPDATE_REQ_HEADERS, [<<"Call-ID">>, <<"Updates">>]).
+-define(OPTIONAL_CHANNEL_UPDATE_REQ_HEADERS, []).
+-define(CHANNEL_UPDATE_REQ_VALUES, [{<<"Event-Category">>, <<"call_event">>}
+                                   ,{<<"Event-Name">>, <<"channel_update_req">>}
+                                   ]).
+-define(CHANNEL_UPDATE_REQ_TYPES, [{<<"Updates">>, fun kz_json:is_json_object/1}]).
+
 %% Query Auth ID Req
 -define(QUERY_AUTH_ID_REQ_HEADERS, [<<"Auth-ID">>]).
 -define(OPTIONAL_QUERY_AUTH_ID_REQ_HEADERS, []).

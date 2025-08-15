@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2022, 2600Hz
+%%% @copyright (C) 2013-2025, 2600Hz
 %%% @doc Track the FreeSWITCH channel information, and provide accessors
 %%% @author James Aimonetti
 %%% @author Karl Anderson
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_channel).
@@ -25,6 +26,8 @@
         ,get_other_leg/2
         ,maybe_update_interaction_id/2
         ,new/2
+        ,update_channel/2
+        ,update_channel/3
         ]).
 -export([to_json/1
         ,to_props/1
@@ -358,6 +361,44 @@ channel_cavs(#channel{cavs='undefined'}) -> [];
 channel_cavs(#channel{cavs=CAVs}) -> CAVs;
 channel_cavs([_|_]=Props) -> props:get_value(<<"custom_application_vars">>, Props, []);
 channel_cavs(JObj) -> kz_json:get_list_value(<<"custom_application_vars">>, JObj, []).
+
+%%%-----------------------------------------------------------------------------
+%%% @doc Update channel properties (singular or a list of them).
+%%% @end
+%%%-----------------------------------------------------------------------------
+-spec update_channel(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
+update_channel(_UUID, []) -> 'ok';
+update_channel(UUID, [{ChannelProperty, Value}|Rest]) ->
+    update_channel(UUID, ChannelProperty, Value),
+    update_channel(UUID, Rest).
+
+-spec update_channel(kz_term:ne_binary(), kz_term:ne_binary() | atom() | pos_integer(), kz_term:ne_binary()) -> 'ok'.
+update_channel(UUID, ChannelProperty, Value) ->
+    Key = case find_channel_position(ChannelProperty) of
+              'not_found' -> lager:info("invalid channel property supplied for update; ignoring", []),
+                             'ok';
+              _KeyPosition -> _KeyPosition
+          end,
+    ecallmgr_fs_channels:update(UUID, Key, Value).
+
+%%%-----------------------------------------------------------------------------
+%%% @doc A #channel is a record, so we need to take the property supplied as a
+%%% binary and look up it's corresponding atom field label in the record, and
+%%% thus its corresponding index position in the record (tuple), and do the
+%%% requested update on that key/index/position.
+%%%-----------------------------------------------------------------------------
+-spec find_channel_position(kz_term:text()) -> pos_integer() | 'not_found'.
+find_channel_position(Property) ->
+    NameAtom = try kz_term:to_atom(Property) %% the try/catch makes sure an invalid property doesn't crash the process
+               catch _:_ -> 'not_found'
+               end,
+    RecordFields = record_info('fields', 'channel'),
+    find_channel_position(NameAtom, RecordFields, 2). %% the first tuple position is the record name, so 2 is the first field
+
+-spec find_channel_position(atom(), kz_term:atoms(), integer()) -> integer() | 'not_found'.
+find_channel_position(_, [], _) -> 'not_found';
+find_channel_position(Name, [Name | _], Position) -> Position;
+find_channel_position(Name, [_Else | Remaining], Position) -> find_channel_position(Name, Remaining, Position + 1).
 
 %%%=============================================================================
 %%% gen_server callbacks
