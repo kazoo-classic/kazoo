@@ -36,6 +36,7 @@
 -export([handle_query_account_channels/2]).
 -export([handle_query_channels/2]).
 -export([handle_channel_status/2]).
+-export([handle_channel_update/2]).
 
 -export([has_channels_for_owner/1]).
 
@@ -66,6 +67,9 @@
                      }
                     ,{{?MODULE, 'handle_channel_status'}
                      ,[{<<"call_event">>, <<"channel_status_req">>}]
+                     }
+                    ,{{?MODULE, 'handle_channel_update'}
+                     ,[{<<"call_event">>, <<"channel_update_req">>}]
                      }
                     ]).
 -define(BINDINGS, [{'call', [{'restrict_to', ['status_req']}
@@ -205,7 +209,6 @@ update(UUID, Key, Value) ->
 
 -spec updates(kz_term:ne_binary(), channel_updates()) -> 'ok'.
 updates(UUID, Updates) ->
-    lager:debug("updating channel properties: ~p", [Updates]),
     gen_server:cast(?SERVER, {'channel_updates', UUID, Updates}).
 
 -spec format_updates(channel_updates()) -> kz_term:ne_binary().
@@ -375,6 +378,28 @@ send_empty_channel_resp(CallId, JObj) ->
            ],
     kapi_call:publish_channel_status_resp(kz_api:server_id(JObj), Resp).
 
+%%------------------------------------------------------------------------------
+%% @doc Update the status of a channel
+%% @end
+%%------------------------------------------------------------------------------
+-spec handle_channel_update(kz_json:object(), kz_term:proplist()) -> 'ok'.
+handle_channel_update(JObj, _Props) ->
+    'true' = kapi_call:channel_update_req_v(JObj),
+    _ = kz_util:put_callid(JObj),
+    CallId = kz_api:call_id(JObj),
+    lager:debug("channel update request received for ~s", [CallId]),
+    case ecallmgr_fs_channel:fetch(CallId) of
+        {'error', 'not_found'} ->
+            lager:debug("channel ~s not found on this ~s", [CallId, ?APP_NAME]),
+            ok;
+        {'ok', Channel} ->
+            Node = kz_json:get_binary_value(<<"node">>, Channel),
+            [_, Hostname] = binary:split(Node, <<"@">>),
+            lager:debug("channel is on ~s, attempting to update properties", [Hostname]),
+            Updates = kz_json:to_proplist(kz_json:get_json_value(<<"Updates">>, JObj, kz_json:new())),
+            ecallmgr_fs_channel:update_channel(CallId, Updates)
+    end.
+
 %%%=============================================================================
 %%% gen_server callbacks
 %%%=============================================================================
@@ -411,8 +436,9 @@ start_cleanup_ref() ->
 handle_call({'new_channel', Channel}, _, State) ->
     ets:insert(?CHANNELS_TBL, Channel),
     {'reply', 'ok', State};
-handle_call({'channel_updates', UUID, Update}, _, State) ->
-    ets:update_element(?CHANNELS_TBL, UUID, Update),
+handle_call({'channel_updates', UUID, Updates}, _, State) ->
+    lager:debug("updating channel properties: ~s", [format_updates(Updates)]),
+    ets:update_element(?CHANNELS_TBL, UUID, Updates),
     {'reply', 'ok', State};
 handle_call(_, _, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
