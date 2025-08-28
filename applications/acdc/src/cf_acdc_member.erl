@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2020, 2600Hz
+%%% @copyright (C) 2012-2025, 2600Hz
 %%% @doc data: {
 %%%   "id":"queue id"
 %%%  }
@@ -13,6 +13,8 @@
 %%% @author James Aimonetti
 %%% @author KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
 %%% @author Daniel Finke
+%%% @author Ruel Tmeizeh (RuhNet https://ruhnet.co)
+%%%
 %%% This Source Code Form is subject to the terms of the Mozilla Public
 %%% License, v. 2.0. If a copy of the MPL was not distributed with this
 %%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -71,7 +73,7 @@ handle(Data, Call) ->
     lager:info("loading ACDc queue: ~s", [QueueId]),
     {'ok', QueueJObj} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call), QueueId),
 
-    MaxWait = max_wait(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
+    MaxWait = max_wait(kz_json:get_ne_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
     MaxQueueSize = max_queue_size(kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 'undefined')),
 
     Call1 = maybe_enable_callback(
@@ -437,7 +439,7 @@ is_queue_full(MaxQueueSize, CurrQueueSize) -> CurrQueueSize >= MaxQueueSize.
 
 -spec current_queue_size(kz_term:ne_binary(), kz_term:ne_binary()) -> integer() | 'undefined'.
 current_queue_size(AccountId, QueueId) ->
-    [MGT] = kz_config:get(<<"amqp">>, <<"mgt_url">>, [?DEFAULT_AMQP_MGT_URL]),
+    MGT = get_amqp_mgmt_url(),
     URL = hackney_url:make_url(MGT
                               ,<<"/api/queues/%2F/acdc.queue."
                                 ,AccountId/binary
@@ -445,6 +447,7 @@ current_queue_size(AccountId, QueueId) ->
                                 ,QueueId/binary>>
                               ,[{<<"columns">>, <<"messages">>}]),
     Headers = [{<<"Content-Type">>, <<"application/json">>}],
+    lager:debug("querying RabbitMQ management API for queue size: ~s", [kz_util:sanitize_url(URL)]),
     case hackney:request('get', URL, Headers, [], []) of
         {ok, _, _, ClientRef} ->
             {ok, Body} = hackney:body(ClientRef),
@@ -454,6 +457,22 @@ current_queue_size(AccountId, QueueId) ->
             lager:warning("rabbitMQ Management plugin problem, check that 'rabbitmq_management' is enabled in /etc/kazoo/rabbitmq/enabled_plugins"),
             'undefined'
     end.
+
+-spec get_amqp_mgmt_url() -> kz_term:ne_binary().
+get_amqp_mgmt_url() ->
+    AutoURL = case amqp_uri_to_mgmt_url(kz_amqp_connections:primary_broker()) of
+                  'undefined' -> ?DEFAULT_AMQP_MGT_URL;
+                  _URL -> _URL
+              end,
+    [URL] = kz_config:get('zone', 'mgt_url', [AutoURL]),
+    URL.
+
+-spec amqp_uri_to_mgmt_url(kz_term:api_ne_binary()) -> kz_term:api_ne_binary().
+amqp_uri_to_mgmt_url(<<"amqp://", X/binary>>) ->
+    [UserPass, Y] = binary:split(X, <<"@">>), %% [<<"username:password">>, <<"hostname:port/path">>]
+    [Host, _] = binary:split(Y, <<":">>),     %% [<<"hostname">>, <<"port/path">>]
+    <<"http://", UserPass/binary, "@", Host/binary, ":15672">>;
+amqp_uri_to_mgmt_url(_) -> 'undefined'.
 
 -spec cancel_member_call(kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 cancel_member_call(Call, <<"timeout">>) ->
