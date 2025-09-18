@@ -10,8 +10,8 @@
             "description": "Capture groups?",
             "type": "array"
         },
-        "leg": {
-            "description": "Which leg to be the transfer leg",
+        "moh": {
+            "description": "MOH media ID for the b-leg, or indicator selection: silence, pulse, beep, beep{frequency}, tone_stream://{tones pattern}, shout://{mp3 stream}, local_stream://{local stream}",
             "type": "string"
         },
         "target": {

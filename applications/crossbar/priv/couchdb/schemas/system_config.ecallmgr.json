@@ -212,6 +212,14 @@
             "description": "ecallmgr freeswitch context",
             "type": "string"
         },
+        "fs_additional_events": {
+            "default": [],
+            "description": "a list of additional freeswitch events to bind/listen to (in addition to the defaults)",
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
         "fs_cmds": {
             "default": [
                 {
@@ -231,6 +239,11 @@
             "default": 5000,
             "description": "ecallmgr fs cmds wait in milliseconds",
             "type": "integer"
+        },
+        "fs_debug_events": {
+            "default": false,
+            "description": "log all events received from Freeswitch (warning: this will produce lots of log data)",
+            "type": "boolean"
         },
         "fs_node_uptime_s": {
             "default": 600,

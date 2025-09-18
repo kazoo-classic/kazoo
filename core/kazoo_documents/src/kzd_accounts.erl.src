@@ -48,7 +48,6 @@
 -export([topup_threshold/1, topup_threshold/2, set_topup_threshold/2]).
 -export([voicemail/1, voicemail/2, set_voicemail/2]).
 -export([voicemail_notify/1, voicemail_notify/2, set_voicemail_notify/2]).
--export([voicemail_notify_callback/1, voicemail_notify_callback/2, set_voicemail_notify_callback/2]).
 -export([zones/1, zones/2, set_zones/2]).
 
 
@@ -566,18 +565,6 @@ voicemail_notify(Doc, Default) ->
 -spec set_voicemail_notify(doc(), kz_json:object()) -> doc().
 set_voicemail_notify(Doc, VoicemailNotify) ->
     kz_json:set_value([<<"voicemail">>, <<"notify">>], VoicemailNotify, Doc).
-
--spec voicemail_notify_callback(doc()) -> kz_term:api_object().
-voicemail_notify_callback(Doc) ->
-    voicemail_notify_callback(Doc, 'undefined').
-
--spec voicemail_notify_callback(doc(), Default) -> kz_json:object() | Default.
-voicemail_notify_callback(Doc, Default) ->
-    kz_json:get_json_value([<<"voicemail">>, <<"notify">>, <<"callback">>], Doc, Default).
-
--spec set_voicemail_notify_callback(doc(), kz_json:object()) -> doc().
-set_voicemail_notify_callback(Doc, VoicemailNotifyCallback) ->
-    kz_json:set_value([<<"voicemail">>, <<"notify">>, <<"callback">>], VoicemailNotifyCallback, Doc).
 
 -spec zones(doc()) -> kz_term:api_object().
 zones(Doc) ->

@@ -1,14 +1,16 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2014-2022, 2600Hz
+%%% @copyright (C) 2014-2025, 2600Hz
 %%% @doc Transfers caller to the extension extracted in the regex
 %%% Data = {
 %%%   "takeback_dtmf":"2" // Transferor can cancel the transfer request
 %%%   ,"moh":"media_id" // custom music on hold
 %%%   ,"target":"1000" // extension/DID to transfer to
+%%%   ,"transfer_type":"attended" // "blind" is the default
 %%%   ,"ringback":"%(2000,4000,440,480)" // ringback to play to transferor
 %%% }
 %%%
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(konami_transfer).
@@ -99,17 +101,57 @@
                             ,<<"dialplan">>
                             ]).
 
--spec handle(kz_json:object(), kapps_call:call()) -> no_return().
+-spec handle(kz_json:object(), kapps_call:call()) -> no_return() | 'ok'.
 handle(Data, Call) ->
     kapps_call:put_callid(Call),
-    Transferor = kz_json:get_ne_binary_value(<<"dtmf_leg">>, Data),
+    case kz_json:get_ne_binary_value(<<"transfer_type">>, Data, <<"blind">>) of
+        <<"attended">> -> handle_attended(Data, Call);
+        _AnythingBlind -> handle_blind(Data, Call) % do blind by default
+    end.
+
+-spec determine_control_leg(kz_term:ne_binary() | kz_json:object(), kapps_call:call()) -> 'a' | 'b'.
+determine_control_leg(Transferor, Call) when is_binary(Transferor) ->
+    case Transferor =:= kapps_call:call_id(Call) of
+        'true' -> 'a';
+        'false' -> 'b'
+    end;
+determine_control_leg(Data, Call) ->
+    determine_control_leg(kz_json:get_first_defined([<<"transferor">>, <<"dtmf_leg">>], Data), Call).
+
+-spec handle_blind(kz_json:object(), kapps_call:call()) -> 'ok'.
+handle_blind(Data, Call) ->
+    Transferor = kz_json:get_first_defined([<<"transferor">>, <<"dtmf_leg">>], Data),
+    Transferee =
+        case kapps_call:call_id(Call) of
+            Transferor -> kapps_call:other_leg_call_id(Call); % if transferor is the local party that placed the call, the transferee is BLeg
+            CallId ->
+                konami_util:listen_on_other_leg(Call, ?TARGET_CALL_EVENTS),
+                CallId % if other side placed call (inbound) then transferee is the ALeg
+        end,
+
+    Target = get_extension(kz_json:get_first_defined([<<"captures">>, <<"target">>], Data)),
+    lager:info("transferor ~s initiating blind transfer of ~s to ~s", [Transferor, Target, Transferee]),
+
+    %% build and send transfer command:
+    ControlLeg = determine_control_leg(Data, Call),
+    lager:debug("control leg is the ~sleg", [ControlLeg]),
+
+    Command = case ControlLeg of
+                  'a' -> kapps_call_command:transfer_command(<<"blind">>, Target, <<"bleg">>, Call); %% transfer the b-leg
+                  'b' -> kapps_call_command:transfer_command(<<"blind">>, Target, Call)              %% transfer the a-leg
+              end,
+    kapps_call_command:send_command(Command, Call).
+
+-spec handle_attended(kz_json:object(), kapps_call:call()) -> no_return().
+handle_attended(Data, Call) ->
+    Transferor = kz_json:get_first_defined([<<"transferor">>, <<"dtmf_leg">>], Data),
     Transferee =
         case kapps_call:call_id(Call) of
             Transferor -> kapps_call:other_leg_call_id(Call);
             CallId -> CallId
         end,
 
-    lager:info("first, we need to receive call events for our two legs"),
+    lager:debug("first, we need to receive call events for our two legs"),
     add_transferor_bindings(Transferor),
     add_transferee_bindings(Transferee),
 
@@ -138,7 +180,7 @@ handle(Data, Call) ->
         'exit':'normal' -> 'ok';
         _E:_R ->
             ST = erlang:get_stacktrace(),
-            lager:info("statem terminated abnormally: ~s: ~p", [_E, _R]),
+            lager:info("attended transfer statem terminated abnormally: ~s: ~p", [_E, _R]),
             kz_util:log_stacktrace(ST)
     end.
 
@@ -157,12 +199,14 @@ pre_originate('cast', ?EVENT(UUID, <<"CHANNEL_UNBRIDGE">>, _Evt)
              )
   when UUID =:= Transferee;
        UUID =:= Transferor ->
-    MOHToPlay = kz_media_util:media_path(MOH, kapps_call:account_id(Call)),
+    %% determine MoH to play
+    MOHToPlay = konami_util:moh(MOH, Call),
+
     lager:info("putting transferee ~s on hold with MOH ~s", [Transferee, MOHToPlay]),
     HoldCommand = kapps_call_command:hold_command(MOHToPlay, Transferee),
     kapps_call_command:send_command(HoldCommand, Call),
 
-    lager:info("ok, now we need to originate to the requested number ~s", [Extension]),
+    lager:debug("ok, now we need to originate to the requested number ~s", [Extension]),
 
     Target = originate_to_extension(Extension, Transferor, Call),
     lager:info("originating to target 'a' ~s", [Target]),

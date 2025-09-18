@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2022, 2600Hz
+%%% @copyright (C) 2012-2025, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -17,9 +17,9 @@
 
 -define(FREESWITCH_EVENTS, application:get_env(?APP, 'event_stream', ?FS_EVENTS)).
 -define(CUSTOM_EVENTS, application:get_env(?APP, 'event_stream_custom', ?FS_CUSTOM_EVENTS)).
--define(EVENTS, ?FREESWITCH_EVENTS ++ ?CUSTOM_EVENTS).
+-define(EVENTS, ?FREESWITCH_EVENTS ++ ?CUSTOM_EVENTS ++ [?FS_ADDITIONAL_EVENTS]).
 
--define(CHILDREN(PacketSize), [event_child(Node, Event, PacketSize) || Event <- ?EVENTS]).
+-define(CHILDREN(PacketSize), [event_child(Node, Event, PacketSize) || Event <- ?EVENTS, Event /= []]).
 
 %%==============================================================================
 %% API functions

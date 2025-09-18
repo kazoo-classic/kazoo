@@ -1,0 +1,16 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "voicemail.notify",
+    "description": "Schema for voicemail notify callback options",
+    "properties": {
+        "callback": {
+            "default": [],
+            "description": "Ordered list of callback objects",
+            "items": {
+                "$ref": "notify.callback"
+            },
+            "type": "array"
+        }
+    },
+    "type": "object"
+}

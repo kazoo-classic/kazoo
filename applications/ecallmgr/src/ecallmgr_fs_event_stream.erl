@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2022, 2600Hz
+%%% @copyright (C) 2012-2025, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -190,8 +190,16 @@ handle_fs_props(UUID, Props, Node, SwitchURI, SwitchURL) ->
                                         ,{<<"Switch-Nodename">>, kz_term:to_binary(Node)}
                                         ]
                                        )
-        ++ Props ,
+        ++ Props,
+    _ = maybe_debug_event(EventName, UUID, EventProps, Node),
     ecallmgr_events:event(EventName, UUID, EventProps, Node).
+
+-spec maybe_debug_event(kz_term:api_binary(), kz_term:api_binary(), kz_term:proplist(), atom()) -> 'ok'.
+maybe_debug_event(EventName, UUID, EventProps, Node) ->
+    case kapps_config:get_is_true(?APP_NAME, <<"fs_debug_events">>, 'false') of
+        'true' -> lager:debug("~s ~s ~s event: ~p", [Node, EventName, UUID, EventProps]);
+        'false' -> 'ok'
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc This function is called by a `gen_server' when it is about to

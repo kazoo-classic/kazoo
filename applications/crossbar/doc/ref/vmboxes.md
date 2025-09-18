@@ -25,8 +25,7 @@ Key | Description | Type | Default | Required | Support Level
 `media_extension` | Voicemail audio format | `string('mp3' | 'mp4' | 'wav')` | `mp3` | `false` | `supported`
 `name` | A friendly name for the voicemail box | `string(1..128)` |   | `true` | `supported`
 `not_configurable` | Determines if the user can configure this voicemail. | `boolean()` | `false` | `false` | `supported`
-`notify.callback` | Schema for a callback options | [#/definitions/notify.callback](#notifycallback) |   | `false` |  
-`notify` |   | `object()` |   | `false` | `supported`
+`notify` | Schema for voicemail notify callback options | [#/definitions/voicemail.notify](#voicemailnotify) |   | `false` |  
 `notify_email_addresses.[]` |   | `string()` |   | `false` | `supported`
 `notify_email_addresses` | List of email addresses to send notifications to (in addition to owner's email, if any) | `array(string())` | `[]` | `false` | `supported`
 `oldest_message_first` | Play older voicemail messages before new ones | `boolean()` | `false` | `false` | `supported`
@@ -34,6 +33,7 @@ Key | Description | Type | Default | Required | Support Level
 `pin` | The pin number for the voicemail box | `string(4..6)` |   | `false` | `supported`
 `require_pin` | Determines if a pin is required to check the voicemail from the users devices | `boolean()` | `false` | `false` | `supported`
 `save_after_notify` | Move the voicemail to save folder after the notification has been sent (This setting will override delete_after_notify) | `boolean()` | `false` | `false` | `supported`
+`schedule` | ananke schedule | `object()` |   | `false` |  
 `seek_duration_ms` | callflow fastforward and rewind seek duration | `integer()` | `10000` | `false` |  
 `skip_envelope` | Determines if the envelope should be skipped | `boolean()` | `false` | `false` | `beta`
 `skip_greeting` | Determines if the greeting should be skipped | `boolean()` | `false` | `false` | `supported`
@@ -48,12 +48,21 @@ Schema for a callback options
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`attempts` | How many attempts without answer will system do | `integer()` |   | `false` |  
+`attempts` | How many times the system will attempt without answer | `integer()` |   | `false` |  
 `disabled` | Determines if the system will call to callback number | `boolean()` |   | `false` |  
-`interval_s` | How long will system wait between call back notification attempts | `integer()` |   | `false` |  
+`interval_s` | How long to wait between call back notification attempts | `integer()` |   | `false` |  
 `number` | Number for callback notifications about new messages | `string()` |   | `false` |  
 `schedule` | Schedules interval between callbacks | `array(integer())` |   | `false` |  
 `timeout_s` | How long will system wait for answer to callback | `integer()` |   | `false` |  
+
+### voicemail.notify
+
+Schema for voicemail notify callback options
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`callback` | Ordered list of callback objects | `["array(", "[#/definitions/notify.callback](#notifycallback)", ")"]` | `[]` | `false` |  
 
 
 

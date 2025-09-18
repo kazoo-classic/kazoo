@@ -1,0 +1,31 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "kapi.call.channel_update_req",
+    "description": "AMQP API for call.channel_update_req",
+    "properties": {
+        "Call-ID": {
+            "type": "string"
+        },
+        "Event-Category": {
+            "enum": [
+                "call_event"
+            ],
+            "type": "string"
+        },
+        "Event-Name": {
+            "enum": [
+                "channel_update_req"
+            ],
+            "type": "string"
+        },
+        "Updates": {
+            "description": "object containing channel property values to update",
+            "type": "object"
+        }
+    },
+    "required": [
+        "Call-ID",
+        "Updates"
+    ],
+    "type": "object"
+}

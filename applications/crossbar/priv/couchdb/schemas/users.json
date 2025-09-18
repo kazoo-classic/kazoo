@@ -324,12 +324,7 @@
         "voicemail": {
             "properties": {
                 "notify": {
-                    "properties": {
-                        "callback": {
-                            "$ref": "notify.callback"
-                        }
-                    },
-                    "type": "object"
+                    "$ref": "voicemail.notify"
                 }
             },
             "type": "object"

@@ -21,13 +21,13 @@
 -export([name/1, name/2, set_name/2]).
 -export([not_configurable/1, not_configurable/2, set_not_configurable/2]).
 -export([notify/1, notify/2, set_notify/2]).
--export([notify_callback/1, notify_callback/2, set_notify_callback/2]).
 -export([notify_email_addresses/1, notify_email_addresses/2, set_notify_email_addresses/2]).
 -export([oldest_message_first/1, oldest_message_first/2, set_oldest_message_first/2]).
 -export([owner_id/1, owner_id/2, set_owner_id/2]).
 -export([pin/1, pin/2, set_pin/2]).
 -export([require_pin/1, require_pin/2, set_require_pin/2]).
 -export([save_after_notify/1, save_after_notify/2, set_save_after_notify/2]).
+-export([schedule/1, schedule/2, set_schedule/2]).
 -export([seek_duration_ms/1, seek_duration_ms/2, set_seek_duration_ms/2]).
 -export([skip_envelope/1, skip_envelope/2, set_skip_envelope/2]).
 -export([skip_greeting/1, skip_greeting/2, set_skip_greeting/2]).
@@ -227,18 +227,6 @@ notify(Doc, Default) ->
 set_notify(Doc, Notify) ->
     kz_json:set_value([<<"notify">>], Notify, Doc).
 
--spec notify_callback(doc()) -> kz_term:api_object().
-notify_callback(Doc) ->
-    notify_callback(Doc, 'undefined').
-
--spec notify_callback(doc(), Default) -> kz_json:object() | Default.
-notify_callback(Doc, Default) ->
-    kz_json:get_json_value([<<"notify">>, <<"callback">>], Doc, Default).
-
--spec set_notify_callback(doc(), kz_json:object()) -> doc().
-set_notify_callback(Doc, NotifyCallback) ->
-    kz_json:set_value([<<"notify">>, <<"callback">>], NotifyCallback, Doc).
-
 -spec notify_email_addresses(doc()) -> kz_term:ne_binaries().
 notify_email_addresses(Doc) ->
     notify_email_addresses(Doc, []).
@@ -310,6 +298,18 @@ save_after_notify(Doc, Default) ->
 -spec set_save_after_notify(doc(), boolean()) -> doc().
 set_save_after_notify(Doc, SaveAfterNotify) ->
     kz_json:set_value([<<"save_after_notify">>], SaveAfterNotify, Doc).
+
+-spec schedule(doc()) -> kz_term:api_object().
+schedule(Doc) ->
+    schedule(Doc, 'undefined').
+
+-spec schedule(doc(), Default) -> kz_json:object() | Default.
+schedule(Doc, Default) ->
+    kz_json:get_json_value([<<"schedule">>], Doc, Default).
+
+-spec set_schedule(doc(), kz_json:object()) -> doc().
+set_schedule(Doc, Schedule) ->
+    kz_json:set_value([<<"schedule">>], Schedule, Doc).
 
 -spec seek_duration_ms(doc()) -> integer().
 seek_duration_ms(Doc) ->

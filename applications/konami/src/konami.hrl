@@ -14,5 +14,8 @@
 
 -define(WSD_ENABLED, kapps_config:get_is_true(?CONFIG_CAT, <<"webseq_enabled">>, 'false')).
 
+-define(SILENCE, <<"silence_stream://-1">>).
+-define(DEFAULT_BEEP, <<"tone_stream://%(100,15000,432);loops=-1">>). % 432Hz beep every 15 sec
+
 -define(KONAMI_HRL, 'true').
 -endif.

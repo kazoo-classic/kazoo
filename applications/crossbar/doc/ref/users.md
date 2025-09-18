@@ -67,8 +67,7 @@ Key | Description | Type | Default | Required | Support Level
 `username` | The GUI login username - alpha-numeric, dashes, at symbol, periods, plusses, and underscores allowed | `string(1..256)` |   | `false` | `supported`
 `verified` | Determines if the user has been verified | `boolean()` | `false` | `false` |  
 `vm_to_email_enabled` | Determines if the user would like voicemails emailed to them | `boolean()` | `true` | `false` |  
-`voicemail.notify.callback` | Schema for a callback options | [#/definitions/notify.callback](#notifycallback) |   | `false` |  
-`voicemail.notify` |   | `object()` |   | `false` |  
+`voicemail.notify` | Schema for voicemail notify callback options | [#/definitions/voicemail.notify](#voicemailnotify) |   | `false` |  
 `voicemail` |   | `object()` |   | `false` |  
 
 ### call_recording
@@ -225,9 +224,9 @@ Schema for a callback options
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`attempts` | How many attempts without answer will system do | `integer()` |   | `false` |  
+`attempts` | How many times the system will attempt without answer | `integer()` |   | `false` |  
 `disabled` | Determines if the system will call to callback number | `boolean()` |   | `false` |  
-`interval_s` | How long will system wait between call back notification attempts | `integer()` |   | `false` |  
+`interval_s` | How long to wait between call back notification attempts | `integer()` |   | `false` |  
 `number` | Number for callback notifications about new messages | `string()` |   | `false` |  
 `schedule` | Schedules interval between callbacks | `array(integer())` |   | `false` |  
 `timeout_s` | How long will system wait for answer to callback | `integer()` |   | `false` |  
@@ -250,6 +249,15 @@ Key | Description | Type | Default | Required | Support Level
 `role` | To specify the function or part played in a particular situation by the user | `string()` |   | `false` |  
 `sort-string` | To specify the family name or given name text to be used for national-language-specific sorting of the FN and N types | `string()` |   | `false` |  
 `title` | To specify the position or job of the user | `string()` |   | `false` |  
+
+### voicemail.notify
+
+Schema for voicemail notify callback options
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`callback` | Ordered list of callback objects | `["array(", "[#/definitions/notify.callback](#notifycallback)", ")"]` | `[]` | `false` |  
 
 
 

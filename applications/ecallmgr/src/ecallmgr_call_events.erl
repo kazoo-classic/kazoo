@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2022, 2600Hz
+%%% @copyright (C) 2010-2025, 2600Hz
 %%% @doc Receive call events from FreeSWITCH, publish to the call's event queue
 %%% @author James Aimonetti <james@2600hz.org>
 %%% @author Karl Anderson <karl@2600hz.org>
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(ecallmgr_call_events).
@@ -505,12 +506,29 @@ process_channel_event(Props) ->
     EventName = get_event_name(Props),
     ApplicationName = get_application_name(Props),
     Masqueraded = is_masquerade(Props),
+    _ = maybe_process_specific_event(EventName, ApplicationName, Props),
     case should_publish(EventName, ApplicationName, Masqueraded) of
         'false' -> 'ok';
         'true' ->
             Event = create_event(EventName, ApplicationName, Props),
             publish_event(Event)
     end.
+
+-spec maybe_process_specific_event(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
+%%% processing soft_hold events here because they are CHANNEL_EXECUTE events;
+%%% processing them in ecallmgr_fs_channel_hold would be wasteful of resources
+%%% since it would require ecallmgr_fs_channel_hold to subscribe to all
+%%% CHANNEL_EXECUTE and CHANNEL_EXECUTE_COMPLETE events and filter out only
+%%% the ones that were for soft_hold. So, doing it here is much more efficient.
+maybe_process_specific_event(<<"CHANNEL_EXECUTE">>, <<"soft_hold">>, Props) ->
+    UUID = get_call_id(Props),
+    lager:debug("soft_hold started; updating channel property 'is_onhold'"),
+    ecallmgr_fs_channels:updates(UUID, [{#channel.is_onhold, 'true'}]);
+maybe_process_specific_event(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"soft_hold">>, Props) ->
+    UUID = get_call_id(Props),
+    lager:debug("soft_hold ended; updating channel property 'is_onhold'"),
+    ecallmgr_fs_channels:updates(UUID, [{#channel.is_onhold, 'false'}]);
+maybe_process_specific_event(_EventName, _ApplicationName, _Props) -> 'ok'.
 
 -spec create_event(kz_term:proplist()) -> kz_term:proplist().
 create_event(Props) ->
@@ -848,6 +866,8 @@ should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"execute_extension">>, 'false')
     'false';
 should_publish(<<"CHANNEL_EXECUTE", _/binary>>, <<"park">>, _) ->
     'false';
+should_publish(<<"CHANNEL_EXECUTE", _/binary>>, <<"soft_hold">>, _) ->
+    'false'; %% do not publish any event for soft_hold (Konami should and will handle this)
 should_publish(<<"CHANNEL_EXECUTE", _/binary>>, Application, _) ->
     props:get_value(Application, ?FS_APPLICATION_NAMES) =/= 'undefined';
 should_publish(_, <<"transfer">>, _) ->

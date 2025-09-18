@@ -43,6 +43,7 @@ These will be your Kamailio IP addresses most of the time
 * `channel_details [{NODE_NAME}]`: List details of known channels, across all connected FreeSWITCH servers (or just for `{NODE_NAME}`)
 * `conference_summary [{NODE_NAME}]`: List a summary report of all conferences on all connected FreeSWITCH servers (or just `{NODE_NAME}`).
 * `conference_details [{NODE_NAME}]`: List a detailed report of all conferences on all connected FreeSWITCH servers (or just `{NODE_NAME}`).
+* `list_events`: List events being listened to from Freeswitch.
 * `registrar_summary [{SIP_REALM}]`: List known registration summary for all known registrations or just for registrations for `{SIP_REALM}`.
 * `registrar_details [{SIP_REALM}]`: List known registration details for all known registrations or just for registrations for `{SIP_REALM}`.
 * `registrar_details {SIP_USER} {SIP_REALM}`: List registration details for `SipUser@SipRealm`

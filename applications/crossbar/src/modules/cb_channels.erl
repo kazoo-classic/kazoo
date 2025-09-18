@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(cb_channels).
@@ -135,7 +136,7 @@ put(Context, UUID) ->
           ,{<<"Flow">>, cb_context:doc(Context)}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_flow/1),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_flow/1),
     crossbar_util:response_202(<<"metaflow sent">>, Context).
 
 %%------------------------------------------------------------------------------
@@ -213,6 +214,10 @@ maybe_execute_command(Context, Transferor, <<"transfer">>) ->
     maybe_transfer(Context, Transferor);
 maybe_execute_command(Context, CallId, <<"hangup">>) ->
     maybe_hangup(Context, CallId);
+maybe_execute_command(Context, CallId, <<"hold">>) ->
+    maybe_hold(Context, CallId);
+maybe_execute_command(Context, CallId, <<"unhold">>) ->
+    maybe_unhold(Context, CallId);
 maybe_execute_command(Context, CallId, <<"break">>) ->
     maybe_break(Context, CallId);
 maybe_execute_command(Context, CallId, <<"callflow">>) ->
@@ -455,20 +460,21 @@ maybe_transfer(Context, Transferor, Transferee) ->
 
 -spec transfer(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
 transfer(Context, Transferor, _Transferee, Target) ->
-    TransferType = cb_context:req_value(Context, <<"transfer-type">>, <<"blind">>),
+    TransferType = cb_context:req_value(Context, <<"transfer_type">>, <<"blind">>),
     API = [{<<"Call-ID">>, Transferor}
           ,{<<"Action">>, <<"transfer">>}
           ,{<<"Data">>, kz_json:from_list(
                           [{<<"target">>, Target}
-                          ,{<<"transfer-type">>, TransferType}
+                          ,{<<"transfer_type">>, TransferType}
+                          ,{<<"transferor">>, Transferor}
                           ,{<<"moh">>, cb_context:req_value(Context, <<"moh">>)}
                           ])
            }
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
 
-    lager:debug("attempting ~s transfer ~s to ~s by ~s", [TransferType, _Transferee, Target, Transferor]),
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
+    lager:debug("attempting ~s transfer of ~s to ~s by ~s", [TransferType, _Transferee, Target, Transferor]),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
     crossbar_util:response_202(<<"transfer initiated">>, Context).
 
 -spec maybe_hangup(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
@@ -479,8 +485,55 @@ maybe_hangup(Context, CallId) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     lager:debug("attempting to hangup ~s", [CallId]),
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
     crossbar_util:response_202(<<"hangup initiated">>, Context).
+
+-spec maybe_hold(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+maybe_hold(Context, CallId) ->
+    MOH = cb_context:req_value(Context, <<"moh">>),
+    MOHA = cb_context:req_value(Context, <<"moh_aleg">>),
+    MOHB = cb_context:req_value(Context, <<"moh_bleg">>, MOH),
+    %% WARNING: Instead of using the unhold key for API hold, use the unhold
+    %% command via the API, so that an unhold event can be generated.
+    %% We set the default unhold key to something unlikely to be pressed, so
+    %% that the call won't be unheld with DTMF unless it is explicitly
+    %% desired and specified.
+    Unholdkey = cb_context:req_value(Context, <<"unhold_key">>, <<"*ABCD*">>),
+    Update = cb_context:req_value(Context, <<"update_channel">>, 'true'),
+    API = [{<<"Call-ID">>, CallId}
+          ,{<<"Action">>, <<"hold">>}
+          ,{<<"Data">>, kz_json:from_list(
+                          props:filter_undefined(
+                            [{<<"moh_aleg">>, MOHA}
+                            ,{<<"moh_bleg">>, MOHB}
+                            ,{<<"unhold_key">>, Unholdkey}
+                            ,{<<"update_channel">>, Update} % sets is_onhold:true on the channel
+                            ])
+                         )
+           }
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    lager:debug("attempting to hold ~s", [CallId]),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
+    crossbar_util:response_202(<<"hold initiated">>, Context).
+
+-spec maybe_unhold(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+maybe_unhold(Context, CallId) ->
+    %% By default, CHANNEL_EXECUTE_COMPLETE event should allow Kazoo to
+    %% identify the unhold has occured and update the channel property.
+    Update = cb_context:req_value(Context, <<"update_channel">>, 'false'),
+    API = [{<<"Call-ID">>, CallId}
+          ,{<<"Action">>, <<"hold">>}
+          ,{<<"Data">>, kz_json:from_list([{<<"unhold">>, 'true'}
+                                          ,{<<"update_channel">>, Update} % sets is_onhold:false on the channel
+                                          ]
+                                         )
+           }
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    lager:debug("attempting to unhold ~s", [CallId]),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
+    crossbar_util:response_202(<<"unhold initiated">>, Context).
 
 -spec maybe_break(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 maybe_break(Context, CallId) ->
@@ -490,7 +543,7 @@ maybe_break(Context, CallId) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     lager:debug("attempting to break ~s", [CallId]),
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
     crossbar_util:response_202(<<"break initiated">>, Context).
 
 -spec maybe_callflow(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
@@ -508,7 +561,7 @@ maybe_callflow(Context, CallId) ->
           ],
 
     lager:debug("attempting to running callflow ~s on ~s", [CallflowId, CallId]),
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
     crossbar_util:response_202(<<"callflow initiated">>, Context).
 
 -spec maybe_intercept(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
@@ -541,8 +594,8 @@ maybe_intercept(Context, CallId, TargetType, TargetId) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
 
-    lager:debug("attempting to move ~s to ~s(~s)", [CallId, TargetId, TargetType]),
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
+    lager:debug("attempting to intercept ~s to ~s(~s)", [CallId, TargetId, TargetType]),
+    _ = kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
     crossbar_util:response_202(<<"intercept initiated">>, Context).
 
 %%------------------------------------------------------------------------------

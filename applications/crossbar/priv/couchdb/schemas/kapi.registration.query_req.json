@@ -21,6 +21,9 @@
         "Fields": {
             "type": "string"
         },
+        "Owner": {
+            "type": "string"
+        },
         "Realm": {
             "type": "string"
         },
