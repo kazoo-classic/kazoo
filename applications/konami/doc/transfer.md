@@ -1,4 +1,4 @@
-# In-Call Attended Transfer
+# In-Call Attended or Blind Transfer
 
 ## Overview
 
@@ -12,7 +12,7 @@ _Kazoo API:_  The Kazoo platform exposes REST HTTP interfaces for configuration,
 _Konami:_ A Kazoo application that listens to digits in active calls and detects pre-programmed patters which are associated with actions.
 
 ### Purpose
-The purpose is of this project is to allow callers to preform an attended transfer from their mobile device.
+The purpose is of this project is to allow callers to preform an attended or blind transfer from their mobile device, or other SIP endpoint that does not support native SIP transfer.
 
 ### Non-Goals
 
@@ -20,10 +20,10 @@ The purpose is of this project is to allow callers to preform an attended transf
 
 #### App-less Transfer
 
-As a user when I on a call with someone I would like the ability to preform an attended transfer by dialing some feature code into the native dialer.
+As a user when I am on a call with someone I would like the ability to perform a transfer by dialing some feature code into the native dialer.
 
 #### App-based Transfer
-As a user using an application I installed on my mobile device, I would like to be able to press a transfer button that makes an attended transfer.
+As a user using an application I installed on my mobile device, I would like to be able to press a transfer button that makes a blind or attended transfer.
 
 ### Prerequisites
 
@@ -83,22 +83,39 @@ The *transfer* module requires being used with Metaflow "patterns". In the examp
 
 ```json
     "metaflows":{
-        "numbers":{...}
-        ,"patterns":{
+        "numbers":{...},
+        "patterns":{
             "2(\\d+)":{
-                "module":"transfer"
-                ,"data":{
-                    "takeback_dtmf":"*1"
-                    ,"moh":"media_id"
+                "module":"transfer",
+                "data":{
+                    "takeback_dtmf":"*1",
+                    "transfer_type":"attended",
+                    "moh":"{media_id}"
                 }
             }
-        }
-        ,"binding_key":"*"
+        },
+        "binding_key":"*"
+    }
+```
+
+Or for blind transfer (blind is the default, so no data parameters are necessary):
+
+```json
+    "metaflows":{
+        "numbers":{...},
+        "patterns":{
+            "2(\\d+)":{
+                "module":"transfer",
+                "data":{}
+            }
+        },
+        "binding_key":"*"
     }
 ```
 
 ##### Configuration
 
+* `transfer_type`: specify `blind` or `attended` transfer type
 * `takeback_dtmf`: the DTMF sequence the transferor can press to reattach to the transferee leg, canceling the transfer
 * `moh`: a media_id from the account's media holdings, to play to the transferee instead of the default system music-on-hold
 * `ringback`: the tone stream to play to the transferor when the target call leg is being setup. See the [FreeSWITCH TGML](http://wiki.freeswitch.org/wiki/TGML) for samples. Otherwise the `default_ringback` in the `system_config/ecallmgr` doc will be used (if set).
@@ -109,6 +126,8 @@ The *transfer* module requires being used with Metaflow "patterns". In the examp
 
 This requires the cb_channels module to be started: `sup crossbar_maintenance start_module cb_channels`
 
+Attended Transfer:
+
 ```json
      POST v1/accounts/{ACCOUNT_ID}/channels/{CALL_ID}
      {
@@ -116,14 +135,29 @@ This requires the cb_channels module to be started: `sup crossbar_maintenance st
          "action": "transfer",
          "target": "2600",
          "takeback_dtmf": "*1",
+         "transfer_type": "attended",
          "moh": "media_id"
        }
      }
 ```
 
+Blind Transfer:
+
+```json
+     POST v1/accounts/{ACCOUNT_ID}/channels/{CALL_ID}
+     {
+       "data": {
+         "action": "transfer",
+         "target": "2600"
+       }
+     }
+```
+
+
 ##### Configuration
 
-* `action`: what action to perform on the call
+* `action`: what action to perform on the call (`transfer`)
+* `transfer_type`: specify `blind` or `attended` transfer type
 * `target`: the extension or DID to dial for the target leg of the transfer
 * `takeback_dtmf`: the DTMF sequence the transferor can press to reattach to the transferee leg, canceling the transfer
 * `moh`: a media_id from the account's media holdings, to play to the transferee instead of the default system music-on-hold

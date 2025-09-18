@@ -4,17 +4,27 @@
     "description": "Put the leg on hold",
     "properties": {
         "moh_aleg": {
-            "description": "MOH ID for the a-leg",
+            "description": "indicator selection for the a-leg: silence, pulse, beep, beep{frequency}, tone_stream://{tones pattern}",
             "type": "string"
         },
         "moh_bleg": {
-            "description": "MOH ID for the b-leg",
+            "description": "MOH media ID for the b-leg, or indicator selection: silence, pulse, beep, beep{frequency}, tone_stream://{tones pattern}, shout://{mp3 stream}, local_stream://{local stream}",
             "type": "string"
+        },
+        "unhold": {
+            "default": false,
+            "description": "if true, an unhold action is performed (using the FS 'break' command), rather than hold",
+            "type": "boolean"
         },
         "unhold_key": {
             "default": "1",
-            "description": "DTMF to press to unhold the call",
+            "description": "DTMF key[s] that when pressed will unhold the call (Note: if unhold_key is used, no unhold event will be generated)",
             "type": "string"
+        },
+        "update_channel": {
+            "default": false,
+            "description": "update the channel property 'is_onhold'",
+            "type": "boolean"
         }
     },
     "type": "object"

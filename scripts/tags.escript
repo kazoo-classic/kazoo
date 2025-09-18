@@ -32,5 +32,6 @@ add_app_dirs(_App, Dirs, _Else) ->
     Dirs.
 
 app_path(App) ->
+    io:format(" ~p", [App]),
     {'ok', [M | _]} = application:get_key(App, 'modules'),
     filename:dirname(filename:dirname(code:which(M))).

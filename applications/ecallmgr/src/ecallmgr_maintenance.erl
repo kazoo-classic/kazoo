@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2022, 2600Hz
+%%% @copyright (C) 2012-2025, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -98,6 +98,8 @@
 -export([limit_channel_uptime/1, limit_channel_uptime/2
         ,hangup_long_running_channels/0, hangup_long_running_channels/1
         ]).
+
+-export([list_events/0]).
 
 -include("ecallmgr.hrl").
 
@@ -735,3 +737,17 @@ not_system_config_acl(Name, AuthType) ->
 -spec print_and_log(string(), [any()]) -> 'ok'.
 print_and_log(FormatStr, Args) ->
     ?SUP_LOG_INFO(FormatStr, Args).
+
+%%% get list of events from the event stream supervisor for the first connected node:
+-spec list_events() -> 'ok'.
+list_events() ->
+    case ecallmgr_fs_nodes:connected() of
+        [] ->
+            io:format("No connected Freeswitch nodes!~n", []);
+        [Node|_] ->
+            NodeBinary = kz_term:to_binary(Node),
+            Supervisor = kz_term:to_atom(<<"ecallmgr_fs_event_stream_sup_", NodeBinary/binary>>),
+            Children = supervisor:which_children(Supervisor),
+            Events = [element(1, EventStreamSupChild) || EventStreamSupChild <- Children],
+            io:format("Listening for these Freeswitch events:~n~p~n", [Events])
+    end.

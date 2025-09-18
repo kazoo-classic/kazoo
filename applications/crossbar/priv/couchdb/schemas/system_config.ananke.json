@@ -3,6 +3,11 @@
     "_id": "system_config.ananke",
     "description": "Schema for ananke system_config",
     "properties": {
+        "press_any_key_prompt": {
+            "default": "agent-logged_out",
+            "description": "ananke press_any_key_prompt",
+            "type": "string"
+        },
         "schedules": {
             "default": [],
             "description": "ananke schedules",

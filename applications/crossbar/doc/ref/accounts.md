@@ -52,8 +52,7 @@ Key | Description | Type | Default | Required | Support Level
 `timezone` | The default timezone | `string(5..32)` |   | `false` | `supported`
 `topup.threshold` | The account balance when topup occurs | `number()` |   | `false` |  
 `topup` | Topup settings for the account | `object()` |   | `false` |  
-`voicemail.notify.callback` | Schema for a callback options | [#/definitions/notify.callback](#notifycallback) |   | `false` |  
-`voicemail.notify` |   | `object()` |   | `false` |  
+`voicemail.notify` | Schema for voicemail notify callback options | [#/definitions/voicemail.notify](#voicemailnotify) |   | `false` |  
 `voicemail` |   | `object()` |   | `false` |  
 `zones` | A priority ordered mapping of zones for the account | `object()` |   | `false` |  
 
@@ -189,12 +188,21 @@ Schema for a callback options
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`attempts` | How many attempts without answer will system do | `integer()` |   | `false` |  
+`attempts` | How many times the system will attempt without answer | `integer()` |   | `false` |  
 `disabled` | Determines if the system will call to callback number | `boolean()` |   | `false` |  
-`interval_s` | How long will system wait between call back notification attempts | `integer()` |   | `false` |  
+`interval_s` | How long to wait between call back notification attempts | `integer()` |   | `false` |  
 `number` | Number for callback notifications about new messages | `string()` |   | `false` |  
 `schedule` | Schedules interval between callbacks | `array(integer())` |   | `false` |  
 `timeout_s` | How long will system wait for answer to callback | `integer()` |   | `false` |  
+
+### voicemail.notify
+
+Schema for voicemail notify callback options
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`callback` | Ordered list of callback objects | `["array(", "[#/definitions/notify.callback](#notifycallback)", ")"]` | `[]` | `false` |  
 
 
 

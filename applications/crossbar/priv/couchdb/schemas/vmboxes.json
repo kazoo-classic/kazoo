@@ -99,18 +99,7 @@
             "type": "boolean"
         },
         "notify": {
-            "properties": {
-                "callback": {
-                    "default": [],
-                    "description": "Ordered List of callback objects",
-                    "items": {
-                        "$ref": "notify.callback"
-                    }
-                },
-                "type": "array"
-            },
-            "support_level": "supported",
-            "type": "object"
+            "$ref": "voicemail.notify"
         },
         "notify_email_addresses": {
             "default": [],

@@ -76,6 +76,11 @@
             "description": "acdc maximum result set",
             "type": "integer"
         },
+        "no_endpoints_pause_time": {
+            "default": 15,
+            "description": "acdc no_endpoints_pause_time",
+            "type": "integer"
+        },
         "queue_collect_resp_timeout": {
             "default": 2000,
             "description": "acdc queue collect resp timeout",

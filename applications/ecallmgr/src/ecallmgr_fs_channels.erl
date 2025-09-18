@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2013-2022, 2600Hz
+%%% @copyright (C) 2013-2025, 2600Hz
 %%% @doc Track the FreeSWITCH channel information, and provide accessors
 %%% @author James Aimonetti
 %%% @author Karl Anderson
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_channels).
@@ -388,14 +389,12 @@ handle_channel_update(JObj, _Props) ->
     _ = kz_util:put_callid(JObj),
     CallId = kz_api:call_id(JObj),
     lager:debug("channel update request received for ~s", [CallId]),
-    case ecallmgr_fs_channel:fetch(CallId) of
+    case ecallmgr_fs_channel:node(CallId) of
         {'error', 'not_found'} ->
             lager:debug("channel ~s not found on this ~s", [CallId, ?APP_NAME]),
             ok;
-        {'ok', Channel} ->
-            Node = kz_json:get_binary_value(<<"node">>, Channel),
-            [_, Hostname] = binary:split(Node, <<"@">>),
-            lager:debug("channel is on ~s, attempting to update properties", [Hostname]),
+        {'ok', Node} ->
+            lager:debug("channel is on ~s, attempting to update properties", [Node]),
             Updates = kz_json:to_proplist(kz_json:get_json_value(<<"Updates">>, JObj, kz_json:new())),
             ecallmgr_fs_channel:update_channel(CallId, Updates)
     end.

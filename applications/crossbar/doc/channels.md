@@ -93,7 +93,7 @@ curl -v -X GET \
 ## Execute an application against a Channel
 
 !!! note
-    This API requires Konami Pro to be running and metaflows to be enabled on the call
+    This API requires Konami to be running and metaflows to be enabled on the call
 
 > POST /v2/accounts/{ACCOUNT_ID}/channels/{UUID}
 
@@ -105,12 +105,12 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/channels/{UUID}
 ```
 
-Available `action` values are `transfer`, `hangup`, `break`, `callflow`, `move` and `intercept`.
+Available `action` values are `hold`, `unhold`, `transfer`, `hangup`, `break`, `callflow`, `move` and `intercept`.
 
 ### Move
 
 ```shell
-curl -v -x POST \
+curl -v -X POST \
     -H "Content-Type: application/json" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -d '{"data": {"action": "move", "owner_id": "2e04e3205b36b6291f854995e80985b0", "device_id": "c27b0a86c5e7b0f2a5999967fd8bbf09", "auto_answer": true, "can_call_self": true, "dial_strategy": "simultaneous"}}' \
@@ -125,22 +125,43 @@ Key | Description | Type | Default | Required
 `dial_strategy` | How to ring the endpoints, if multiple | `string()` | `simultaneous` | `false`
 `owner_id` | User ID to use for finding endpoints | `string()` |   | `false`
 
-### Transfer
+### Hold
 
 ```shell
 curl -v -X POST \
     -H "Content-Type: application/json" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{"module":"transfer","data":{"target":"2600","Transfer-Type":"blind","leg":"bleg"}},"action":"metaflow"}' \
+    -d '{"data":{"action":"hold"}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/channels/{UUID}
+```
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`action` | Action to perform | `string('hold' | 'unhold')` | | `true`
+`moh` | Media ID or indicator selection for the b-leg | `string('{media_id}' | 'silence' | 'pulse' | 'beep' | 'beep{frequency}' | 'tone_stream://{tones pattern}')` | `shout://{mp3 stream URL}` | `local_stream://{local stream URL}` | `{user or account MoH}` | `false`
+`moh_aleg` | Indicator selection for the a-leg | `string('silence' | 'pulse' | 'beep' | 'beep{frequency}' | 'tone_stream://{tones pattern}')` | `beep` | `false`
+`moh_bleg` | Media ID or indicator selection for the b-leg (included for compatibility) | `string('{media_id}' | 'silence' | 'pulse' | 'beep' | 'beep{frequency}' | 'tone_stream://{tones pattern}')` | `shout://{mp3 stream URL}` | `local_stream://{local stream URL}` | `{user or account MoH}` | `false`
+`unhold_key` | DTMF key[s] that when pressed will unhold the call (Note: if unhold_key is used, no unhold event will be generated)| `string()` |   | `false`
+`update_channel` | Update the channel property `is_onhold` | `boolean()` | `true` | `false`
+
+### Transfer
+
+When using the channels API to perform a transfer, the UUID specified is the transferor, and the other leg is the transferee. In other words, if Bob wants to transfer Alice to somewhere, use the UUID of Bob's leg in the request to the API.
+
+```shell
+curl -v -X POST \
+    -H "Content-Type: application/json" \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data":{"action":"transfer","target":"2600","transfer_type":"attended"}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/channels/{UUID}
 ```
 
 Key | Description | Type | Default
 --- | ----------- | ---- | -------
-`leg` | Defines which leg of the call to take action against | `string('self' | 'bleg')` | `self`
-`target` | Extension/DID to transfer the `{UUID}` | `string()` |
-`transfer-type` | What type of transfer to perform | `string('attended' | 'blind')` | `blind`
-`moh` | Music on hold to play while transferring | `string()` |
+`moh` | MoH Media ID or indicator selection to be played to the transferee | `string('{media_id}' | 'silence' | 'pulse' | 'beep' | 'beep{frequency}' | 'tone_stream://{tones pattern}' | 'shout://{mp3 stream}' | 'local_stream://{local stream}')` | `{user or account MoH}` | `false`
+`target` | Extension/DID to transfer to | `string()` |
+`transfer_type` | What type of transfer to perform | `string('attended' | 'blind')` | `blind`
+
 
 ## Put a feature (metaflow) on a channel
 

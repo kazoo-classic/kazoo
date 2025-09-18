@@ -4,7 +4,7 @@
     "description": "Schema for a callback options",
     "properties": {
         "attempts": {
-            "description": "How many attempts without answer will system do",
+            "description": "How many times the system will attempt without answer",
             "type": "integer"
         },
         "disabled": {
@@ -12,7 +12,7 @@
             "type": "boolean"
         },
         "interval_s": {
-            "description": "How long will system wait between call back notification attempts",
+            "description": "How long to wait between call back notification attempts",
             "type": "integer"
         },
         "number": {

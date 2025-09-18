@@ -364,28 +364,40 @@ channel_cavs(JObj) -> kz_json:get_list_value(<<"custom_application_vars">>, JObj
 
 %%%-----------------------------------------------------------------------------
 %%% @doc Update channel properties (singular or a list of them).
+%%% Explicitly matched properties (in binary form) are listed first and are
+%%% directly processed with update_channel/2. If a property is received that
+%%% is not explitly matched as a binary, the update is processed with
+%%% update_channel/3 which searches the record for the specified property after
+%%% converting it to an atom.
 %%% @end
 %%%-----------------------------------------------------------------------------
--spec update_channel(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
-update_channel(_UUID, []) -> 'ok';
-update_channel(UUID, [{ChannelProperty, Value}|Rest]) ->
-    update_channel(UUID, ChannelProperty, Value),
-    update_channel(UUID, Rest).
+-spec update_channel(kz_term:ne_binary(), kz_term:proplist() | {kz_term:proplist_key(), kz_term:proplist_value()}) -> 'ok'.
+update_channel(UUID, {K,V}) ->
+    update_channel(UUID, [{K, V}]);
+%%% Explicit channel property matches:
+update_channel(UUID, [{<<"is_onhold">>,V}]) ->
+    ecallmgr_fs_channels:updates(UUID, [{#channel.is_onhold, V}]);
+%%% Variable channel property not explicitly matched above:
+update_channel(UUID, UnformattedUpdates) ->
+    update_channel(UUID, UnformattedUpdates, []).
 
--spec update_channel(kz_term:ne_binary(), kz_term:ne_binary() | atom() | pos_integer(), kz_term:ne_binary()) -> 'ok'.
-update_channel(UUID, ChannelProperty, Value) ->
-    Key = case find_channel_position(ChannelProperty) of
-              'not_found' -> lager:info("invalid channel property supplied for update; ignoring", []),
-                             'ok';
-              _KeyPosition -> _KeyPosition
-          end,
-    ecallmgr_fs_channels:update(UUID, Key, Value).
+-spec update_channel(kz_term:ne_binary(), kz_term:proplist(), kz_term:proplist()) -> 'ok'.
+update_channel(_, [], []) -> 'ok';
+update_channel(UUID, [], Updates) -> ecallmgr_fs_channels:updates(UUID, Updates); % all updates are now formatted
+update_channel(UUID, [{ChannelProperty, Value}|Rest], Updates) ->
+    case find_channel_position(ChannelProperty) of
+        'not_found' ->
+            lager:info("invalid channel property '~p' supplied for update; ignoring", [ChannelProperty]),
+            update_channel(UUID, Rest, Updates);
+        KeyPosition -> update_channel(UUID, Rest, [{KeyPosition, Value} | Updates])
+    end.
 
 %%%-----------------------------------------------------------------------------
 %%% @doc A #channel is a record, so we need to take the property supplied as a
-%%% binary and look up it's corresponding atom field label in the record, and
+%%% binary and look up its corresponding atom field label in the record, and
 %%% thus its corresponding index position in the record (tuple), and do the
 %%% requested update on that key/index/position.
+%%% @end
 %%%-----------------------------------------------------------------------------
 -spec find_channel_position(kz_term:text()) -> pos_integer() | 'not_found'.
 find_channel_position(Property) ->
@@ -395,7 +407,7 @@ find_channel_position(Property) ->
     RecordFields = record_info('fields', 'channel'),
     find_channel_position(NameAtom, RecordFields, 2). %% the first tuple position is the record name, so 2 is the first field
 
--spec find_channel_position(atom(), kz_term:atoms(), integer()) -> integer() | 'not_found'.
+-spec find_channel_position(atom(), kz_term:atoms(), pos_integer()) -> pos_integer() | 'not_found'.
 find_channel_position(_, [], _) -> 'not_found';
 find_channel_position(Name, [Name | _], Position) -> Position;
 find_channel_position(Name, [_Else | Remaining], Position) -> find_channel_position(Name, Remaining, Position + 1).

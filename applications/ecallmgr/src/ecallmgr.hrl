@@ -374,6 +374,9 @@
                               ,{<<"playback">>, <<"play_macro">>}
                               ]).
 
+-define(FS_ADDITIONAL_EVENTS_BINARIES, kapps_config:get_ne_binaries(?APP_NAME, <<"fs_additional_events">>, [])).
+-define(FS_ADDITIONAL_EVENTS, [kz_term:to_atom(Event, 'true') || Event <- ?FS_ADDITIONAL_EVENTS_BINARIES]).
+
 -define(FS_EVENTS, [['CHANNEL_CREATE', 'CHANNEL_ANSWER', 'CHANNEL_DESTROY']
                    ,['DETECTED_TONE', 'DTMF','CHANNEL_PROGRESS_MEDIA']
                    ,['RECORD_START', 'RECORD_STOP']
