@@ -20,8 +20,15 @@ Although you can expose kazoo fax on port 25 or use haproxy to relay incoming em
 
 ```
 relay_domains = hash:/etc/postfix/kz_smtp_domains
+# use the line below instead if you have enabled the postfix_lookup
+# server with system_config/fax.postfix_lookup = true.
+relay_domains = tcp:127.0.0.1:19024 # replace 127.0.0.1 with appropriate hostname or IP
+
 # relayhost should be the IP:PORT of haproxy-smtp-listener or kazoo fax whapp
 relayhost = 127.0.0.1:2525
+# OR if using postfix_lookup, comment relayhost and instead use this:
+transport_maps = tcp:127.0.0.1:19023 # replace 127.0.0.1 with appropriate hostname or IP
+
 
 policy-spf_time_limit = 3600s
 
@@ -37,7 +44,7 @@ smtpd_sender_restrictions =
     permit_mynetworks,
     reject_non_fqdn_sender,
     reject_unknown_sender_domain,
-     check_sender_access regexp:/etc/postfix/kz_allowed_senders,
+    #check_sender_access regexp:/etc/postfix/kz_allowed_senders, # optional
     reject
 
 smtpd_recipient_restrictions =
@@ -47,7 +54,7 @@ smtpd_recipient_restrictions =
    permit_mynetworks,
    reject_unauth_destination,
    check_policy_service unix:private/policyd-spf,
-   check_sender_access regexp:/etc/postfix/kz_allowed_senders,
+   #check_sender_access regexp:/etc/postfix/kz_allowed_senders, # optional
    reject_rbl_client zen.spamhaus.org,
    reject_rbl_client bl.spamcop.net,
    check_policy_service unix:postgrey/socket,
@@ -61,8 +68,7 @@ policy-spf  unix  -       n       n       -       0       spawn
 ```
 
 ## To-do
-* use CouchDB views to get kazoo faxboxes configuration into postfix
-* edit domains and permitted users from kazoo
+* use CouchDB views to get kazoo faxboxes configuration into postfix - DONE!
 * `postmap /etc/postfix/kz_smtp_domains`
 * `postmap /etc/postfix/kz_allowed_senders`
 * `postfix reload`
