@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2022, 2600Hz
+%%% @copyright (C) 2012-2025, 2600Hz
 %%% @doc
 %%% @author Luis Azedo
 %%% @end
@@ -127,7 +127,7 @@ handle_cast(_Msg, State) -> {'noreply', State}.
 
 -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'stanza', _Client, #xmlel{}=Packet}, State) ->
-    process_received_packet(Packet, State),
+    _ = process_received_packet(Packet, State),
     {'noreply', State, ?POLLING_INTERVAL};
 
 handle_info('timeout', State) ->
@@ -282,7 +282,7 @@ start_all_printers() ->
                  <<"claimed">> =:= kz_json:get_ne_binary_value([<<"value">>,<<"state">>], Result)
              ]),
     [begin
-         send_start_printer(Id, Jid),
+         _ = send_start_printer(Id, Jid),
          timer:sleep(Pause)
      end
      || {Pause, Id, Jid} <- List],

@@ -156,6 +156,31 @@
             "description": "fax port",
             "type": "integer"
         },
+        "postfix_lookup": {
+            "default": false,
+            "description": "enable the postfix_lookup service which listens for Postfix tcp_table requests to authorize and route email domains",
+            "type": "boolean"
+        },
+        "postfix_lookup_domain_port": {
+            "default": 19024,
+            "description": "port used for postfix_lookup_domain service",
+            "type": "integer"
+        },
+        "postfix_lookup_kazoo_transport": {
+            "default": "smtp:[127.0.0.1]:19025",
+            "description": "default transport pointing to Kazoo. Adjust as needed to point to Kazoo fax SMTP host/port, or HAProxy that load balances to it.",
+            "type": "string"
+        },
+        "postfix_lookup_transport_port": {
+            "default": 19023,
+            "description": "port used for postfix_lookup_transport service. Used to determine if mail for a particular domain should be sent [inbound] to Kazoo or [outbound] to the internet.",
+            "type": "integer"
+        },
+        "postfix_lookup_workers": {
+            "default": 4,
+            "description": "how many postfix_lookup server workers to run (for each lookup type)",
+            "type": "integer"
+        },
         "report_anonymous_system_errors": {
             "default": false,
             "description": "fax report anonymous system errors",
