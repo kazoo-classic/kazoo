@@ -55,7 +55,7 @@
 
 -define(ORIGINATE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 2).
 -define(NEGOTIATE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 2).
--define(PAGE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 5).
+-define(PAGE_TIMEOUT, kapps_config:get_integer(?CONFIG_CAT, <<"page_timeout_s">>, 480) * ?MILLISECONDS_IN_SECOND).
 
 -define(BINDINGS(CallId), [{'self', []}
                           ,{'fax', [{'restrict_to', ['query_status']}]}
