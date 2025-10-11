@@ -9,6 +9,7 @@
 
 -export([accept/3]).
 -export([check_fax_domain/1]).
+-export([domain_from_email/1]).
 
 -include("fax.hrl").
 
@@ -83,4 +84,11 @@ trim_newline(Binary) ->
     case Binary of
         <<Req:(Size)/binary, $\n>> -> Req;
         _ -> Binary
+    end.
+
+-spec domain_from_email(kz_term:ne_binary()) -> kz_term:ne_binary().
+domain_from_email(Address) ->
+    case binary:split(Address, <<"@">>) of
+        [_User, Domain] -> Domain;
+        _ -> Address
     end.

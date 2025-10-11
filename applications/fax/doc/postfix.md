@@ -21,7 +21,7 @@ Although you can expose kazoo fax on port 25 or use haproxy to relay incoming em
 ```
 relay_domains = hash:/etc/postfix/kz_smtp_domains
 # use the line below instead if you have enabled the postfix_lookup
-# server with system_config/fax.postfix_lookup = true.
+# server with system_config/fax.postfix_lookup_enabled = true.
 relay_domains = tcp:127.0.0.1:19024 # replace 127.0.0.1 with appropriate hostname or IP
 
 # relayhost should be the IP:PORT of haproxy-smtp-listener or kazoo fax whapp

@@ -70,13 +70,14 @@ handle_call(_Request, _From, State) ->
 
 -spec lookup_and_serve(gen_tcp:socket(), kz_term:ne_binary()) -> 'ok' | {'error', any()}.
 lookup_and_serve(Socket, ReqKey) ->
+    Domain = postfix_lookup_util:domain_from_email(ReqKey),
     SMTPPort = kz_term:to_binary(?SMTP_PORT),
     KZTransport = kapps_config:get_ne_binary(?CONFIG_CAT, <<"postfix_lookup_kazoo_transport">>, <<"smtp:[127.0.0.1]:", SMTPPort/binary>>),
-    Res = case postfix_lookup_util:check_fax_domain(ReqKey) of
+    Res = case postfix_lookup_util:check_fax_domain(Domain) of
               'ok' ->
-                  <<KZTransport/binary, "\n">>;
+                  <<"200 ", KZTransport/binary, "\n">>;
               'not_found' ->
-                  <<"smtp:\n">>; %% send using regular SMTP transport out to internet (this is outbound mail)
+                  <<"200 smtp:\n">>; %% send using regular SMTP transport out to internet (this is outbound mail)
               _ ->
                   <<"400 error\n">>
           end,

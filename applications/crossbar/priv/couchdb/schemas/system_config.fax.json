@@ -156,15 +156,15 @@
             "description": "fax port",
             "type": "integer"
         },
-        "postfix_lookup": {
-            "default": false,
-            "description": "enable the postfix_lookup service which listens for Postfix tcp_table requests to authorize and route email domains",
-            "type": "boolean"
-        },
         "postfix_lookup_domain_port": {
             "default": 19024,
             "description": "port used for postfix_lookup_domain service",
             "type": "integer"
+        },
+        "postfix_lookup_enabled": {
+            "default": false,
+            "description": "enable the postfix_lookup service which listens for Postfix tcp_table requests to authorize and route email domains",
+            "type": "boolean"
         },
         "postfix_lookup_kazoo_transport": {
             "default": "smtp:[127.0.0.1]:19025",

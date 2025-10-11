@@ -57,7 +57,7 @@ init([]) ->
                  ,{'packet', 'line'}
                  ,{'reuseaddr', 'true'}
                  ],
-    case kapps_config:get_is_true(?CONFIG_CAT, <<"postfix_lookup">>, 'false') of
+    case kapps_config:get_is_true(?CONFIG_CAT, <<"postfix_lookup_enabled">>, 'false') of
         'false' -> {'ok', {SupFlags, []}}; %% do nothing and keep the supervisor happy
         'true' ->
             case {gen_tcp:listen(?POSTFIX_LOOKUP_DOMAIN_PORT, ServerOpts)
