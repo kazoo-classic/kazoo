@@ -1,14 +1,14 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc CDR
 %%% Read only access to CDR docs
-%%%
 %%%
 %%% @author Edouard Swiac
 %%% @author James Aimonetti
 %%% @author Karl Anderson
 %%% @author Ben Wann
 %%% @author Sponsored by GTNetwork LLC, Implemented by SIPLABS LLC
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(cb_cdrs).
@@ -48,6 +48,7 @@
 -define(PATH_LEGS, <<"legs">>).
 -define(PATH_SUMMARY, <<"summary">>).
 
+-define(KEY_SIMPLE, <<"simple">>).
 -define(KEY_UTC_OFFSET, <<"utc_offset">>).
 -define(KEY_CCV, <<"custom_channel_vars">>).
 
@@ -79,6 +80,7 @@
         ,{<<"rfc_1036">>, fun col_rfc1036/3}
         ,{<<"iso_8601">>, fun col_iso8601/3}
         ,{<<"iso_8601_combined">>, fun col_iso8601_combined/3}
+        ,{<<"rfc3339_local">>, fun col_rfc3339_local/3}
         ,{<<"call_type">>, fun col_account_call_type/3}
         ,{<<"rate">>, fun col_rate/3}
         ,{<<"rate_name">>, fun col_rate_name/3}
@@ -96,6 +98,26 @@
         ,{<<"reseller_id">>, fun col_reseller_id/3}
         ,{<<"account_id">>, fun col_account_id/3}
         ]).
+
+-define(COLUMNS_SIMPLE
+       ,[{<<"timestamp">>, fun col_rfc3339_local/3}
+        ,{<<"caller_id_number">>, fun col_caller_id_number/3}
+        ,{<<"caller_id_name">>, fun col_caller_id_name/3}
+        ,{<<"callee_id_number">>, fun col_callee_id_number/3}
+        ,{<<"callee_id_name">>, fun col_callee_id_name/3}
+        ,{<<"duration_seconds">>, fun col_duration_seconds/3}
+        %,{<<"billing_seconds">>, fun col_billing_seconds/3}
+        ,{<<"direction">>, fun col_call_direction/3}
+        ,{<<"hangup_cause">>, fun col_hangup_cause/3}
+        ,{<<"disposition">>, fun col_disposition/3}
+        ,{<<"user">>, fun col_user_ext/3}
+        %,{<<"owner_id">>, fun col_owner_id/3}
+        %,{<<"cost">>, fun col_customer_cost/3}
+         %% New fields
+        %,{<<"dialed_number">>, fun col_dialed_number/3}
+        %,{<<"calling_from">>, fun col_calling_from/3}
+        ]).
+
 
 -define(CONTEXT_COLUMNS
        ,[{<<"inception_direction">>, fun col_inception_direction/3}]
@@ -486,6 +508,13 @@ maybe_add_csv_header(Context, <<"csv">>, [Head | Tail]=Data) ->
 
 -spec csv_rows(cb_context:context()) -> [{kz_term:ne_binary(), cdr_column_fun()}].
 csv_rows(Context) ->
+    case kz_term:is_true(cb_context:req_value(Context, ?KEY_SIMPLE)) of %% check for simple output mode
+        'true' -> ?COLUMNS_SIMPLE;
+        _ -> csv_rows(Context, 'false')
+    end.
+
+-spec csv_rows(cb_context:context(), atom()) -> [{kz_term:ne_binary(), cdr_column_fun()}].
+csv_rows(Context, 'false') -> %% not simple output mode
     case cb_context:fetch(Context, 'is_reseller', 'false') of
         'false' -> ?COLUMNS;
         'true' -> ?COLUMNS ++ ?COLUMNS_RESELLER
@@ -493,7 +522,10 @@ csv_rows(Context) ->
 
 -spec json_rows(cb_context:context()) -> [{kz_term:ne_binary(), cdr_column_fun()}].
 json_rows(Context) ->
-    json_rows(Context, interaction_path(Context)).
+    case kz_term:is_true(cb_context:req_value(Context, ?KEY_SIMPLE)) of %% check for simple output mode
+        'true' -> ?COLUMNS_SIMPLE;
+        _ -> json_rows(Context, interaction_path(Context))
+    end.
 
 -spec json_rows(cb_context:context(), atom()) -> [{kz_term:ne_binary(), cdr_column_fun()}].
 json_rows(Context, 'undefined') ->
@@ -544,6 +576,7 @@ col_unix_timestamp(_JObj, Timestamp, _Context) -> kz_term:to_binary(kz_time:greg
 col_rfc1036(_JObj, Timestamp, _Context) -> kz_time:rfc1036(Timestamp).
 col_iso8601(_JObj, Timestamp, _Context) -> kz_date:to_iso8601_extended(Timestamp).
 col_iso8601_combined(_JObj, Timestamp, _Context) -> kz_time:iso8601(Timestamp).
+col_rfc3339_local(JObj, Timestamp, _Context) -> local_rfc3339_time(JObj, Timestamp).
 col_account_call_type(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"account_billing">>], JObj, <<>>).
 col_rate(JObj, _Timestamp, _Context) -> kz_term:to_binary(kz_currency:units_to_dollars(kz_json:get_value([?KEY_CCV, <<"rate">>], JObj, 0))).
 col_rate_name(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"rate_name">>], JObj, <<>>).
@@ -572,6 +605,60 @@ col_inception_direction(JObj, _Timestamp, Context) ->
                 <<"inbound">> -> <<"origination">>;
                 <<"outbound">> -> <<"termination">>
             end
+    end.
+
+col_user_ext(JObj, _Timestamp, _Context) ->
+    AccountId = kz_json:get_ne_binary_value([?KEY_CCV, <<"account_id">>], JObj),
+    OwnerId = kz_json:get_value([?KEY_CCV, <<"owner_id">>], JObj),
+    user_ext(AccountId, OwnerId).
+
+-spec user_ext(kz_term:api_binary(), kz_term:api_binary()) -> binary().
+user_ext(_, 'undefined') -> <<>>;
+user_ext(_, <<>>) -> <<>>;
+user_ext(AccountId, OwnerId) ->
+    case kzd_users:fetch(AccountId, OwnerId) of
+        {'ok', UserDoc} -> user_ext(UserDoc);
+        _ -> <<>>
+    end.
+
+-spec user_ext(kz_json:object()) -> binary().
+user_ext(UserDoc) ->
+    Name = kzd_user:name(UserDoc),
+    Ext = kzd_users:presence_id(UserDoc),
+    case Ext of
+        'undefined' -> Name;
+        <<>> -> Name;
+        Exten -> <<Name/binary, " - ", Exten/binary>>
+    end.
+
+-spec local_rfc3339_time(kz_json:object(), kz_time:gregorian_second()) -> kz_term:ne_binary().
+local_rfc3339_time(JObj, Timestamp) ->
+    AccountId = kz_json:get_ne_binary_value([?KEY_CCV, <<"account_id">>], JObj),
+    Timezone = kzd_accounts:timezone(AccountId),
+    UTCDateTime = calendar:gregorian_seconds_to_datetime(Timestamp),
+    Offset = local_tz_offset(UTCDateTime, Timezone), %% -0400
+    LocalDateTime = localtime:utc_to_local(UTCDateTime, kz_term:to_list(Timezone)), %% {{2025,11,2},{1,17,34}}
+    {{Y, M, D}, {H, Min, S}} = LocalDateTime,
+    YYYY = kz_term:to_binary(Y),
+    MM = kz_binary:pad_left(kz_term:to_binary(M), 2, <<"0">>),
+    DD = kz_binary:pad_left(kz_term:to_binary(D), 2, <<"0">>),
+    HH = kz_binary:pad_left(kz_term:to_binary(H), 2, <<"0">>),
+    MMin = kz_binary:pad_left(kz_term:to_binary(Min), 2, <<"0">>),
+    SS = kz_binary:pad_left(kz_term:to_binary(S), 2, <<"0">>),
+    %% 2025-11-02T01:41:17-04:00
+    <<YYYY/binary, "-", MM/binary, "-", DD/binary, "T", HH/binary, ":", MMin/binary, ":", SS/binary, Offset/binary>>.
+
+-spec local_tz_offset(calendar:datetime(), kz_term:ne_binary()) -> kz_term:ne_binary().
+local_tz_offset(Datetime, <<FromTz/binary>>) ->
+    case localtime:tz_shift(Datetime, "UTC", kz_term:to_list(FromTz)) of %% offset of the Timezone relative to UTC
+        0 -> <<"+0000">>;
+        {'error', 'unknown_tz'} -> <<"+00:00">>;
+        {Sign, H, M} ->
+            list_to_binary([kz_term:to_binary(Sign)
+                           ,kz_binary:pad_left(kz_term:to_binary(H), 2, <<"0">>)
+                           ,":"
+                           ,kz_binary:pad_left(kz_term:to_binary(M), 2, <<"0">>)
+                           ])
     end.
 
 -spec interaction_path(cb_context:context()) -> 'account' | 'user' | 'undefined'.
