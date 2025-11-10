@@ -2220,6 +2220,20 @@
             },
             "type": "object"
         },
+        "callflows.destination_listmatch": {
+            "description": "Validator for the destination_listmatch callflow data object",
+            "properties": {
+                "id": {
+                    "description": "Destination List ID",
+                    "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "callflows.device": {
             "properties": {
                 "can_call_self": {
