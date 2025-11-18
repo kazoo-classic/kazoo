@@ -477,6 +477,10 @@ provider_module(?FEATURE_FORCE_OUTBOUND, _, _) ->
     ?PROVIDER_FORCE_OUTBOUND;
 provider_module(?FEATURE_ATTRIBUTES, _, _) ->
     ?PROVIDER_ATTRIBUTES;
+provider_module(?FEATURE_SMS, _, _) ->
+    ?PROVIDER_SMS;
+provider_module(?FEATURE_MMS, _, _) ->
+    ?PROVIDER_MMS;
 provider_module(Other, _, _) ->
     ?LOG_DEBUG("unmatched feature provider ~p, allowing", [Other]),
     Other.
