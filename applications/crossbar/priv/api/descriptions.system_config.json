@@ -406,7 +406,6 @@
     "kazoo_endpoint.mobile.realm": "kazoo_endpoint.mobile realm",
     "kazoo_endpoint.mobile.sms_interface": "kazoo_endpoint.mobile sms interface",
     "kazoo_endpoint.mobile.suffix": "kazoo_endpoint.mobile suffix",
-    "kazoo_endpoint.number_attributes_lookup": "use number attributes in call processing",
     "kazoo_endpoint.restrict_to_known_types": "kazoo_endpoint restrict to known types",
     "kazoo_endpoint.should_add_diversion_header": "kazoo_endpoint should add diversion header",
     "kazoo_endpoint.sip_transport": "kazoo_endpoint sip transport",

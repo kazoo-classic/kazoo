@@ -1,9 +1,10 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
 %%% @author Luis Azedo
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kz_endpoint).
@@ -83,6 +84,8 @@
                         ]).
 
 -define(RECORDING_ARGS(Call, Data), [kapps_call:clear_helpers(Call), Data]).
+
+-define(CONFIG_ATTRIBUTES_LOOKUP, kapps_config:get_is_true(<<"callflow">>, <<"number_attributes_lookup">>, 'false')).
 
 -type sms_route() :: {binary(), kz_term:proplist()}.
 -type sms_routes() :: [sms_route(), ...].
@@ -1232,22 +1235,43 @@ create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
 %%------------------------------------------------------------------------------
 -spec maybe_get_t38(kz_json:object(), kapps_call:call()) -> kz_term:proplist().
 maybe_get_t38(Endpoint, Call) ->
-    T38Source = %% ?MODULE:get/1 below gets the authorizing entity, whether it is an offnet resource (inbound) or another Kazoo device
-        case ?MODULE:get(Call) of
-            {'ok', JObj} -> kz_json:is_true([<<"media">>, <<"fax_option">>], JObj);
-            {'error', _} -> 'undefined'
-        end,
-    FaxOptionEndpoint = kz_json:is_true([<<"media">>, <<"fax_option">>], Endpoint),
-    T38Endpoint =
-        case {FaxOptionEndpoint, kapps_config:get_is_true(?CONFIG_CAT, <<"number_attributes_lookup">>, 'false')} of
-            {'true', _} -> 'true';
-            {_, 'true'} ->
-                DestNumber = kapps_call:to(Call),
-                knm_phone_number:is_fax_number(DestNumber);
-            {_, _} -> 'false'
-        end,
-
+    T38Source = source_has_t38(Call),
+    T38Endpoint = dest_has_t38(Endpoint, Call),
     kapps_call_command:get_inbound_t38_settings(T38Source, T38Endpoint).
+
+-spec dest_has_t38(kz_json:object(), kapps_call:call()) -> kz_term:api_boolean().
+dest_has_t38(Endpoint, Call) ->
+    DestNumber = knm_converters:normalize(kapps_call:callee_id_number(Call), kapps_call:account_id(Call)),
+    FaxOption = kz_json:is_true([<<"media">>, <<"fax_option">>], Endpoint),
+    T38DestNumber = case ?CONFIG_ATTRIBUTES_LOOKUP of
+                        'true' -> knm_phone_number:is_fax_number(DestNumber);
+                        'false' -> 'false'
+                    end,
+    case {FaxOption, T38DestNumber} of
+        {'true', _} -> 'true';
+        {_, 'true'} -> 'true';
+        {'undefined', _} -> 'undefined';
+        {_, _} -> 'false'
+    end.
+
+-spec source_has_t38(kapps_call:call()) -> kz_term:api_boolean().
+source_has_t38(Call) ->
+    CLINumber = knm_converters:normalize(kapps_call:caller_id_number(Call), kapps_call:account_id(Call)),
+    %% ?MODULE:get/1 below gets the authorizing entity, whether it is an offnet resource (inbound) or another Kazoo device
+    FaxOption = case ?MODULE:get(Call) of
+                    {'ok', JObj} -> kz_json:is_true([<<"media">>, <<"fax_option">>], JObj);
+                    {'error', _} -> 'false'
+                end,
+    T38SourceNumber = case ?CONFIG_ATTRIBUTES_LOOKUP of
+                          'true' -> knm_phone_number:is_fax_number(CLINumber);
+                          'false' -> 'false'
+                      end,
+    case {FaxOption, T38SourceNumber} of
+        {'true', _} -> 'true';
+        {_, 'true'} -> 'true';
+        {'undefined', _} -> 'undefined';
+        {_, _} -> 'false'
+    end.
 
 -spec maybe_build_failover(kz_json:object(), kapps_call:call()) -> kz_term:api_object().
 maybe_build_failover(Endpoint, Call) ->

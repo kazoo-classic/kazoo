@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc Callflow resource.
 %%%
 %%% <h4>Data options:</h4>
@@ -55,6 +55,7 @@
 %%%
 %%% @author Karl Anderson
 %%% @author Sponsored by Raffel Internet B.V. Implemented by Voyager Internet Ltd.
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(cf_resources).
@@ -428,8 +429,13 @@ get_ignore_early_media(Data) ->
 -spec get_t38_enabled(kapps_call:call()) -> kz_term:api_boolean().
 get_t38_enabled(Call) ->
     case kz_endpoint:get(Call) of
-        {'ok', JObj} -> cf_util:determine_t38(Call, JObj);
-        {'error', _} -> 'undefined'
+        {'ok', JObj} ->
+            cf_util:determine_t38(Call, JObj);
+        {'error', _} ->
+            case cf_util:determine_t38(Call) of
+                'true' -> 'true';
+                'false' -> 'undefined'
+            end
     end.
 
 -spec get_flags(kz_json:object(), kapps_call:call()) -> kz_term:api_binaries().
@@ -437,6 +443,7 @@ get_flags(Data, Call) ->
     Flags = kz_attributes:get_flags(?APP_NAME, Call),
     Routines = [fun get_flow_flags/3
                ,fun get_flow_dynamic_flags/3
+               ,fun maybe_get_fax_flag/3
                ],
     lists:foldl(fun(F, A) -> F(Data, Call, A) end, Flags, Routines).
 
@@ -454,6 +461,14 @@ get_flow_dynamic_flags(Data, Call, Flags) ->
     case kz_json:get_list_value(<<"dynamic_flags">>, Data) of
         'undefined' -> Flags;
         DynamicFlags -> kz_attributes:process_dynamic_flags(DynamicFlags, Flags, Call)
+    end.
+
+-spec maybe_get_fax_flag(kz_json:object(), kapps_call:call(), kz_term:ne_binaries()) ->
+          kz_term:ne_binaries().
+maybe_get_fax_flag(_Data, Call, Flags) ->
+    case cf_util:determine_t38(Call) of
+        'true' -> lists:usort([<<"fax">> | Flags]);
+        'false' -> Flags
     end.
 
 -spec get_inception(kapps_call:call()) -> kz_term:api_binary().
