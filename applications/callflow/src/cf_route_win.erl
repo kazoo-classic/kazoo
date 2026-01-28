@@ -268,10 +268,18 @@ update_ccvs(Call) ->
               ),
 
     CCVs = kapps_call:custom_channel_vars(Call),
+    Username = kz_json:get_binary_value(<<"Username">>, CCVs),
+    %% check original CID name to make sure it is not the SIP username (which is default if endpoint doesn't specify it):
+    OriginalCIDName = case kz_json:get_binary_value(<<"Original-Caller-ID-Name">>, CCVs) of
+                          Username -> CIDName;
+                          _Name -> _Name
+                      end,
     Props = props:filter_undefined(
               [{<<"Hold-Media">>, kz_attributes:moh_attributes(<<"media_id">>, Call)}
               ,{<<"Caller-ID-Name">>, CIDName}
               ,{<<"Caller-ID-Number">>, CIDNumber}
+              ,{<<"Original-Caller-ID-Name">>, OriginalCIDName}
+              ,{<<"Original-Caller-ID-Number">>, kapps_call:caller_id_number(Call)}
                | get_incoming_security(Call)
                ++ kz_privacy:flags(CCVs)
               ]),

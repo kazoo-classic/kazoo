@@ -3,6 +3,11 @@
     "_id": "system_config.kazoo_endpoint",
     "description": "Schema for kazoo_endpoint system_config",
     "properties": {
+        "allow_passthrough_caller_id": {
+            "default": true,
+            "description": "allow endpoints to passthrough caller id when enabled on the caller id object[s]",
+            "type": "boolean"
+        },
         "custom_sip_interface": {
             "description": "kazoo_endpoint custom sip interface",
             "type": "string"

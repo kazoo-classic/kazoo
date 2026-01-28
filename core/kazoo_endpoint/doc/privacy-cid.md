@@ -8,6 +8,8 @@ Kazoo has a default Feature Code `"*67"` which can be use for making a call with
 
 The system config parameter `system_config/privacy/privacy_mode` can be use to configure which parts of Caller ID should be anonymize if privacy flags are set for a Call. This is especially is important for Outbound Calls, if your carrier is expecting known Caller IDs and they honor privacy flags when they're routing calls to third party carriers or final destination.
 
+Some carriers (or jurisdictions---Australia is one) require anonymous calls to include a P-Asserted-Identity header with a valid number. You can force a PAI header to be used all the time with the `system_config/callflow.resources/default_asserted_identity` parameter. Alternately, the `system_config/callflow.resources/default_asserted_identity_privacy` uses the PAI header only on anonymous calls (anytime number is hidden).
+
 > WARNING: allowing to pass Caller IDs as is should only applied to carriers which you *TRUST* since it will expose caller's identity.
 
 ## Configuring Privacy System wide and/or in Account level

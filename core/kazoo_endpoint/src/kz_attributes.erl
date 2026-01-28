@@ -1,8 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2026, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kz_attributes).
@@ -114,11 +115,35 @@ maybe_get_endpoint_cid(Validate, Attribute, Call) ->
             lager:info("unable to get endpoint: ~p", [_R]),
             maybe_normalize_cid('undefined', 'undefined', Validate, Attribute, Call);
         {'ok', JObj} ->
-            Number = get_cid_or_default(Attribute, <<"number">>, JObj),
-            Name = get_cid_or_default(Attribute, <<"name">>, JObj),
-            _ = log_configured_endpoint_cid(Attribute, Name, Number),
-            Call1 = maybe_add_originals_to_kvs(Number, Name, Call),
-            maybe_use_presence_number(Number, Name, JObj, Validate, Attribute, Call1)
+            Call1 = maybe_add_passthrough_to_kvs(Attribute, JObj, Call),
+            {Number, Name} = get_endpoint_cid(Attribute, JObj, Call1),
+            Call2 = maybe_add_originals_to_kvs(Number, Name, Call1),
+            maybe_use_presence_number(Number, Name, JObj, Validate, Attribute, Call2)
+    end.
+
+-spec maybe_add_passthrough_to_kvs(kz_term:ne_binary(), kz_json:object(), kapps_call:call()) -> kapps_call:call().
+maybe_add_passthrough_to_kvs(Attribute, Endpoint, Call) ->
+    case kz_json:is_true([<<"caller_id">>, Attribute, <<"passthrough">>], Endpoint, 'false')
+        andalso kapps_config:get_is_true(?CONFIG_CAT, <<"allow_passthrough_caller_id">>, 'true')
+    of
+        'true' -> kapps_call:kvs_store('passthrough_caller_id', 'true', Call);
+        'false' -> Call
+    end.
+
+-spec get_endpoint_cid(kz_term:ne_binary(), kz_json:object(), kapps_call:call()) -> {kz_term:api_binary(), kz_term:api_ne_binary()}.
+get_endpoint_cid(Attribute, Endpoint, Call) ->
+    EndpointCLINumber = get_cid_or_default(Attribute, <<"number">>, Endpoint),
+    EndpointCLIName = get_cid_or_default(Attribute, <<"name">>, Endpoint),
+    _ = log_configured_endpoint_cid(Attribute, EndpointCLIName, EndpointCLINumber),
+    case kapps_call:kvs_fetch('passthrough_caller_id', 'false', Call) of
+        'true' ->
+            CCVs = kapps_call:custom_channel_vars(Call),
+            Name = kz_json:get_binary_value(<<"Original-Caller-ID-Name">>, CCVs),
+            Number = kz_json:get_binary_value(<<"Original-Caller-ID-Number">>, CCVs),
+            lager:debug("endpoint configured with passthrough for ~s; provided caller id: [~p] ~s", [Attribute, Name, Number]),
+            {Number, Name};
+        'false' ->
+            {EndpointCLINumber, EndpointCLIName}
     end.
 
 -spec maybe_add_originals_to_kvs(kz_term:api_ne_binary(), kz_term:api_ne_binary(), kapps_call:call()) -> kapps_call:call().
@@ -223,26 +248,143 @@ maybe_ensure_cid_valid(Number, Name, 'true', <<"emergency">>, _Call) ->
     lager:info("determined emergency caller id is <~s> ~s", [Name, Number]),
     {Number, Name};
 maybe_ensure_cid_valid(Number, Name, 'true', <<"external">>, Call) ->
-    case kapps_config:get_is_true(<<"callflow">>, <<"ensure_valid_caller_id">>, 'false') of
-        'true' -> ensure_valid_caller_id(Number, Name, Call);
-        'false' ->
-            lager:info("determined external caller id is <~s> ~s", [Name, Number]),
-            {Number, Name}
+    AccountId = kapps_call:account_id(Call),
+    case kzd_accounts:fetch(AccountId) of
+        {'error', _E} ->
+            ?LOG_INFO("failed to open ~s: ~p", [AccountId, _E]),
+            maybe_get_account_cid(Number, Name, Call);
+        {'ok', AccountDoc} ->
+            case should_check_validity(AccountDoc, Call) of
+                'true' -> ensure_valid_caller_id(Number, Name, Call, AccountDoc);
+                'false' ->
+                    lager:info("determined external caller id is <~s> ~s", [Name, Number]),
+                    {Number, Name}
+            end
     end;
 maybe_ensure_cid_valid(Number, Name, _, Attribute, _Call) ->
     lager:info("determined ~s caller id is <~s> ~s", [Attribute, Name, Number]),
     {Number, Name}.
 
--spec ensure_valid_caller_id(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> cid().
-ensure_valid_caller_id(Number, Name, Call) ->
+%%%-----------------------------------------------------------------------------
+%%% @doc These 'should_check_validity' functions evaluate config parameters on
+%%% system_config/callflow and also the account document to determine if this
+%%% caller ID should be checked. There are these parameters:
+%%%  - system_config/callflow.ensure_valid_caller_id
+%%%  - system_config/callflow.ensure_valid_caller_id_owner
+%%%  - system_config/callflow.ensure_valid_passthrough_caller_id
+%%%  - system_config/callflow.ensure_valid_passthrough_caller_id_owner
+%%%  - {accountDoc}.caller_id_options.ensure_valid
+%%%  - {accountDoc}.caller_id_options.ensure_valid_owner
+%%%  - {accountDoc}.caller_id_options.passthrough_ensure_valid
+%%%  - {accountDoc}.caller_id_options.passthrough_ensure_valid_owner
+%%%  The passthrough options ONLY apply if passthrough caller ID is being used
+%%%  and the device is sending some arbitrary CLI into Kazoo. Passthrough CLI
+%%%  status is set on the Call KVs earlier in maybe_add_passthrough_to_kvs/3.
+%%%-----------------------------------------------------------------------------
+
+-spec should_check_validity(kz_json:object(), boolean() | kapps_call:call()) -> boolean().
+should_check_validity(AccountDoc, 'false') ->
+    kapps_config:get_is_true(<<"callflow">>, <<"ensure_valid_caller_id">>, 'false')
+        orelse kzd_accounts:caller_id_options_ensure_valid(AccountDoc, 'false')
+        orelse should_check_validity_owner(AccountDoc, 'false');
+should_check_validity(AccountDoc, 'true') ->
+    case should_check_validity(AccountDoc, 'false') of
+        'true' -> 'true';
+        'false' ->
+            kapps_config:get_is_true(<<"callflow">>, <<"ensure_valid_passthrough_caller_id">>, 'false')
+                orelse kzd_accounts:caller_id_options_passthrough_ensure_valid(AccountDoc, 'false')
+                orelse should_check_validity_owner(AccountDoc, 'true')
+    end;
+should_check_validity(AccountDoc, Call) ->
+    Passthrough = kapps_call:kvs_fetch('passthrough_caller_id', 'false', Call),
+    should_check_validity(AccountDoc, Passthrough).
+
+-spec should_check_validity_owner(kz_json:object(), boolean() | kapps_call:call()) -> boolean().
+should_check_validity_owner(AccountDoc, 'false') ->
+    kapps_config:get_is_true(<<"callflow">>, <<"ensure_valid_caller_id_owner">>, 'false')
+        orelse kzd_accounts:caller_id_options_ensure_valid_owner(AccountDoc, 'false');
+should_check_validity_owner(AccountDoc, 'true') ->
+    case should_check_validity_owner(AccountDoc, 'false') of
+        'true' -> 'true';
+        'false' ->
+            kapps_config:get_is_true(<<"callflow">>, <<"ensure_valid_passthrough_caller_id_owner">>, 'false')
+                orelse kzd_accounts:caller_id_options_passthrough_ensure_valid_owner(AccountDoc, 'false')
+    end;
+should_check_validity_owner(AccountDoc, Call) ->
+    Passthrough = kapps_call:kvs_fetch('passthrough_caller_id', 'false', Call),
+    should_check_validity_owner(AccountDoc, Passthrough).
+
+-spec ensure_valid_caller_id(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call(), kz_json:object()) -> cid().
+ensure_valid_caller_id(Number, Name, Call, AccountDoc) ->
     case is_valid_caller_id(Number, Call) of
         'true' ->
-            lager:info("determined valid external caller id is <~s> ~s", [Name, Number]),
+            case should_check_validity_owner(AccountDoc, Call) of
+                'true' ->
+                    ensure_valid_caller_id_owner(Number, Name, Call);
+                'false' ->
+                    lager:info("determined valid external caller id is <~s> ~s", [Name, Number]),
+                    {Number, Name}
+            end;
+        'false' ->
+            lager:info("invalid external caller id <~s> ~s", [Name, Number]),
+            maybe_get_account_cid(Number, Name, Call)
+    end.
+
+-spec ensure_valid_caller_id_owner(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> cid().
+ensure_valid_caller_id_owner(Number, Name, Call) ->
+    case number_assigned_to_owner(Number, Call) of
+        'true' ->
+            lager:info("determined valid owner-assigned external caller id is <~s> ~s", [Name, Number]),
             {Number, Name};
         'false' ->
             lager:info("invalid external caller id <~s> ~s", [Name, Number]),
             maybe_get_account_cid(Number, Name, Call)
     end.
+
+-spec number_assigned_to_owner(kz_term:ne_binary(), kapps_call:call()) -> boolean().
+number_assigned_to_owner(Number, Call) ->
+    AccountId = kapps_call:account_id(Call),
+    OwnerId = kapps_call:owner_id(Call),
+    lager:debug("checking if this caller id number ~s belongs to owner ~s", [Number, OwnerId]),
+    case callflow_lookup(Number, AccountId) of
+        {'ok', NumberCallflow} ->
+            OwnerId =:= kz_json:get_ne_binary_value(<<"owner_id">>, NumberCallflow);
+        _Error -> 'false'
+    end.
+
+-spec callflow_lookup(kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kzd_callflow:doc(), boolean()} | {'error', any()}.
+callflow_lookup(Number, AccountId) ->
+    case kz_cache:fetch_local(?CALLFLOW_CACHE_NAME, {'cf_flow', Number, AccountId}) of
+        {'ok', FlowId} -> kzd_callflows:fetch(AccountId, FlowId);
+        {'error', 'not_found'} -> callflow_number_db_lookup(Number, AccountId)
+    end.
+
+-spec callflow_number_db_lookup(kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kzd_callflow:doc(), boolean()} | {'error', any()}.
+callflow_number_db_lookup(Number, AccountId) ->
+    Db = kz_util:format_account_db(AccountId),
+    lager:debug("searching for callflow in ~s to match '~s' with owner", [Db, Number]),
+    Options = [{'key', Number}, 'include_docs'],
+    case kz_datamgr:get_results(Db, <<"callflows/listing_by_number">>, Options) of
+        {'error', _}=E -> E;
+        {'ok', []} -> {'error', 'not_found'};
+        {'ok', [JObj]} ->
+            Flow = kz_json:get_value(<<"doc">>, JObj),
+            cache_callflow_number(Number, AccountId, Flow);
+        {'ok', [JObj | _Rest]} ->
+            lager:debug("lookup resulted in more than one result, using the first"),
+            Flow = kz_json:get_value(<<"doc">>, JObj),
+            cache_callflow_number(Number, AccountId, Flow)
+    end.
+
+-spec cache_callflow_number(kz_term:ne_binary(), kz_term:ne_binary(), kzd_callflow:doc()) ->
+          {'ok', kzd_callflow:doc(), boolean()} | {'error', any()}.
+cache_callflow_number(Number, AccountId, Flow) ->
+    AccountDb = kz_util:format_account_db(AccountId),
+    CacheOptions = [{'origin', [{'db', AccountDb, <<"callflow">>}]}
+                   ,{'expires', ?MILLISECONDS_IN_HOUR}
+                   ],
+    kz_cache:store_local(?CALLFLOW_CACHE_NAME, {'cf_flow', Number, AccountId}, kz_doc:id(Flow), CacheOptions),
+    {'ok', Flow}.
 
 -spec get_account_external_cid(kapps_call:call()) -> cid().
 get_account_external_cid(Call) ->

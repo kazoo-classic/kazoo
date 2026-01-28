@@ -16,6 +16,10 @@
                     "maxLength": 35,
                     "type": "string"
                 },
+                "passthrough": {
+                    "description": "Whether to pass through CLI from the endpoint",
+                    "type": "boolean"
+                },
                 "realm": {
                     "description": "The asserted identity realm for the object type",
                     "type": "string"
@@ -35,6 +39,10 @@
                     "description": "The caller id number for the object type",
                     "maxLength": 35,
                     "type": "string"
+                },
+                "passthrough": {
+                    "description": "Whether to pass through CLI from the endpoint",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -51,6 +59,10 @@
                     "description": "The caller id number for the object type",
                     "maxLength": 35,
                     "type": "string"
+                },
+                "passthrough": {
+                    "description": "Whether to pass through CLI from the endpoint",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -67,6 +79,10 @@
                     "description": "The caller id number for the object type",
                     "maxLength": 35,
                     "type": "string"
+                },
+                "passthrough": {
+                    "description": "Whether to pass through CLI from the endpoint",
+                    "type": "boolean"
                 }
             },
             "type": "object"

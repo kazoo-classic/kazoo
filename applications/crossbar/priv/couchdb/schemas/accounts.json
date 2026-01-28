@@ -52,6 +52,14 @@
         "caller_id_options": {
             "description": "custom properties for configuring caller_id",
             "properties": {
+                "ensure_valid": {
+                    "description": "Ensure caller id is valid (must match a DID on the account)",
+                    "type": "boolean"
+                },
+                "ensure_valid_owner": {
+                    "description": "Ensure caller id is valid (must match a DID assigned to the user)",
+                    "type": "boolean"
+                },
                 "outbound_privacy": {
                     "description": "Determines what appears as caller id for offnet outbound calls. Values: full - hides name and number; name - hides only name; number - hides only number; none - hides nothing",
                     "enum": [
@@ -61,6 +69,14 @@
                         "none"
                     ],
                     "type": "string"
+                },
+                "passthrough_ensure_valid": {
+                    "description": "Ensure passthrough caller id is valid (must match a DID on the account)",
+                    "type": "boolean"
+                },
+                "passthrough_ensure_valid_owner": {
+                    "description": "Ensure passthrough caller id is valid (must match a DID assigned to the user)",
+                    "type": "boolean"
                 },
                 "show_rate": {
                     "description": "Whether to show the rate",

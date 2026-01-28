@@ -9,6 +9,7 @@
 -define(CONFIG_CAT, <<"kazoo_endpoint">>).
 
 -define(CACHE_NAME, 'kazoo_endpoint_cache').
+-define(CALLFLOW_CACHE_NAME, 'callflow_cache').
 
 -define(ATTR_LOWER_KEY, <<109,108,112,112>>).
 -define(ATTR_UPPER_KEY, <<109,097,120,095,112,114,101,099,101,100,101,110,099,101>>).
