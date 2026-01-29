@@ -450,7 +450,7 @@ set_or_merge_override(ServicesJObj, PlanId, Override, Options) ->
     end.
 
 -spec set_override(kz_json:object(), kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
-set_override(_ServicesJObj, PlanId, Overrides)  ->
+set_override(_ServicesJObj, PlanId, Overrides) ->
     lager:debug("updating overrides for ~s via set", [PlanId]),
     Overrides.
 

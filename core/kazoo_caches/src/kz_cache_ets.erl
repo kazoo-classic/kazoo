@@ -67,7 +67,7 @@ to_tab(Name, Suffix) ->
     kz_term:to_atom(kz_term:to_list(Name) ++ Suffix, 'true').
 
 -spec store(kz_types:server_ref(), any(), any(), kz_cache:store_options()) -> 'ok' | 'error'.
-store(Srv, K, V, Props)  ->
+store(Srv, K, V, Props) ->
     gen_server:call(Srv, {'store', cache_obj(K, V, Props)}).
 
 -spec store_async(kz_typs:server_ref(), any(), any(), kz_term:proplist()) -> 'ok'.

@@ -88,7 +88,7 @@ init([Name]) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), {pid(), any()}, state()) -> kz_types:handle_call_ret_state(state()).
-handle_call('is_ready', From, #state{pending = Pids} = State) ->
+handle_call('is_ready', From, #state{pending = Pids}=State) ->
     NewState = maybe_ready(State#state{pending = [From | Pids]}),
     {'noreply', NewState};
 handle_call(_Request, _From, State) ->
@@ -100,10 +100,10 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
-handle_cast({'is_ready', Pid, Ref}, #state{pending = Pending} = State) ->
+handle_cast({'is_ready', Pid, Ref}, #state{pending = Pending}=State) ->
     NewState = maybe_ready(State#state{pending = [{Pid, Ref} | Pending]}),
     {'noreply', NewState};
-handle_cast({'kz_nodes', {'expire', #kz_node{node = Node}}}, #state{name = Name} = State) ->
+handle_cast({'kz_nodes', {'expire', #kz_node{node = Node}}}, #state{name = Name}=State) ->
     Name ! {'DOWN', Node},
     {'noreply', State};
 handle_cast({'gen_listener', {'created_queue', _QueueNAme}}, State) ->
@@ -196,7 +196,7 @@ ready_when_node_is_up() ->
 maybe_ready(#state{pending = Pids
                   ,has_queue = 'true'
                   ,is_consuming = 'true'
-                  } = State) ->
+                  }=State) ->
     _ = [gen_server:reply(Pid, 'ready') || Pid <- Pids],
     State#state{pending = []};
 maybe_ready(#state{has_queue='true'}=State) ->

@@ -31,18 +31,18 @@
         ]).
 
 -define(IS_US_TOLLFREE_PREFIX(Options)
-        ,?IS_US_TOLLFREE(props:get_value('prefix', Options)) orelse ?IS_US_TOLLFREE_WILDCARD(props:get_value('prefix', Options))
-        ).
+       ,?IS_US_TOLLFREE(props:get_value('prefix', Options)) orelse ?IS_US_TOLLFREE_WILDCARD(props:get_value('prefix', Options))
+       ).
 
 -define(CARRIER_MODULES(IsTollfree, AccountId, ResellerId)
-        ,(case IsTollfree of 
-            'false' -> ?CARRIER_MODULES(AccountId, ResellerId); 
-            'true' -> 
-                case ?TF_CARRIER_MODULES(AccountId, ResellerId) of
-                    [] -> ?CARRIER_MODULES(AccountId, ResellerId);
-                    Else -> Else
-                end
-          end)
+       ,(case IsTollfree of
+             'false' -> ?CARRIER_MODULES(AccountId, ResellerId);
+             'true' ->
+                 case ?TF_CARRIER_MODULES(AccountId, ResellerId) of
+                     [] -> ?CARRIER_MODULES(AccountId, ResellerId);
+                     Else -> Else
+                 end
+         end)
        ).
 
 -define(CARRIER_MODULES(AccountId, ResellerId)
@@ -175,25 +175,25 @@ carrier_modules(IsTollFree, AccountId, ResellerId) when IsTollFree =:= 'false' -
         [] -> ?CARRIER_MODULES;
         C -> C
     end;
-%system_config/number_manager
+%%system_config/number_manager
 carrier_modules('true', 'undefined', 'undefined') ->
     case {?CARRIER_MODULES, ?TF_CARRIER_MODULES} of
         {[], []} -> ?DEFAULT_CARRIER_MODULES;
-        {C, []} -> 
+        {C, []} ->
             kapps_config:set(?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, C),
             C;
         {_, C} -> C
     end;
-%Reseller
+%%Reseller
 carrier_modules('true', ResellerId, 'undefined') ->
     case {?CARRIER_MODULES(ResellerId), ?TF_CARRIER_MODULES(ResellerId)} of
         {[], []} -> carrier_modules('true', 'undefined', 'undefined');
-        {_, []} -> 
+        {_, []} ->
             kapps_account_config:set(ResellerId, ?KNM_CONFIG_CAT, <<"tf_carrier_modules">>, [?CARRIER_LOCAL]),
             [?CARRIER_LOCAL];
         {_, C} -> C
     end;
-%Account
+%%Account
 carrier_modules('true', AccountId, ResellerId) ->
     case {?CARRIER_MODULES(AccountId), ?TF_CARRIER_MODULES(AccountId)} of
         {[], []} -> carrier_modules('true', ResellerId, 'undefined');

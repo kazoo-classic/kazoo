@@ -403,9 +403,9 @@ handle_info(?LOOPBACK_BOWOUT_MSG(Node, Props), #state{call_id=ResigningUUID
     {'noreply', State#state{call_id=NewUUID}};
 handle_info({'usurp_publisher', CallId, RefId, _JObj}, #state{ref=RefId
                                                              ,call_id=CallId
-                                                             } = State) ->
+                                                             }=State) ->
     {'noreply', State};
-handle_info({'usurp_publisher', CallId, _RefId, _JObj}, #state{call_id=CallId} = State) ->
+handle_info({'usurp_publisher', CallId, _RefId, _JObj}, #state{call_id=CallId}=State) ->
     {'noreply', State#state{passive='true'}};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
@@ -1062,7 +1062,7 @@ get_progress_seconds(Props) ->
 ensure_non_negative(Var, NegativeS) when NegativeS < 0 ->
     lager:warning("unexpectedly negative value for ~s: ~p", [Var, NegativeS]),
     0;
-ensure_non_negative(_Var, NonNegativeS)  -> NonNegativeS.
+ensure_non_negative(_Var, NonNegativeS) -> NonNegativeS.
 
 -spec get_ringing_seconds(kzd_freeswitch:data()) -> non_neg_integer().
 get_ringing_seconds(Props) ->

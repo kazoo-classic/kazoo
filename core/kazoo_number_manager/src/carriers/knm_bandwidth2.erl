@@ -20,12 +20,12 @@
 -export([check_numbers/1]).
 
 -define(SITE_ID(Options)
-        ,?BW2_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
-        ).
+       ,?BW2_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+       ).
 
 -define(SIP_PEER(Options)
-        ,?BW2_SIP_PEER(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
-        ).
+       ,?BW2_SIP_PEER(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+       ).
 
 %% Maintenance commands
 -export([sites/0, peers/1]).
@@ -67,7 +67,7 @@ is_number_billable(_Number) -> 'true'.
 %% @end
 %%------------------------------------------------------------------------------
 -spec check_numbers(kz_term:ne_binaries()) -> {ok, kz_json:object()} |
-                                              {error, any()}.
+          {error, any()}.
 check_numbers(_Numbers) -> {error, not_implemented}.
 
 %%------------------------------------------------------------------------------
@@ -254,7 +254,7 @@ from_bandwidth2(Number) -> <<"+1", Number/binary>>.
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) ->
     disconnect_number(Number, []).
-    
+
 -spec disconnect_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
 disconnect_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
@@ -509,7 +509,7 @@ rate_center_to_json(Xml) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec verify_response(kz_types:xml_el()) -> {'ok', kz_types:xml_el()} |
-                                            {'error', any()}.
+          {'error', any()}.
 verify_response(Xml) ->
     NPAPath = "count(//TelephoneNumberDetailList/TelephoneNumberDetail)",
     TollFreePath = "count(//TelephoneNumberList/TelephoneNumber)",

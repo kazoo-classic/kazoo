@@ -102,7 +102,7 @@ get_target_for_extension(Exten, Call) ->
     end.
 
 -spec maybe_correct_target(target(), kz_term:api_binary(), kapps_call:call()) ->
-                                  kz_term:proplist().
+          kz_term:proplist().
 maybe_correct_target({'ok', Data}, 'undefined', _Call) ->
     Data;
 maybe_correct_target({'ok', Data}, GroupId, Call) ->

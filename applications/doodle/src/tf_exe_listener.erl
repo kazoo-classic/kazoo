@@ -80,7 +80,7 @@ init([]) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
-handle_call('tf_context', _From, #{queue := Queue} = State) ->
+handle_call('tf_context', _From, #{queue:=Queue}=State) ->
     Reply = #{channel => kz_amqp_channel:consumer_channel()
              ,queue => Queue
              },

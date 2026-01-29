@@ -317,7 +317,7 @@ read_index_file(Path, Header, NewLine) ->
         {'ok', <<Header:HSize/binary, "\n">>=H} ->   {'ok', <<H/binary       ,       NewLine/binary>>};
         {'ok', Header} ->                            {'ok', <<Header/binary  , "\n", NewLine/binary>>};
         {'ok', IndexBin} ->                          {'ok', <<IndexBin/binary, "\n", NewLine/binary>>};
-        {'error', 'enoent'} ->                         {'ok', <<Header/binary  , "\n", NewLine/binary>>};
+        {'error', 'enoent'} ->                       {'ok', <<Header/binary  , "\n", NewLine/binary>>};
         {'error', _Reason}=Error ->
             ?DEV_LOG("failed to open index file ~s: ~p", [Path, _Reason]),
             Error

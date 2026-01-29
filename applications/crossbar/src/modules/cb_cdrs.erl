@@ -106,16 +106,10 @@
         ,{<<"callee_id_number">>, fun col_callee_id_number/3}
         ,{<<"callee_id_name">>, fun col_callee_id_name/3}
         ,{<<"duration_seconds">>, fun col_duration_seconds/3}
-        %,{<<"billing_seconds">>, fun col_billing_seconds/3}
         ,{<<"direction">>, fun col_call_direction/3}
         ,{<<"hangup_cause">>, fun col_hangup_cause/3}
         ,{<<"disposition">>, fun col_disposition/3}
         ,{<<"user">>, fun col_user_ext/3}
-        %,{<<"owner_id">>, fun col_owner_id/3}
-        %,{<<"cost">>, fun col_customer_cost/3}
-         %% New fields
-        %,{<<"dialed_number">>, fun col_dialed_number/3}
-        %,{<<"calling_from">>, fun col_calling_from/3}
         ]).
 
 

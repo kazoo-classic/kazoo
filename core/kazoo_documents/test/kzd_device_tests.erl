@@ -271,7 +271,7 @@ test_calculating_presence_id() ->
                                       ,<<"dial_plan">>
                                       ,<<"media">>, <<"metaflows">>, <<"ringtones">>
                                       ]
-                                     , Device),
+                                     ,Device),
     JustUsername = kzd_devices:set_sip_username(BlankDevice, SIPUsername),
 
     DevicePresenceId = kz_binary:rand_hex(5),

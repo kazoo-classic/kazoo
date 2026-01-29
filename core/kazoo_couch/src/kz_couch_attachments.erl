@@ -67,7 +67,7 @@ attachment_url(#server{}=Conn, DbName, DocId, AName, Options) ->
             list_to_binary([kz_couch_util:db_url(Conn, DbName)
                            ,"/", kz_http_util:urlencode(DocId)
                            ,"/", kz_http_util:urlencode(AName)
-                           , maybe_add_revision(Options)
+                           ,maybe_add_revision(Options)
                            ]);
         'false' ->
             {'proxy', {DbName, DocId, AName, Options}}

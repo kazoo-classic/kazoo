@@ -79,8 +79,7 @@ get_refresh_token(<<"offline">>, App, Scope, AuthorizationCode) ->
         {'ok', Token} -> Token;
         _ -> kz_json:new()
     end;
-get_refresh_token(_ , _, _ , _) -> kz_json:new().
-
+get_refresh_token(_, _, _, _) -> kz_json:new().
 
 save_oauth_doc(App, DocId, JObj, TokenObj, RefreshTokenObj) ->
     Doc = props:filter_undefined([{<<"email">>, kz_json:get_value(<<"email">>, TokenObj) }
@@ -128,8 +127,6 @@ load_profile(#oauth_app{provider=#oauth_provider{profile_url=ProfileURL}}, JObj,
             lager:debug("failed to get oauth profile: ~p", [_Else]),
             {'error', <<"OAUTH - Error fetching Profile">>}
     end.
-
-
 
 %%==============================================================================
 %% Internal functions

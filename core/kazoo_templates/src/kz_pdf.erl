@@ -36,7 +36,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_template(kz_term:ne_binary(), kz_term:proplist() | kz_term:ne_binary()) -> ret().
-find_template(AccountId, DocType) when is_binary(DocType)  ->
+find_template(AccountId, DocType) when is_binary(DocType) ->
     find_template(AccountId, DocType, <<DocType/binary, ".tmpl">>);
 find_template(AccountId, Props) ->
     DocType = props:get_first_defined([<<"type">>, <<"pvt_type">>], Props),

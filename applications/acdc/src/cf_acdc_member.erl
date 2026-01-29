@@ -303,7 +303,7 @@ process_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState, Timeout, Start, Wa
     end.
 
 -spec decr_timeout(timeout(), kz_term:kz_now()) -> timeout().
-decr_timeout(Timeout, Wait) -> 
+decr_timeout(Timeout, Wait) ->
     kz_time:decr_timeout(Timeout div ?MILLISECONDS_IN_SECOND, Wait) * ?MILLISECONDS_IN_SECOND.
 
 -spec breakout_loop(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered' | 'cancel'.

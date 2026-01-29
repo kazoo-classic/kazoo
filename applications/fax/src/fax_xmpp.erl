@@ -83,7 +83,7 @@ handle_call(_Request, _From, State) ->
     {'reply', 'ok', State}.
 
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
-handle_cast('start', #state{faxbox_id=FaxBoxId} = State) ->
+handle_cast('start', #state{faxbox_id=FaxBoxId}=State) ->
     case kz_datamgr:open_doc(?KZ_FAXES_DB, FaxBoxId) of
         {'ok', JObj} ->
             {'noreply', handle_start(JObj, State), ?POLLING_INTERVAL};

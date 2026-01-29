@@ -27,20 +27,20 @@
 -endif.
 
 -define(ACCOUNT_ID(Options)
-        ,?THQ_ACCOUNT_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
-        ).
+       ,?THQ_ACCOUNT_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+       ).
 
 -define(SITE_ID(Options)
-        ,?THQ_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
-        ).
+       ,?THQ_SITE_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+       ).
 
 -define(ENABLE_SMS(Options)
-        ,?THQ_ENABLE_SMS(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
-        ).
+       ,?THQ_ENABLE_SMS(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+       ).
 
 -define(TF_ENABLE_SMS(Options)
-        ,?THQ_TF_ENABLE_SMS(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
-        ).
+       ,?THQ_TF_ENABLE_SMS(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+       ).
 
 -type search_ret() :: {'ok', knm_number:knm_numbers()} | {'error', any()}.
 
@@ -147,11 +147,11 @@ tf_prefix(Num) ->
 process_search_response(JObj, Options) ->
     QID = knm_search:query_id(Options),
     Result = kz_json:get_value(<<"dids">>, JObj),
-    Numbers = [{QID, { <<"+", 
-                         (integer_to_binary(kz_json:get_integer_value(<<"id">>, Data)))/binary>>, 
-                        ?MODULE, ?NUMBER_STATE_DISCOVERY, Data}}
-     || Data <- Result
-    ],
+    Numbers = [{QID, { <<"+",
+                         (integer_to_binary(kz_json:get_integer_value(<<"id">>, Data)))/binary>>,
+                       ?MODULE, ?NUMBER_STATE_DISCOVERY, Data}}
+               || Data <- Result
+              ],
     {ok, Numbers}.
 
 
@@ -192,12 +192,12 @@ acquire_number(Number, Options) ->
             JObj = kz_json:set_values(Setters, kz_json:new()),
 
             case knm_thinq_util:api_post(url_purchase(Options), JObj, Options) of
-                {'ok', Results} -> 
+                {'ok', Results} ->
                     OrderId = kz_json:get_value(<<"id">>, Results),
                     OrderStatus = kz_json:get_value(<<"status">>, Results),
                     complete_order(OrderId, OrderStatus, Results, PhoneNumber, Number, Options),
                     maybe_activate_sms(Number, Options);
-                {'error', Reason} -> 
+                {'error', Reason} ->
                     Error = <<"Unable to acquire number: ", (kz_term:to_binary(Reason))/binary>>,
                     knm_errors:by_carrier(?MODULE, Error, Num)
             end
@@ -219,25 +219,25 @@ features(<<Prefix:3/binary, _/binary>>, Options) when ?IS_US_TOLLFREE(Prefix) ->
                        {<<"sms">>, ?TF_ENABLE_SMS(Options)},
                        {<<"e911">>, 'false'}
                       ]);
-features(_Num, Options)  ->
+features(_Num, Options) ->
     kz_json:from_list([{<<"cnam">>, 'false'},
                        {<<"sms">>, ?ENABLE_SMS(Options)},
                        {<<"e911">>, 'false'}
                       ]).
 
 -spec complete_order(kz_term:api_binary()
-                     ,kz_term:ne_binary()
-                     ,kz_types:xml_el()
-                     ,knm_phone_number:knm_phone_number()
-                     ,knm_number:knm_number()
-                     ,knm_search:options()
-                     ) -> knm_number:knm_number().
+                    ,kz_term:ne_binary()
+                    ,kz_types:xml_el()
+                    ,knm_phone_number:knm_phone_number()
+                    ,knm_number:knm_number()
+                    ,knm_search:options()
+                    ) -> knm_number:knm_number().
 complete_order(OrderId, <<"created">>, _Response, PhoneNumber, Number, Options) ->
     case knm_thinq_util:api_post(url_complete(OrderId, Options), kz_json:new(), Options) of
-        {'ok', OrderData} -> 
+        {'ok', OrderData} ->
             PN = knm_phone_number:update_carrier_data(PhoneNumber, OrderData),
             knm_number:set_phone_number(Number, PN);
-        {'error', Reason} -> 
+        {'error', Reason} ->
             Error = <<"Unable to complete order: ", (kz_term:to_binary(Reason))/binary>>,
             Num = knm_thinq_util:to_thinq(knm_phone_number:number(PhoneNumber)),
             knm_errors:by_carrier(?MODULE, Error, Num)
@@ -255,7 +255,7 @@ complete_order(_OrderId, _, _Response, PhoneNumber, _Number, _Options) ->
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) ->
     disconnect_number(Number, []).
-    
+
 -spec disconnect_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
 disconnect_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
@@ -272,12 +272,12 @@ disconnect_number(Number, Options) ->
 
             JObj = kz_json:set_value(<<"dids">>, [Num], kz_json:new()),
 
-            case not IsDryRun andalso 
-                    knm_thinq_util:api_post(url_disconnect(Options), JObj, Options) of
+            case not IsDryRun andalso
+                knm_thinq_util:api_post(url_disconnect(Options), JObj, Options) of
                 'false' -> Number;
-                {'ok', _Results} -> 
+                {'ok', _Results} ->
                     Number;
-                {'error', Reason} -> 
+                {'error', Reason} ->
                     Error = <<"Unable to disconnect number: ", (kz_term:to_binary(Reason))/binary>>,
                     knm_errors:by_carrier(?MODULE, Error, Num)
             end
@@ -312,41 +312,43 @@ process_peer(Peer) ->
     io:format("Id: ~p Name: ~p~n", [Id, Name]).
 
 %%% Internals
-%{{host}}/origination/did/search/individual/{{account_id}}
-%{{host}}/origination/did/search/tollfree/{{account_id}}
+%%{{host}}/origination/did/search/individual/{{account_id}}
+%%{{host}}/origination/did/search/tollfree/{{account_id}}
 -spec url_search([nonempty_string()]) -> nonempty_string().
 url_search(RelativePath) ->
     lists:flatten(
-        io_lib:format("~s~s", [?THQ_BASE_URL, RelativePath])
-    ).
+      io_lib:format("~s~s", [?THQ_BASE_URL, RelativePath])
+     ).
 
-%{{host}}/account/{{account_id}}/origination/order/create
+%%{{host}}/account/{{account_id}}/origination/order/create
 -spec url_purchase(knm_search:options()) -> nonempty_string().
 url_purchase(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/order/create", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
-    ).
+      io_lib:format("~s/account/~s/origination/order/create", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
+     ).
 
-%{{host}}/account/{{account_id}}/origination/order/complete/{{order_id}}
+%%{{host}}/account/{{account_id}}/origination/order/complete/{{order_id}}
 -spec url_complete(nonempty_string(), knm_search:options()) -> nonempty_string().
 url_complete(OrderId, Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/order/complete/~b", [?THQ_BASE_URL, ?ACCOUNT_ID(Options), OrderId])
-    ).
+      io_lib:format("~s/account/~s/origination/order/complete/~b", [?THQ_BASE_URL, ?ACCOUNT_ID(Options), OrderId])
+     ).
 
-%{{host}}/account/{{account_id}}/origination/disconnect
+%%{{host}}/account/{{account_id}}/origination/disconnect
 -spec url_disconnect(knm_search:options()) -> nonempty_string().
 url_disconnect(Options) ->
     lists:flatten(
-        io_lib:format("~s/account/~s/origination/disconnect", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
-    ).
+      io_lib:format("~s/account/~s/origination/disconnect", [?THQ_BASE_URL, ?ACCOUNT_ID(Options)])
+     ).
 
 -spec search(nonempty_string(), [nonempty_string()], knm_search:options()) -> kz_json:object().
 search(Num, Params, Options) ->
     case knm_thinq_util:api_get(lists:flatten(
-                    [url_search("/inbound/get-numbers")
-                     ,"?" 
-                     ,Params]), Options) of
+                                  [url_search("/inbound/get-numbers")
+                                  ,"?"
+                                  ,Params
+                                  ]
+                                 ), Options) of
         {'ok', Results} -> Results;
         {'error', Reason} -> knm_errors:by_carrier(?MODULE, Reason, Num)
     end.

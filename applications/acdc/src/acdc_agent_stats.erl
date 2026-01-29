@@ -250,14 +250,14 @@ handle_agent_calls_query(JObj, _Prop) ->
     MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
 
     case agent_call_build_match_spec(JObj) of
-        {'ok', Match} -> 
+        {'ok', Match} ->
             Limit = acdc_stats_util:get_query_limit(JObj),
             Result = query_agent_calls(Match, Limit),
             Resp = Result ++
-                    kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++
-                    [{<<"Query-Time">>, kz_time:current_tstamp()}
-                    ,{<<"Msg-ID">>, MsgId}
-            ],
+                kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++
+                [{<<"Query-Time">>, kz_time:current_tstamp()}
+                ,{<<"Msg-ID">>, MsgId}
+                ],
             kapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp);
         {'error', Errors} -> publish_agent_call_query_errors(RespQ, MsgId, Errors)
     end.
@@ -469,14 +469,14 @@ query_agent_calls(Match, _Limit) ->
             [];
         Stats ->
             Dict = dict:from_list([{<<"handled">>, []}
-                                    ,{<<"processed">>, []}
-                                    ,{<<"missed">>, []}
-                                    ]),
+                                  ,{<<"processed">>, []}
+                                  ,{<<"missed">>, []}
+                                  ]),
             QueryResult = lists:foldl(fun query_agent_calls_fold/2, Dict, Stats),
             [{<<"Missed">>, dict:fetch(<<"missed">>, QueryResult)}
             ,{<<"Processed">>, dict:fetch(<<"processed">>, QueryResult)}
             ,{<<"Handled">>, dict:fetch(<<"handled">>, QueryResult)}
-            ]  
+            ]
     end.
 
 -spec query_agent_calls_fold(agent_call_stat(), dict:dict()) -> kz_json:object().
@@ -486,14 +486,14 @@ query_agent_calls_fold(#agent_call_stat{status=Status}=Stat, Acc) ->
 
 -spec agent_call_stat_to_doc(agent_call_stat()) -> kz_json:object().
 agent_call_stat_to_doc(#agent_call_stat{id=Id
-                                        ,account_id=AccountId
-                                        ,queue_id=QueueId
-                                        ,agent_id=AgentId
-                                        ,call_id=CallId
-                                        ,status=Status
-                                        ,talk_time=TalkTime
-                                        ,timestamp=Timestamp
-                                        }) ->
+                                       ,account_id=AccountId
+                                       ,queue_id=QueueId
+                                       ,agent_id=AgentId
+                                       ,call_id=CallId
+                                       ,status=Status
+                                       ,talk_time=TalkTime
+                                       ,timestamp=Timestamp
+                                       }) ->
     Prop = [{<<"_id">>, Id}
            ,{<<"call_id">>, CallId}
            ,{<<"agent_id">>, AgentId}

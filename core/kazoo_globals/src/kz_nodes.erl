@@ -831,12 +831,12 @@ handle_info({'heartbeat', Ref}
     catch
         _:{noproc,_} ->
             {'noreply', State#state{heartbeat_ref=Reference}, 'hibernate'};
-        'exit' : {'timeout' , _} when Me =/= 'undefined' ->
+        'exit' : {'timeout', _} when Me =/= 'undefined' ->
             NewMe = Me#kz_node{expires=Heartbeat},
             _ = ets:insert(Tab, NewMe),
             lager:notice("timeout creating node sending old data"),
             {'noreply', State#state{heartbeat_ref=Reference, me=NewMe}};
-        'exit' : {'timeout' , _} ->
+        'exit' : {'timeout', _} ->
             lager:warning("timeout creating node, no data to send"),
             {'noreply', State#state{heartbeat_ref=Reference}};
         _E:_N ->

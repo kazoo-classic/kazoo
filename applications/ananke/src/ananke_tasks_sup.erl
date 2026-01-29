@@ -51,11 +51,11 @@ start_task(Id, Module, Args) ->
 -spec reset() -> 'ok'.
 reset() ->
     Ids = [Id || {Id, _Child, _Type, _Modules} <- supervisor:which_children(?SERVER)],
-    lists:foreach(fun(Id) -> 
-          'ok' = supervisor:terminate_child(?SERVER, Id),
-          'ok' = supervisor:delete_child(?SERVER, Id)
-        end,
-        Ids),
+    lists:foreach(fun(Id) ->
+                          'ok' = supervisor:terminate_child(?SERVER, Id),
+                          'ok' = supervisor:delete_child(?SERVER, Id)
+                  end,
+                  Ids),
     'ok'.
 
 -spec delete_child(any()) -> 'ok' | {'error', any()}.

@@ -61,14 +61,13 @@ handle_req(JObj, Props) ->
     VMNumber = get_voicemail_number(AccountDb, Mailbox),
 
     Callbacks = lists:map(fun(VMBoxNotifyJObj) ->
-                  #callback{
-                            callback_number = kz_json:get_value(<<"number">>, VMBoxNotifyJObj)
-                            ,is_callback_disabled = kz_json:get_boolean_value(<<"disabled">>, VMBoxNotifyJObj)
-                            ,call_timeout = get_callback_timeout(VMBoxNotifyJObj)
-                            ,schedule = get_schedule(VMBoxNotifyJObj)
-                           }
-                  end,
-                  VMBoxNotifyList),
+                                  #callback{callback_number = kz_json:get_value(<<"number">>, VMBoxNotifyJObj)
+                                           ,is_callback_disabled = kz_json:get_boolean_value(<<"disabled">>, VMBoxNotifyJObj)
+                                           ,call_timeout = get_callback_timeout(VMBoxNotifyJObj)
+                                           ,schedule = get_schedule(VMBoxNotifyJObj)
+                                           }
+                          end,
+                          VMBoxNotifyList),
 
     StartArgs = #args{account_id = AccountId
                      ,user_id = UserId
@@ -123,8 +122,8 @@ get_callflow_number(Callflow, _Mailbox) ->
 
 -spec maybe_start_caller(#args{}) -> 'ok'.
 maybe_start_caller(#args{callbacks = []
-                         ,account_id = AccountId
-                         ,vm_box_id = VMBoxId}) ->
+                        ,account_id = AccountId
+                        ,vm_box_id = VMBoxId}) ->
     lager:warning("not starting callback, no callback numbers defined in Account: ~s Mailbox: ~s", [AccountId, VMBoxId]);
 maybe_start_caller(#args{vm_number = 'undefined', account_id = AccountId}) ->
     lager:warning("not starting callback, cannot find voicemail number in account ~p", [AccountId]);
@@ -145,10 +144,10 @@ start_caller(#args{ account_id = AccountId
     ananke_tasks_sup:start_task(WorkerId, 'ananke_callback_worker', WorkerArgs).
 
 -spec build_originate_req(#args{},  kz_term:api_binary(), kz_term:api_binary(), pos_integer()) -> {kz_term:api_binary(), kapps_call:call(), kz_term:proplist()}.
-build_originate_req(#args{vm_number = VMNumber
-                         ,account_id = AccountId
-                         ,user_id = UserId
-                         ,realm = Realm
+build_originate_req(#args{vm_number=VMNumber
+                         ,account_id=AccountId
+                         ,user_id=UserId
+                         ,realm=Realm
                          }, Queue, CallbackNumber, Timeout) ->
 
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
@@ -182,7 +181,7 @@ build_originate_req(#args{vm_number = VMNumber
     Endpoint = kz_json:from_list(
                  props:filter_undefined(
                    [{<<"Invite-Format">>, <<"loopback">>}
-                   ,{<<"Route">>,  CallbackNumber}
+                   ,{<<"Route">>, CallbackNumber}
                    ,{<<"To-DID">>, CallbackNumber}
                    ,{<<"To-Realm">>, Realm}
                    ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
@@ -190,25 +189,25 @@ build_originate_req(#args{vm_number = VMNumber
                    ])),
 
     {TargetCallId, Call, props:filter_undefined(
-                [{<<"Endpoints">>, [Endpoint]}
-                ,{<<"Outbound-Call-ID">>, TargetCallId}
-                ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-                ,{<<"Msg-ID">>, MsgId}
-                ,{<<"Continue-On-Fail">>, 'true'}
-                ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
-                ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
-                                                     ,<<"Account-Realm">>
-                                                     ,<<"Authorizing-ID">>
-                                                     ,<<"Authorizing-Type">>
-                                                     ,<<"Owner-ID">>
-                                                    ]}
-                ,{<<"Application-Name">>, <<"park">>}
-                ,{<<"Timeout">>, Timeout}
+                           [{<<"Endpoints">>, [Endpoint]}
+                           ,{<<"Outbound-Call-ID">>, TargetCallId}
+                           ,{<<"Dial-Endpoint-Method">>, <<"single">>}
+                           ,{<<"Msg-ID">>, MsgId}
+                           ,{<<"Continue-On-Fail">>, 'true'}
+                           ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+                           ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
+                                                               ,<<"Account-Realm">>
+                                                               ,<<"Authorizing-ID">>
+                                                               ,<<"Authorizing-Type">>
+                                                               ,<<"Owner-ID">>
+                                                               ]}
+                           ,{<<"Application-Name">>, <<"park">>}
+                           ,{<<"Timeout">>, Timeout}
 
-                ,{<<"Resource-Type">>, <<"originate">>}
-                ,{<<"Originate-Immediate">>, 'true'}
-                 | kz_api:default_headers(Queue, ?APP_NAME, ?APP_VERSION)
-                ])}.
+                           ,{<<"Resource-Type">>, <<"originate">>}
+                           ,{<<"Originate-Immediate">>, 'true'}
+                            | kz_api:default_headers(Queue, ?APP_NAME, ?APP_VERSION)
+                           ])}.
 
 -spec create_call_id() -> kz_term:ne_binary().
 create_call_id() ->

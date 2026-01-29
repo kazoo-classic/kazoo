@@ -84,7 +84,7 @@
                                         ,{'account_id', A}
                                         ,{'queue_id', Q}
                                         ,'federate'
-                                        ]}                                     
+                                        ]}
                         ,{'presence', [{'restrict_to', ['probe']}]}
                         ,{'acdc_stats', [{'restrict_to', ['status_stat']}
                                         ,{'account_id', A}
@@ -424,7 +424,7 @@ handle_call({'up_next', CallId}, _, #state{strategy='sbrr'
                                           }=State) ->
     {'reply', maps:is_key(CallId, CallIdMap), State};
 handle_call({'up_next', _CallId}, _, #state{strategy='all'
-                                          }=State) ->
+                                           }=State) ->
     {'reply', 'true', State};
 handle_call({'up_next', CallId}, _, #state{strategy=Strategy
                                           ,strategy_state=SS
@@ -492,7 +492,7 @@ handle_call('current_agents', _, #state{strategy=S
                                                                       ,busy_agents=BusyAgents
                                                                       }
                                        }=State) when S =:= 'rr'
-                                                     orelse S =:= 'all'  ->
+                                                     orelse S =:= 'all' ->
     {'reply', pqueue4:to_list(Q) ++ RingingAgents ++ BusyAgents, State};
 handle_call('current_agents', _, #state{strategy='mi'
                                        ,strategy_state=#strategy_state{agents=L}
@@ -507,25 +507,25 @@ handle_call('current_agents', _, #state{strategy='sbrr'
     {'reply', pqueue4:to_list(RRQueue) ++ RingingAgents ++ BusyAgents, State};
 
 handle_call('agents', _, #state{strategy=S
-                                       ,strategy_state=#strategy_state{agents=Q
-                                                                      }
-                                       }=State) when S =:= 'rr'
-                                                     orelse S =:= 'all'  ->
+                               ,strategy_state=#strategy_state{agents=Q
+                                                              }
+                               }=State) when S =:= 'rr'
+                                             orelse S =:= 'all' ->
     {'reply', pqueue4:to_plist(Q), State};
 handle_call('agents', _, #state{strategy='mi'
-                                       ,strategy_state=#strategy_state{agents=L}
-                                       }=State) ->
+                               ,strategy_state=#strategy_state{agents=L}
+                               }=State) ->
     {'reply', L, State};
 handle_call('agents', _, #state{strategy='sbrr'
-                                       ,strategy_state=#strategy_state{agents=#{rr_queue := RRQueue}
-                                                                      }
-                                       }=State) ->
+                               ,strategy_state=#strategy_state{agents=#{rr_queue := RRQueue}
+                                                              }
+                               }=State) ->
     {'reply', pqueue4:to_plist(RRQueue), State};
 
 handle_call('skill_map', _, #state{strategy='sbrr'
-                                ,strategy_state=#strategy_state{agents = Map
-                                                               }
-                                       }=State) ->
+                                  ,strategy_state=#strategy_state{agents = Map
+                                                                 }
+                                  }=State) ->
     {'reply', maps:get(skill_map, Map), State};
 
 handle_call({'queue_member_position', CallId}, _, #state{current_member_calls=Calls}=State) ->
@@ -736,7 +736,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                      _  when Skills /= [] ->
                          lager:warning("skills ~p required, but queue ~s is not set to skills_based_round_robin", [Skills, QueueId]),
                          'undefined';
-                    _ -> 'undefined'
+                     _ -> 'undefined'
                  end,
     _ = acdc_stats:call_waiting(AccountId, QueueId, Position
                                ,kapps_call:call_id(Call1)
@@ -904,13 +904,13 @@ start_secondary_queue(AccountId, QueueId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     Priority = acdc_util:max_priority(AccountDb, QueueId),
     kz_util:spawn(fun gen_listener:add_queue/4
-                    ,[self()
-                     ,?SECONDARY_QUEUE_NAME(QueueId)
-                     ,[{'queue_options', ?SECONDARY_QUEUE_OPTIONS(Priority)}
-                      ,{'consume_options', ?SECONDARY_CONSUME_OPTIONS}
-                      ]
-                     ,?SECONDARY_BINDINGS(AccountId, QueueId)
-                     ]).
+                 ,[self()
+                  ,?SECONDARY_QUEUE_NAME(QueueId)
+                  ,[{'queue_options', ?SECONDARY_QUEUE_OPTIONS(Priority)}
+                   ,{'consume_options', ?SECONDARY_CONSUME_OPTIONS}
+                   ]
+                  ,?SECONDARY_BINDINGS(AccountId, QueueId)
+                  ]).
 
 make_ignore_key(AccountId, QueueId, CallId) ->
     {AccountId, QueueId, CallId}.
@@ -1481,10 +1481,10 @@ create_strategy_state(Strategy, AccountDb, QueueId) ->
                            ,kz_term:ne_binary(), kz_term:ne_binary()
                            ) -> strategy_state().
 create_strategy_state(S, #strategy_state{agents='undefined'}=SS, AccountDb, QueueId) when S =:= 'rr'
-                                                                                       orelse S =:= 'all' ->
+                                                                                          orelse S =:= 'all' ->
     create_strategy_state(S, SS#strategy_state{agents=pqueue4:new()}, AccountDb, QueueId);
 create_strategy_state(S, #strategy_state{agents=AgentQ}=SS, AccountDb, QueueId) when S =:= 'rr'
-                                                                                  orelse S =:= 'all' ->
+                                                                                     orelse S =:= 'all' ->
     case acdc_util:agents_in_queue(AccountDb, QueueId) of
         [] -> lager:debug("no agents around"), SS;
         {'error', _E} -> lager:debug("error creating strategy rr: ~p", [_E]), SS;
@@ -1585,7 +1585,7 @@ ss_size('mi', #strategy_state{agents=Agents
 ss_size('sbrr', #strategy_state{agents=#{rr_queue := RRQueue}}=SS, 'free') ->
     ss_size('mi', SS#strategy_state{agents=pqueue4:to_list(RRQueue)}, 'free').
 
-maybe_start_queue_workers(_QueueSup, _Count, 'all')  ->
+maybe_start_queue_workers(_QueueSup, _Count, 'all') ->
     ok;
 maybe_start_queue_workers(QueueSup, Count, _Strategy) ->
     WSup = acdc_queue_sup:workers_sup(QueueSup),

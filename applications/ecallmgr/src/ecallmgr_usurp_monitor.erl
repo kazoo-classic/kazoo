@@ -166,7 +166,7 @@ register(Type, CallId, RefId, Pid) ->
     gen_listener:cast(?SERVER, {register, Type, CallId, RefId, Pid}).
 
 -spec handle_register(cache(), state()) -> state().
-handle_register(#cache{key={Type, CallId}, ref_id=RefId, pid=Pid}=Cache, #{calls := Calls, pids := Pids} = State) ->
+handle_register(#cache{key={Type, CallId}, ref_id=RefId, pid=Pid}=Cache, #{calls := Calls, pids := Pids}=State) ->
     _ = handle_usurp(Type, CallId, RefId, kz_json:new(), Calls),
     _ = ets:insert(Calls, Cache),
     _ = ets:insert(Pids, Cache),
@@ -174,14 +174,14 @@ handle_register(#cache{key={Type, CallId}, ref_id=RefId, pid=Pid}=Cache, #{calls
     State.
 
 -spec handle_unregister(pid(), state()) -> state().
-handle_unregister(Pid, #{pids := Pids} = State) ->
+handle_unregister(Pid, #{pids := Pids}=State) ->
     case ets:lookup(Pids, Pid) of
         [#cache{}=Cache] -> unregister(Cache, State);
         _ -> State
     end.
 
 -spec unregister(cache(), state()) -> state().
-unregister(#cache{}=Cache, #{calls := Calls, pids := Pids} = State) ->
+unregister(#cache{}=Cache, #{calls := Calls, pids := Pids}=State) ->
     _ = ets:delete_object(Calls, Cache),
     _ = ets:delete_object(Pids, Cache),
     State.

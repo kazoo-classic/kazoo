@@ -310,11 +310,11 @@ presence(State, PresenceId, <<_/binary>> = CallId) ->
 presence(State, PresenceId, Call) ->
     presence(State, PresenceId, kapps_call:call_id(Call), Call).
 
--spec presence(kz_term:ne_binary(), kz_term:ne_binary() , kz_term:api_binary() , kapps_call:call() | 'undefined') -> 'ok'.
+-spec presence(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary(), kapps_call:call() | 'undefined') -> 'ok'.
 presence(State, PresenceId, CallId, Call) ->
     presence(State, PresenceId, CallId, 'undefined', Call).
 
--spec presence(kz_term:ne_binary(), kz_term:ne_binary() , kz_term:api_binary() , kz_term:api_binary(), kapps_call:call() | 'undefined') -> 'ok'.
+-spec presence(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary(), kapps_call:call() | 'undefined') -> 'ok'.
 presence(State, PresenceId, CallId, 'undefined', 'undefined') ->
     [User, Realm] = binary:split(PresenceId, <<"@">>),
     Command = props:filter_undefined(
@@ -1232,9 +1232,9 @@ b_bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, I
 
 -spec b_bridge_wait(pos_integer(), kapps_call:call()) -> kapps_api_bridge_return().
 b_bridge_wait(0, Call) ->
-    wait_for_bridge(?BRIDGE_DEFAULT_TIMEOUT + ?EXTRA_BRIDGE_TIMEOUT , Call);
+    wait_for_bridge(?BRIDGE_DEFAULT_TIMEOUT + ?EXTRA_BRIDGE_TIMEOUT, Call);
 b_bridge_wait(Timeout, Call) ->
-    wait_for_bridge((kz_term:to_integer(Timeout) * ?MILLISECONDS_IN_SECOND) + ?EXTRA_BRIDGE_TIMEOUT , Call).
+    wait_for_bridge((kz_term:to_integer(Timeout) * ?MILLISECONDS_IN_SECOND) + ?EXTRA_BRIDGE_TIMEOUT, Call).
 
 -spec unbridge(kapps_call:call()) -> 'ok'.
 unbridge(Call) ->
@@ -3027,7 +3027,7 @@ send_command(Command, Call) when is_list(Command) ->
                 kz_api:default_headers(Q, <<"call">>, <<"command">>, AppName, AppVersion),
             Prop = props:insert_value(<<"Control-Queue">>, CtrlQ, Prop0),
             kz_amqp_worker:cast(Prop, fun kapi_dialplan:publish_command/1);
-%%            kapi_dialplan:publish_command(CtrlQ, props:filter_undefined(Prop));
+        %%            kapi_dialplan:publish_command(CtrlQ, props:filter_undefined(Prop));
         'false' -> 'ok'
     end;
 send_command(JObj, Call) -> send_command(kz_json:to_proplist(JObj), Call).

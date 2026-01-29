@@ -447,7 +447,7 @@ call_summary_resp(JObj) ->
 -spec call_summary_resp_v(kz_term:api_terms()) -> boolean().
 call_summary_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CALL_SUMMARY_RESP_HEADERS, ?CALL_SUMMARY_RESP_VALUES, ?CALL_SUMMARY_RESP_TYPES) orelse
-        call_summary_err_v(Prop);    
+        call_summary_err_v(Prop);
 call_summary_resp_v(JObj) ->
     call_summary_resp_v(kz_json:to_proplist(JObj)).
 
@@ -746,7 +746,7 @@ agent_cur_status_resp(JObj) ->
 -spec agent_cur_status_resp_v(kz_term:api_terms()) -> boolean().
 agent_cur_status_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?AGENT_CUR_STATUS_RESP_HEADERS, ?AGENT_CUR_STATUS_RESP_VALUES, ?AGENT_CUR_STATUS_RESP_TYPES) orelse
-            agent_cur_status_err_v(Prop);
+        agent_cur_status_err_v(Prop);
 agent_cur_status_resp_v(JObj) ->
     agent_cur_status_resp_v(kz_json:to_proplist(JObj)).
 

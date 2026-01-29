@@ -41,9 +41,9 @@ split_account_mod_test() ->
 get_year_month_sequence_test() ->
     AccountId = <<"a05ced59126846892856c1fecbc3d5d9">>,
     AccountDb = kz_util:format_account_db(AccountId),
-    ?assertEqual( [ <<AccountDb/binary, "-201311">>
-                  , <<AccountDb/binary, "-201312">>
-                  , <<AccountDb/binary, "-201401">>
-                  ]
-                , kazoo_modb:get_year_month_sequence(AccountId, {2013, 11}, {2014, 1})
+    ?assertEqual([<<AccountDb/binary, "-201311">>
+                 ,<<AccountDb/binary, "-201312">>
+                 ,<<AccountDb/binary, "-201401">>
+                 ]
+                ,kazoo_modb:get_year_month_sequence(AccountId, {2013, 11}, {2014, 1})
                 ).

@@ -805,7 +805,7 @@ summary_quantities(Services) ->
       [{<<"account">>, account_billing_summary(
                             account_quantities(Services))}
       ,{<<"cascade">>, cascade_billing_summary(account_id(Services),
-			    cascade_quantities(Services))}
+                            cascade_quantities(Services))}
       ,{<<"manual">>, manual_quantities(Services)}
       ]
      ).
@@ -851,7 +851,7 @@ summary_billing_cycle(_Services) ->
 
 cascade_billing_summary(AccountId, JObj) ->
     Descendants = kapps_util:account_descendants(AccountId),
-    lists:foldl(fun(D, Acc) -> 
+    lists:foldl(fun(D, Acc) ->
         update_billable_users(Acc,
           account_billing_summary(
             account_quantities(kz_services:fetch(D)))) end, JObj, Descendants).
@@ -868,7 +868,7 @@ update_billable_users(JObj, UpdateJObj) ->
 account_billing_summary(JObj) ->
     case kz_json:get_value([<<"call_recording">>, <<"account_enabled">>], JObj, 0) > 0 of
         'true' ->
-            Users = kz_json:get_integer_value([<<"users">>, <<"user">>], JObj, 0) 
+            Users = kz_json:get_integer_value([<<"users">>, <<"user">>], JObj, 0)
                         + kz_json:get_integer_value([<<"users">>, <<"admin">>], JObj, 0)
                         - kz_json:get_value([<<"call_recording">>, <<"user_disabled">>], JObj, 0),
             kz_json:set_value([<<"call_recording">>, <<"billable_users">>], Users, JObj);

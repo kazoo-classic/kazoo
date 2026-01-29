@@ -36,8 +36,8 @@ handle_call(_Data, Call, 'undefined') ->
 handle_call(Data, Call, JObj) ->
     Number = kz_json:get_ne_binary_value(<<"digits">>, JObj),
     AccountId = kz_json:get_ne_binary_value(
-                    kz_json:get_ne_binary_value(<<"office_id">>, JObj)
-                    ,kz_json:get_value(<<"office_id">>, Data)),
+                  kz_json:get_ne_binary_value(<<"office_id">>, JObj)
+                 ,kz_json:get_value(<<"office_id">>, Data)),
     CallerIdPrefix = kz_json:get_ne_binary_value(<<"caller_id_prefix">>, Data, <<"">>),
     case cf_flow:lookup(Number, AccountId) of
         {'ok', Flow, NoMatch} ->

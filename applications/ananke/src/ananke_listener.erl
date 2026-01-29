@@ -248,7 +248,7 @@ unknown_type(Type) ->
 
 -spec load_schedule(kz_term:ne_binary(), kz_json:object()) -> normal.
 load_schedule(Name, Schedule) ->
-    amqp_cron:schedule_task(<<"load_schedule_", Name/binary>> 
+    amqp_cron:schedule_task(<<"load_schedule_", Name/binary>>
                            ,{'oneshot', 60000}
                            ,{'gen_listener', 'cast', [?MODULE, {'load_schedule', Schedule}]}
                            ),

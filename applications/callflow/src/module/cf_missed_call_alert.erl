@@ -68,7 +68,7 @@ maybe_add_handle(_Data, Call, _Wat) ->
 handle_termination(Call, 'undefined', Data) ->
     handle_termination(Call, kz_json:new(), Data);
 handle_termination(Call, JObj, Data) ->
-%%    _ = kz_util:spawn(fun ?MODULE:handle_termination/4, [Call, JObj, Data, should_handle_termination(Call)]).
+    %%    _ = kz_util:spawn(fun ?MODULE:handle_termination/4, [Call, JObj, Data, should_handle_termination(Call)]).
     handle_termination(Call, JObj, Data, should_handle_termination(Call)).
 
 -spec handle_termination(kapps_call:call(), kz_json:object(), kz_json:object(), boolean()) -> 'ok'.

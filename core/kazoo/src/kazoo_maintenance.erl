@@ -79,7 +79,7 @@ debug_dump_processes_status(StatusLog, [Pid|Pids]) ->
     debug_dump_processes_status(StatusLog, Pids).
 
 -spec debug_dump_process_status(string(), pid()) -> 'ok'.
-debug_dump_process_status(StatusLog, Pid)  ->
+debug_dump_process_status(StatusLog, Pid) ->
     debug_dump_process_info(StatusLog, Pid, process_info(Pid)).
 
 -spec debug_dump_process_info(string(), pid(), kz_term:api_proplist()) -> 'ok'.
@@ -145,7 +145,7 @@ hotload(Module) when is_atom(Module) ->
     _ = code:soft_purge(Module),
     case code:load_file(Module) of
         {'module', _} -> 'ok';
-        {'error' , Reason} ->
+        {'error', Reason} ->
             io:format("ERROR: unable to hotload ~s: ~s~n", [Module, Reason]),
             'no_return'
     end;

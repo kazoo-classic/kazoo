@@ -41,7 +41,7 @@
 -define(CNAM_PROVIDER_MODULE(AccountId, ResellerId)
        ,kz_term:to_atom(<<"stepswitch_cnam_", (kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"provider">>, ?CNAM_PROVIDER_MODULE(ResellerId)))/binary>>, 'true')
        ).
-    
+
 -define(CNAM_PROVIDER_MODULE(AccountId)
        ,kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"provider">>, ?CNAM_PROVIDER_MODULE)
        ).

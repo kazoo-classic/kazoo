@@ -132,7 +132,7 @@ find_agent_supervisor(AccountId, AgentId) -> find_agent_supervisor(AccountId, Ag
 
 -spec find_agent_supervisor(kz_term:api_binary(), kz_term:api_binary(), kz_term:pids()) -> kz_term:api_pid().
 find_agent_supervisor(AccountId, AgentId, _) when AccountId =:= 'undefined';
-                                               AgentId =:= 'undefined' ->
+                                                  AgentId =:= 'undefined' ->
     lager:debug("failed to get good data: ~s ~s", [AccountId, AgentId]),
     'undefined';
 find_agent_supervisor(AccountId, AgentId, []) ->

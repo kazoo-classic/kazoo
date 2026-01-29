@@ -356,12 +356,12 @@ handle_cast('move_doc', #state{account_id=AccountId
                               ,job_id=JobId
                               ,job=JObj
                               ,move_retry=?MAX_MOVE_RETRY
-                              } = State) ->
+                              }=State) ->
     Props = kz_json:to_proplist(JObj),
     kz_notify:detailed_alert(?MAX_MOVE_NOTIFY_MSG, [JobId, AccountId], Props),
     gen_listener:cast(self(), 'notify'),
     {'noreply', State};
-handle_cast('move_doc', #state{job=JObj, move_retry=Tries} = State) ->
+handle_cast('move_doc', #state{job=JObj, move_retry=Tries}=State) ->
     case maybe_move_doc(JObj, kzd_fax:job_status(JObj)) of
         {'ok', Doc} ->
             gen_listener:cast(self(), 'notify'),
@@ -372,7 +372,7 @@ handle_cast('move_doc', #state{job=JObj, move_retry=Tries} = State) ->
             gen_listener:cast(self(), 'move_doc'),
             {'noreply', State#state{move_retry=Tries + 1}}
     end;
-handle_cast('notify', #state{job=JObj, resp=Resp} = State) ->
+handle_cast('notify', #state{job=JObj, resp=Resp}=State) ->
     maybe_notify(JObj, Resp, kzd_fax:job_status(JObj)),
     {'stop', 'normal', State};
 handle_cast(_Msg, State) ->

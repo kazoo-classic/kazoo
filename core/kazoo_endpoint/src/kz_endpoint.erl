@@ -1645,7 +1645,7 @@ maybe_add_aor(JObj, Endpoint, Call) ->
 -spec maybe_add_aor(kz_json:object(), kz_json:object(), kz_term:api_binary(), kz_term:ne_binary()) -> kz_json:object().
 maybe_add_aor(JObj, _, 'undefined', _Realm) -> JObj;
 maybe_add_aor(JObj, _, Username, Realm) ->
-    kz_json:set_value(<<"X-KAZOO-AOR">>, <<"sip:", Username/binary, "@", Realm/binary>> , JObj).
+    kz_json:set_value(<<"X-KAZOO-AOR">>, <<"sip:", Username/binary, "@", Realm/binary>>, JObj).
 
 %%------------------------------------------------------------------------------
 %% @doc This function will return the custom channel vars that should be
@@ -2022,7 +2022,7 @@ build_mobile_sms_route(<<"sip">>, MDN) ->
     {<<"sip">>, [{build_mobile_route(MDN), 'undefined'}]};
 build_mobile_sms_route(<<"amqp">>, _MDN) ->
     Connections = kapps_config:get_json(?MOBILE_CONFIG_CAT, [<<"sms">>, <<"connections">>], ?DEFAULT_MOBILE_AMQP_CONNECTIONS),
-    {<<"amqp">>, kz_json:foldl(fun build_mobile_sms_amqp_route/3 , [], Connections)}.
+    {<<"amqp">>, kz_json:foldl(fun build_mobile_sms_amqp_route/3, [], Connections)}.
 
 -spec build_mobile_sms_amqp_route(kz_json:path(), kz_json:json_term(), kz_term:proplist()) -> sms_routes().
 build_mobile_sms_amqp_route(K, JObj, Acc) ->

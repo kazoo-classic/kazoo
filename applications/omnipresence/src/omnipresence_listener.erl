@@ -119,7 +119,7 @@ handle_cast({'gen_listener',{'is_consuming',IsConsuming}}, State) ->
     {'noreply', State#state{consuming=IsConsuming}};
 handle_cast({'gen_listener', {'federators_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast('send_sync', #state{subs_pid=Pid, queue=Queue, consuming=IsConsuming} = State)
+handle_cast('send_sync', #state{subs_pid=Pid, queue=Queue, consuming=IsConsuming}=State)
   when Pid =:= 'undefined'
        orelse Queue =:= 'undefined'
        orelse IsConsuming =:= 'false'  ->
@@ -130,7 +130,7 @@ handle_cast('send_sync', #state{queue='undefined'}=State) ->
     {'noreply', State};
 handle_cast('send_sync', #state{consuming='false'}=State) ->
     {'noreply', State};
-handle_cast('send_sync', #state{subs_pid=Pid, queue=Queue, consuming='true', sync='false'} = State) ->
+handle_cast('send_sync', #state{subs_pid=Pid, queue=Queue, consuming='true', sync='false'}=State) ->
     maybe_sync_subscriptions(?SUBSCRIPTIONS_SYNC_ENABLED, Queue),
     erlang:send_after(2 * ?MILLISECONDS_IN_SECOND, Pid, 'check_sync'),
     {'noreply', State#state{sync='true'}};

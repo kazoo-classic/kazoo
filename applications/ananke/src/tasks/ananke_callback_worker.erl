@@ -27,8 +27,7 @@
 
 -define(PRESS_ANY_KEY_PROMPT, kapps_config:get(?CONFIG_CAT, <<"press_any_key_prompt">>, <<"agent-logged_out">>)).
 
--record(state, {
-               args             :: args()
+-record(state, {args             :: args()
                ,callbacks        :: callbacks()
                ,originate_fun :: fun()
                ,check = 'true' :: check_fun()
@@ -49,7 +48,7 @@
                   ]).
 -define(RESPONDERS, [{{?MODULE, 'handle_call_event'}
                      ,[{<<"call_event">>, <<"*">>}]}
-                     ,{{?MODULE, 'handle_originate_resp'}
+                    ,{{?MODULE, 'handle_originate_resp'}
                      ,[{<<"resource">>, <<"*">>}]}
                     ]).
 -define(QUEUE_NAME, <<>>).
@@ -58,26 +57,26 @@
 
 -spec start_link(args(), callbacks(), fun(), check_fun()) -> {'ok', pid()} | {'error', any()}.
 start_link(Args, Callbacks, OriginateFun, CheckFun) ->
-    start_link(#state{args = Args,
-                      callbacks = Callbacks
-                     ,originate_fun = OriginateFun
-                     ,check = CheckFun
-                     ,callback_position = 1
+    start_link(#state{args=Args,
+                      callbacks=Callbacks
+                     ,originate_fun=OriginateFun
+                     ,check=CheckFun
+                     ,callback_position=1
                      }).
 
 -spec start_link(state()) -> {'ok', pid()} | {'error', any()}.
-start_link(#state{} = State) ->
+start_link(#state{}=State) ->
     gen_listener:start_link(?SERVER, [{'bindings', ?BINDINGS}
                                      ,{'responders', ?RESPONDERS}
                                      ,{'queue_name', ?QUEUE_NAME}       % optional to include
                                      ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
                                      ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
                                       %%,{basic_qos, 1}                % only needed if prefetch controls
-                                     ]  
-                                     ,[State]).
+                                     ]
+                           ,[State]).
 
 -spec init([state()]) -> {'ok', state()}.
-init([#state{callbacks = Callbacks, callback_position = Pos} = State]) ->
+init([#state{callbacks=Callbacks, callback_position=Pos}=State]) ->
     Callback = lists:nth(Pos, Callbacks),
     #callback{schedule = [Interval|Schedule]} = Callback,
     Timer = start_originate_timer(Callback, Interval * ?MILLISECONDS_IN_SECOND),
@@ -92,24 +91,24 @@ handle_cast({'gen_listener', {'created_queue', QueueName}}, State) ->
     {'noreply', State#state{my_q = QueueName}};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast({'ananke_call_play_msg', _JObj}, #state{call = Call
-                                                   } = State) ->
+handle_cast({'ananke_call_play_msg', _JObj}, #state{call=Call
+                                                   }=State) ->
     kapps_call_command:prompt_and_collect_digit(?PRESS_ANY_KEY_PROMPT, Call),
     {'noreply', maybe_set_confirm_timer(State)};
-handle_cast({'ananke_call_confirmed', _JObj}, #state{args = Args, confirm_timer = Timer, call = Call} = State) ->
+handle_cast({'ananke_call_confirmed', _JObj}, #state{args=Args, confirm_timer=Timer, call=Call}=State) ->
     stop_confirm_timer(Timer),
     kapps_call_command:blind_transfer(Args#args.vm_number, Call),
     {'noreply', State#state{confirm_timer = 'undefined', confirmed = true}};
-handle_cast({'ananke_originate_uuid', JObj}, #state{call = Call} = State) ->
+handle_cast({'ananke_originate_uuid', JObj}, #state{call=Call}=State) ->
     CtrlQ = kz_json:get_value(<<"Outbound-Call-Control-Queue">>, JObj),
     CallId = kz_json:get_value(<<"Outbound-Call-ID">>, JObj),
     lager:info("updating ~s with ~s", [CallId, CtrlQ]),
     {'noreply', State#state{call = kapps_call:set_control_queue(CtrlQ, Call)}};
-handle_cast({'ananke_call_hungup', _JObj}, #state{call_id = CallId, confirmed = true} = State) ->
+handle_cast({'ananke_call_hungup', _JObj}, #state{call_id=CallId, confirmed=true}=State) ->
     lager:info("confirmed call hungup, unbind from call events ~s and stop", [CallId]),
     unbind_from_call_events(CallId),
     {'stop', 'normal', State};
-handle_cast({'ananke_call_hungup', _JObj}, #state{call_id = CallId, confirmed = false} = State) ->
+handle_cast({'ananke_call_hungup', _JObj}, #state{call_id=CallId, confirmed=false}=State) ->
     lager:info("unconfirmed call hungup, unbind from call events ~s and continue", [CallId]),
     unbind_from_call_events(CallId),
     {'noreply', maybe_set_originate_timer(State)};
@@ -117,14 +116,14 @@ handle_cast(_Msg, State) ->
     {'noreply', State}.
 
 -spec handle_info({'originate', callback()}, state()) -> {'noreply', state()} | {'stop', any(), state()}.
-handle_info({'originate', #callback{callback_number = Number, call_timeout = Timeout}}, #state{args = Args, my_q = MyQ, originate_fun = OrigFun} = State) ->
+handle_info({'originate', #callback{callback_number=Number, call_timeout=Timeout}}, #state{args=Args, my_q=MyQ, originate_fun=OrigFun}=State) ->
     {CallId, Call, Req} = OrigFun(Args, MyQ, Number, Timeout),
     Routines = [{fun check_condition/2, {}}
                ,{fun maybe_bind_to_call_events/2, Req}
                ,{fun send_request/2, Req}
                ],
     return(State#state{originate_timer = 'undefined', call_id = CallId, call = Call}, Routines);
-handle_info('confirm_timeout', #state{call_id = CallId, call = Call} = State) ->
+handle_info('confirm_timeout', #state{call_id=CallId, call=Call}=State) ->
     lager:info("confirm timeout, hangup ~s and continue", [CallId]),
     kapps_call_command:hangup(Call),
     {'noreply', State#state{confirm_timer = 'undefined'}};
@@ -167,7 +166,7 @@ handle_call_event(Category, Name, _JObj, _Props) ->
     lager:debug("unhandled call event: ~p:~p", [Category, Name]).
 
 -spec terminate(any(), state()) -> 'ok'.
-terminate(_, #state{originate_timer = Timer}) ->
+terminate(_, #state{originate_timer=Timer}) ->
     _ = stop_originate_timer(Timer),
     %% supervisor doesn't delete stopped child specification
     ananke_tasks_sup:delete_child(self(), 1 * ?MILLISECONDS_IN_SECOND),
@@ -183,7 +182,7 @@ code_change(_OldVsn, State, _Extra) ->
 -type routines() :: [routine()].
 
 -spec return(state(), routines()) -> {'stop', any(), state()} | {'noreply', state()}.
-return(#state{} = State, [{Fun, Args} | Routines]) ->
+return(#state{}=State, [{Fun, Args} | Routines]) ->
     case Fun(State, Args) of
         #state{} = NewState ->
             return(NewState, Routines);
@@ -193,20 +192,20 @@ return(#state{} = State, [{Fun, Args} | Routines]) ->
         'continue' ->
             return(State, Routines)
     end;
-return(#state{} = NewState, []) ->
+return(#state{}=NewState, []) ->
     {'noreply', NewState}.
 
 -spec check_condition(state(), any()) -> routine_ret().
-check_condition(#state{check = 'true'}, _) ->
+check_condition(#state{check='true'}, _) ->
     'continue';
-check_condition(#state{check = {Module, Fun, Args}}, _) ->
+check_condition(#state{check={Module, Fun, Args}}, _) ->
     case erlang:apply(Module, Fun, Args) of
         'true' -> 'continue';
         'false' ->
             lager:info("condition failed, stopping"),
             'stop'
     end;
-check_condition(#state{check = Fun}, _) when is_function(Fun, 0) ->
+check_condition(#state{check=Fun}, _) when is_function(Fun, 0) ->
     case Fun() of
         'true' -> 'continue';
         'false' ->
@@ -232,19 +231,19 @@ send_request(State, Req) ->
     State.
 
 -spec maybe_set_originate_timer(state()) -> state().
-maybe_set_originate_timer(#state{originate_timer = Timer} = State) when is_reference(Timer) ->
+maybe_set_originate_timer(#state{originate_timer=Timer}=State) when is_reference(Timer) ->
     lager:debug("originate timer already set, ignoring"),
     State;
-maybe_set_originate_timer(#state{schedule = [TimeoutS | Schedule], callbacks = Callbacks, callback_position = Pos} = State) ->
+maybe_set_originate_timer(#state{schedule=[TimeoutS | Schedule], callbacks=Callbacks, callback_position=Pos}=State) ->
     Callback = lists:nth(Pos, Callbacks),
     Timer = start_originate_timer(Callback, TimeoutS * ?MILLISECONDS_IN_SECOND),
     State#state{originate_timer = Timer, schedule = Schedule};
-maybe_set_originate_timer(#state{schedule = [], callbacks = Callbacks, callback_position = Pos} = State) ->
-    NextPos = 
-    case Pos == length(Callbacks) of
-        'true' ->  1;
-        'false' -> Pos + 1
-    end,
+maybe_set_originate_timer(#state{schedule=[], callbacks=Callbacks, callback_position=Pos}=State) ->
+    NextPos =
+        case Pos == length(Callbacks) of
+            'true' -> 1;
+            'false' -> Pos + 1
+        end,
     Callback = lists:nth(NextPos, Callbacks),
     #callback{schedule = [Interval|Schedule]} = Callback,
     Timer = start_originate_timer(Callback, Interval * ?MILLISECONDS_IN_SECOND),
@@ -261,7 +260,7 @@ stop_originate_timer(Timer) ->
     erlang:cancel_timer(Timer).
 
 -spec maybe_set_confirm_timer(state()) -> state().
-maybe_set_confirm_timer(#state{confirm_timer = Timer} = State) when is_reference(Timer) ->
+maybe_set_confirm_timer(#state{confirm_timer=Timer}=State) when is_reference(Timer) ->
     lager:debug("confirm timer already set, ignoring"),
     State;
 maybe_set_confirm_timer(State) ->
@@ -301,7 +300,7 @@ bind_to_call_events(Call) ->
 
 -spec bind_to_call_events(kz_term:api_binary() | {kz_term:api_binary(), any()} | kapps_call:call(), pid()) ->  'undefined' | 'ok'.
 bind_to_call_events('undefined', _) -> 'undefined';
-bind_to_call_events(?NE_BINARY = CallId, Pid) ->
+bind_to_call_events(?NE_BINARY=CallId, Pid) ->
     gen_listener:add_binding(Pid, 'call', [{'callid', CallId}]);
 bind_to_call_events({CallId, _}, Pid) -> bind_to_call_events(CallId, Pid);
 bind_to_call_events(Call, Pid) -> bind_to_call_events(kapps_call:call_id(Call), Pid).
@@ -312,7 +311,7 @@ unbind_from_call_events(Call) ->
 
 -spec unbind_from_call_events(kz_term:api_binary() | {kz_term:api_binary(), any()} | kapps_call:call(), pid()) -> 'ok'.
 unbind_from_call_events('undefined', _Pid) -> 'ok';
-unbind_from_call_events(?NE_BINARY = CallId, Pid) ->
+unbind_from_call_events(?NE_BINARY=CallId, Pid) ->
     gen_listener:rm_binding(Pid, 'call', [{'callid', CallId}]);
 unbind_from_call_events({CallId, _}, Pid) -> unbind_from_call_events(CallId, Pid);
 unbind_from_call_events(Call, Pid) -> unbind_from_call_events(kapps_call:call_id(Call), Pid).

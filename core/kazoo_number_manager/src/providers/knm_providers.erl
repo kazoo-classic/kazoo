@@ -409,9 +409,11 @@ requested_modules(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     AccountId = knm_phone_number:assigned_to(PhoneNumber),
     Doc = knm_phone_number:doc(PhoneNumber),
-    RequestedFeatures = lists:flatten([fixup_cnam_key(Key, Doc) || Key <- ?FEATURES_ROOT_KEYS,
-                                'undefined' =/= kz_json:get_value(Key, Doc)
-                        ]),
+    RequestedFeatures = lists:flatten(
+                          [fixup_cnam_key(Key, Doc) || Key <- ?FEATURES_ROOT_KEYS,
+                                                       'undefined' =/= kz_json:get_value(Key, Doc)
+                          ]
+                         ),
     ?LOG_DEBUG("asked on public fields: ~s", [?PP(RequestedFeatures)]),
     ExistingFeatures = knm_phone_number:features_list(PhoneNumber),
     ?LOG_DEBUG("previously allowed: ~s", [?PP(ExistingFeatures)]),
@@ -422,12 +424,12 @@ requested_modules(Number) ->
 fixup_cnam_key(<<"cnam">>, Doc) ->
     Value = kz_json:get_value(<<"cnam">>, Doc),
     Routines = [fun maybe_cnam_outbound/2
-                ,fun maybe_cnam_inbound/2
-                ],
+               ,fun maybe_cnam_inbound/2
+               ],
     lists:foldl(fun(F, Acc) -> F(Value, Acc) end
-    ,[]
-    ,Routines
-    );
+               ,[]
+               ,Routines
+               );
 fixup_cnam_key(Key, _Doc) ->
     Key.
 
@@ -485,9 +487,9 @@ provider_module(Other, _, _) ->
     ?LOG_DEBUG("unmatched feature provider ~p, allowing", [Other]),
     Other.
 
-e911_provider(PhoneNumber, _AccountId) -> 
-  Module = knm_phone_number:module_name(PhoneNumber),
-  e911_provider(Module).
+e911_provider(PhoneNumber, _AccountId) ->
+    Module = knm_phone_number:module_name(PhoneNumber),
+    e911_provider(Module).
 
 e911_provider(<<"knm_bandwidth2">>) ->
     <<"knm_dash_e911">>;
@@ -495,8 +497,8 @@ e911_provider(Module) ->
     <<Module/binary, "_e911">>.
 
 cnam_outbound_provider(PhoneNumber, _AccountId) ->
-  Module = knm_phone_number:module_name(PhoneNumber),
-  cnam_outbound_provider(Module).
+    Module = knm_phone_number:module_name(PhoneNumber),
+    cnam_outbound_provider(Module).
 
 cnam_outbound_provider(Module) ->
     <<Module/binary, "_cnam">>.
@@ -568,7 +570,7 @@ split_requests(Number) ->
     lists:partition(F, RequestedModules).
 
 -spec exec(knm_number:knm_number(), exec_action(), kz_term:ne_binaries()) ->
-                  knm_number:knm_number().
+          knm_number:knm_number().
 exec(Number, _, []) -> Number;
 exec(Number, Action, [Provider|Providers]) ->
     case apply_action(Number, Action, Provider) of
@@ -578,7 +580,7 @@ exec(Number, Action, [Provider|Providers]) ->
     end.
 
 -spec apply_action(knm_number:knm_number(), exec_action(), kz_term:ne_binary()) ->
-                          {'true', any()} | 'false'.
+          {'true', any()} | 'false'.
 apply_action(Number, Action, Provider) ->
     case kz_module:ensure_loaded(Provider) of
         'false' ->
@@ -597,14 +599,14 @@ apply_action(Number, Action, Provider) ->
 -type set_feature() :: {kz_term:ne_binary(), kz_json:object()}.
 
 -spec activate_feature(knm_number:knm_number(), set_feature() | kz_term:ne_binary()) ->
-                              knm_number:knm_number().
+          knm_number:knm_number().
 activate_feature(Number, Feature=?NE_BINARY) ->
     activate_feature(Number, {Feature, kz_json:new()});
 activate_feature(Number, FeatureToSet={?NE_BINARY,_}) ->
     do_activate_feature(Number, FeatureToSet).
 
 -spec do_activate_feature(knm_number:knm_number(), set_feature()) ->
-                                 knm_number:knm_number().
+          knm_number:knm_number().
 do_activate_feature(Number, {Feature,FeatureData}) ->
     PhoneNumber = knm_number:phone_number(Number),
     lager:debug("adding feature ~s to ~s"

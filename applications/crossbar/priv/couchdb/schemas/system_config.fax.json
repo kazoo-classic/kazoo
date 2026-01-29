@@ -151,6 +151,11 @@
             "description": "fax maximum storage retry",
             "type": "integer"
         },
+        "page_timeout_s": {
+            "default": 480,
+            "description": "fax page timeout (in seconds)",
+            "type": "integer"
+        },
         "port": {
             "default": 30950,
             "description": "fax port",

@@ -224,7 +224,7 @@ handle_info({'EXIT', Pid, _Reason}, #state{tf_module_old_pid={Pid, Ref}
     {'noreply', State#state{tf_module_old_pid='undefined'}};
 handle_info({'amqp_return', _JObj, _Returned} = Msg, #state{tf_module_pid=PidRef
                                                            ,call=Im
-                                                           } = State) ->
+                                                           }=State) ->
     Others = kapps_im:kvs_fetch('tf_event_pids', [], Im),
     Notify = case get_pid(PidRef) of
                  'undefined' -> Others;

@@ -180,7 +180,7 @@ process_event_for_bridge(State, JObj) ->
 
 -spec process_event_for_bridge(state(), kz_json:object(), event_type()) ->
           'ignore' | {'hangup' | 'error' | 'bridged', state()}.
-process_event_for_bridge(#ts_callflow_state{aleg_callid=ALeg} = State
+process_event_for_bridge(#ts_callflow_state{aleg_callid=ALeg}=State
                         ,JObj
                         ,{<<"resource">>, <<"offnet_resp">>, _}
                         ) ->

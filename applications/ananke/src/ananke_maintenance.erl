@@ -1,7 +1,7 @@
 -module(ananke_maintenance).
 
 -export([load_schedule/2
-         ,reset/0]).
+        ,reset/0]).
 
 -spec load_schedule(kz_term:ne_binary(), kz_json:object()) -> normal.
 load_schedule(Name, JObj) ->

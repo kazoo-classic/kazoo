@@ -38,11 +38,11 @@ maybe_schedule_callback(AccountId, _AccountJObj) ->
         {'ok', JObjs} ->
             lager:info("listing_by_schedule of account ~s returned: ~p", [AccountId, JObjs]),
             lists:foreach(fun load_schedule/1, lists:map(fun(J) ->
-                                                           {AccountId
-                                                            ,kz_json:get_value(<<"id">>, J)
-                                                            ,kz_json:get_value(<<"value">>, J)}
+                                                                 {AccountId
+                                                                 ,kz_json:get_value(<<"id">>, J)
+                                                                 ,kz_json:get_value(<<"value">>, J)}
                                                          end,
-                                                        JObjs));
+                                                         JObjs));
         {'error', _E} ->
             lager:warning("account: ~s failed to load view vmboxes/listing_by_schedule : ~p", [AccountId, _E])
     end,
@@ -57,8 +57,8 @@ maybe_schedule_callback(AccountId, _AccountJObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 load_schedule({AccountId, Id, Schedule0}) ->
-%%    Schedule1 = kz_json:set_value([<<"action">>, <<"account_id">>], AccountId, Schedule0),
-%%    Schedule = kz_json:set_value([<<"action">>, <<"vmbox_id">>], Id, Schedule1),
+    %%    Schedule1 = kz_json:set_value([<<"action">>, <<"account_id">>], AccountId, Schedule0),
+    %%    Schedule = kz_json:set_value([<<"action">>, <<"vmbox_id">>], Id, Schedule1),
     Routines = [fun (S) -> kz_json:set_value([<<"action">>, <<"account_id">>], AccountId, S) end
                ,fun (S) -> kz_json:set_value([<<"action">>, <<"vmbox_id">>], Id, S) end
                ],

@@ -80,14 +80,14 @@ subscribed(System, Action, _AccountDb) ->
 
 listeners(_, _Action, _AccountDb) ->
     [{'amqp', 'notifications', [{'restrict_to'
-    ,[kapi_definition:restrict_to(Definition)
-      || Definition <- get_notifications_definition()
-     ]
-    },
-    'federate'
-   ]
-}
-].
+                                ,[kapi_definition:restrict_to(Definition)
+                                  || Definition <- get_notifications_definition()
+                                 ]
+                                },
+                                'federate'
+                               ]
+     }
+    ].
 
 -spec get_notifications_definition() -> kapi_definition:apis().
 get_notifications_definition() ->

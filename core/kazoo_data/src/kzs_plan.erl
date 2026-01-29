@@ -73,7 +73,7 @@ plan(DbName, Props) when is_list(Props) ->
     maybe_override_plan(Plan, props:get_value('plan_override', Props));
 plan(DbName, Doc) when ?IS_JSON_GUARD(Doc) ->
     plan(DbName, kz_doc:type(Doc));
-plan(DbName, 'undefined')  ->
+plan(DbName, 'undefined') ->
     plan(DbName);
 plan(DbName, DocType)
   when is_atom(DocType) ->

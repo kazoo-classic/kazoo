@@ -41,7 +41,7 @@
 -define(SERVER, ?MODULE).
 
 -define(BINDINGS, [{'acdc_agent', [{'restrict_to', ['status']}
-                                   ,'federate'
+                                  ,'federate'
                                   ]}
                   ,{'presence', [{'restrict_to', ['probe']}]}
                   ,{'conf', [{'type', <<"user">>}

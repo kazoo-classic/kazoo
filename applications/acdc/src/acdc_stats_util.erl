@@ -262,7 +262,7 @@ publish_call_summary_query_errors(RespQ, MsgId, Errors) ->
 -spec publish_query_errors(kz_term:ne_binary()
                           ,kz_term:ne_binary()
                           ,kz_term:proplist() | {'error', _}
-                          ,fun())  -> 'ok'.
+                          ,fun()) -> 'ok'.
 publish_query_errors(RespQ, MsgId, Errors, PubFun) ->
     API = [{<<"Error-Reason">>, Errors}
           ,{<<"Msg-ID">>, MsgId}
