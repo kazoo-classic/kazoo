@@ -127,6 +127,6 @@ code_change(_OldVsn, _State, _Extra) ->
 
 %%------------------------------------------------------------------------------
 -spec handle_error(any(), state()) -> state().
-handle_error(Reason, #state{name=N, module=M} = State)->
+handle_error(Reason, #state{name=N, module=M}=State)->
     lager:debug("error in ~s|~s|~p: ~s", [N, M, node(), Reason]),
     State.

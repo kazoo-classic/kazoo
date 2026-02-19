@@ -434,8 +434,8 @@ is_fax_number('undefined', DIDAttributes) ->
 media_handling_number(DIDOptsList, DIDAttributes) when is_list(DIDOptsList) ->
     MediaCheckFunc =
         fun(X) -> X == <<"fax">>
-            orelse
-            X == <<"process_media">>
+                      orelse
+                      X == <<"process_media">>
         end,
     MediaOptions = lists:any(MediaCheckFunc, DIDOptsList),
 
@@ -461,5 +461,4 @@ attributes_header(HeaderName, Number, Realm, NumberAttributes) when is_binary(He
     Class = kz_json:get_ne_binary_value(<<"class">>, NumberAttributes),
     Traffic = kz_json:get_ne_binary_value(<<"traffic">>, NumberAttributes),
     Header = <<"<sip:", Number/binary, "@", Realm/binary, ">;group=", Group/binary, ";class=", Class/binary, ";traffic=", Traffic/binary>>,
-    %kz_json:set_value(<<"Call-Info">>, Header, kz_json:new());
     kz_json:set_value(HeaderName, Header, kz_json:new()).

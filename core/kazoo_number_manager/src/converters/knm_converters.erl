@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2022, 2600Hz
+%%% @copyright (C) 2010-2025, 2600Hz
 %%% @doc
 %%% @author Peter Defebvre
 %%% @end
@@ -101,16 +101,18 @@
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec normalize(kz_term:ne_binary()) -> kz_term:ne_binary();
-               (kz_term:ne_binaries()) -> kz_term:ne_binaries().
+-spec normalize(binary()) -> kz_term:binary();
+               (kz_term:binaries()) -> kz_term:binaries().
+normalize(<<>>) -> <<>>;
 normalize(Num=?NE_BINARY) ->
     (?CONVERTER_MOD):normalize(Num);
 normalize(Nums)
   when is_list(Nums) ->
     [normalize(Num) || Num <- Nums].
 
--spec normalize(kz_term:ne_binary(), kz_term:api_ne_binary()) -> kz_term:ne_binary();
-               (kz_term:ne_binaries(), kz_term:api_ne_binary()) -> kz_term:ne_binaries().
+-spec normalize(binary(), kz_term:api_ne_binary()) -> binary();
+               (kz_term:binaries(), kz_term:api_ne_binary()) -> kz_term:binaries().
+normalize(<<>>, _) -> <<>>;
 normalize(Num=?NE_BINARY, 'undefined') ->
     normalize(Num);
 normalize(Num=?NE_BINARY, AccountId) ->
@@ -122,8 +124,9 @@ normalize(Nums, AccountId)
   when is_list(Nums) ->
     [normalize(Num, AccountId) || Num <- Nums].
 
--spec normalize(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> kz_term:ne_binary();
-               (kz_term:ne_binaries(), kz_term:ne_binary(), kz_json:object()) -> kz_term:ne_binaries().
+-spec normalize(binary(), kz_term:ne_binary(), kz_json:object()) -> kz_term:binary();
+               (kz_term:binaries(), kz_term:ne_binary(), kz_json:object()) -> kz_term:binaries().
+normalize(<<>>, _, _) -> <<>>;
 normalize(Num=?NE_BINARY, ?MATCH_ACCOUNT_RAW(AccountId), DialPlan) ->
     (?CONVERTER_MOD):normalize(Num, AccountId, DialPlan);
 normalize(Nums, ?MATCH_ACCOUNT_RAW(AccountId), DialPlan)

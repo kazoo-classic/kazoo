@@ -28,7 +28,7 @@
                                      ," [", 'severity', "] |"
                                      ,'from_app', "|"
                                      ,{'callid', <<"0000000000">>}, "|"
-                                     ,'mod', ":" , 'func', ":", 'line'
+                                     ,'mod', ":", 'func', ":", 'line'
                                      ," (", 'pid', ") "
                                      ,'message', "\n"
                                      ]).
@@ -161,7 +161,7 @@ handle_call({'stop_trace', TraceRef}
         {'value', {TraceRef, Filename, TraceResult}, Traces1} ->
             case stop_trace_file(TraceResult) of
                 'ok' ->
-                    {'reply', {'ok', Filename} , State#state{traces=Traces1}};
+                    {'reply', {'ok', Filename}, State#state{traces=Traces1}};
                 Error ->
                     {'reply', Error, State#state{traces=Traces1}}
             end

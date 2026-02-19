@@ -492,6 +492,14 @@
                 "caller_id_options": {
                     "description": "custom properties for configuring caller_id",
                     "properties": {
+                        "ensure_valid": {
+                            "description": "Ensure caller id is valid (must match a DID on the account)",
+                            "type": "boolean"
+                        },
+                        "ensure_valid_owner": {
+                            "description": "Ensure caller id is valid (must match a DID assigned to the user)",
+                            "type": "boolean"
+                        },
                         "outbound_privacy": {
                             "description": "Determines what appears as caller id for offnet outbound calls. Values: full - hides name and number; name - hides only name; number - hides only number; none - hides nothing",
                             "enum": [
@@ -501,6 +509,14 @@
                                 "none"
                             ],
                             "type": "string"
+                        },
+                        "passthrough_ensure_valid": {
+                            "description": "Ensure passthrough caller id is valid (must match a DID on the account)",
+                            "type": "boolean"
+                        },
+                        "passthrough_ensure_valid_owner": {
+                            "description": "Ensure passthrough caller id is valid (must match a DID assigned to the user)",
+                            "type": "boolean"
                         },
                         "show_rate": {
                             "description": "Whether to show the rate",
@@ -1283,6 +1299,10 @@
                             "maxLength": 35,
                             "type": "string"
                         },
+                        "passthrough": {
+                            "description": "Whether to pass through CLI from the endpoint",
+                            "type": "boolean"
+                        },
                         "realm": {
                             "description": "The asserted identity realm for the object type",
                             "type": "string"
@@ -1302,6 +1322,10 @@
                             "description": "The caller id number for the object type",
                             "maxLength": 35,
                             "type": "string"
+                        },
+                        "passthrough": {
+                            "description": "Whether to pass through CLI from the endpoint",
+                            "type": "boolean"
                         }
                     },
                     "type": "object"
@@ -1318,6 +1342,10 @@
                             "description": "The caller id number for the object type",
                             "maxLength": 35,
                             "type": "string"
+                        },
+                        "passthrough": {
+                            "description": "Whether to pass through CLI from the endpoint",
+                            "type": "boolean"
                         }
                     },
                     "type": "object"
@@ -1334,6 +1362,10 @@
                             "description": "The caller id number for the object type",
                             "maxLength": 35,
                             "type": "string"
+                        },
+                        "passthrough": {
+                            "description": "Whether to pass through CLI from the endpoint",
+                            "type": "boolean"
                         }
                     },
                     "type": "object"
@@ -2213,6 +2245,20 @@
         "callflows.dead_air": {
             "description": "Validator for the dead_air callflow data object",
             "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "callflows.destination_listmatch": {
+            "description": "Validator for the destination_listmatch callflow data object",
+            "properties": {
+                "id": {
+                    "description": "Destination List ID",
+                    "type": "string"
+                },
                 "skip_module": {
                     "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
                     "type": "boolean"
@@ -30899,7 +30945,22 @@
                 },
                 "ensure_valid_caller_id": {
                     "default": false,
-                    "description": "callflow ensure valid caller id",
+                    "description": "Ensure caller id is valid (must match a DID on the account)",
+                    "type": "boolean"
+                },
+                "ensure_valid_caller_id_owner": {
+                    "default": false,
+                    "description": "Ensure caller id is valid (must match a DID assigned to the user)",
+                    "type": "boolean"
+                },
+                "ensure_valid_passthrough_caller_id": {
+                    "default": false,
+                    "description": "Ensure passthrough caller id is valid (must match a DID on the account)",
+                    "type": "boolean"
+                },
+                "ensure_valid_passthrough_caller_id_owner": {
+                    "default": false,
+                    "description": "Ensure passthrough caller id is valid (must match a DID assigned to the user)",
                     "type": "boolean"
                 },
                 "fax_detect_duration_s": {
@@ -31220,6 +31281,11 @@
                 "default_asserted_identity": {
                     "default": false,
                     "description": "When set to true, the asserted identity will have defaults and force the use of P-Asserted-Identity (instead of RPID) on all outbound offnet calls.  When set to false, P-Asserted-Identity is only used if explicitly set in the account/user/device hierarchy.",
+                    "type": "boolean"
+                },
+                "default_asserted_identity_privacy": {
+                    "default": false,
+                    "description": "When set to true, the P-Asserted-Identity header will be used (instead of RPID) on outbound offnet calls that have privacy to hide the number enabled. This is required with some carriers for anonymous calls.",
                     "type": "boolean"
                 },
                 "default_emit_account_id": {
@@ -33302,20 +33368,25 @@
                     "description": "fax maximum storage retry",
                     "type": "integer"
                 },
+                "page_timeout_s": {
+                    "default": 480,
+                    "description": "fax page timeout (in seconds)",
+                    "type": "integer"
+                },
                 "port": {
                     "default": 30950,
                     "description": "fax port",
                     "type": "integer"
                 },
-                "postfix_lookup": {
-                    "default": false,
-                    "description": "enable the postfix_lookup service which listens for Postfix tcp_table requests to authorize and route email domains",
-                    "type": "boolean"
-                },
                 "postfix_lookup_domain_port": {
                     "default": 19024,
                     "description": "port used for postfix_lookup_domain service",
                     "type": "integer"
+                },
+                "postfix_lookup_enabled": {
+                    "default": false,
+                    "description": "enable the postfix_lookup service which listens for Postfix tcp_table requests to authorize and route email domains",
+                    "type": "boolean"
                 },
                 "postfix_lookup_kazoo_transport": {
                     "default": "smtp:[127.0.0.1]:19025",
@@ -33925,6 +33996,11 @@
         "system_config.kazoo_endpoint": {
             "description": "Schema for kazoo_endpoint system_config",
             "properties": {
+                "allow_passthrough_caller_id": {
+                    "default": true,
+                    "description": "allow endpoints to passthrough caller id when enabled on the caller id object[s]",
+                    "type": "boolean"
+                },
                 "custom_sip_interface": {
                     "description": "kazoo_endpoint custom sip interface",
                     "type": "string"

@@ -303,7 +303,7 @@ process_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState, Timeout, Start, Wa
     end.
 
 -spec decr_timeout(timeout(), kz_term:kz_now()) -> timeout().
-decr_timeout(Timeout, Wait) -> 
+decr_timeout(Timeout, Wait) ->
     kz_time:decr_timeout(Timeout div ?MILLISECONDS_IN_SECOND, Wait) * ?MILLISECONDS_IN_SECOND.
 
 -spec breakout_loop(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered' | 'cancel'.
@@ -447,7 +447,7 @@ current_queue_size(AccountId, QueueId) ->
                                 ,QueueId/binary>>
                               ,[{<<"columns">>, <<"messages">>}]),
     Headers = [{<<"Content-Type">>, <<"application/json">>}],
-    lager:debug("querying RabbitMQ management API for queue size: ~s", [kz_util:sanitize_url(URL)]),
+    lager:debug("querying RabbitMQ management API for queue size: ~s", [kz_util:sanitize_uri(URL)]),
     case hackney:request('get', URL, Headers, [], []) of
         {ok, _, _, ClientRef} ->
             {ok, Body} = hackney:body(ClientRef),

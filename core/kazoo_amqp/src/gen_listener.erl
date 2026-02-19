@@ -988,7 +988,7 @@ format_status(_Opt
     end.
 
 -spec distribute_event(kz_json:object(), deliver(), state()) ->  kz_types:handle_info_ret().
-distribute_event(JObj, {_ , #'P_basic'{headers='undefined'}}=BasicDeliver, State) ->
+distribute_event(JObj, {_, #'P_basic'{headers='undefined'}}=BasicDeliver, State) ->
     case callback_handle_event(JObj, BasicDeliver, State) of
         'ignore' -> {'noreply', State};
         {'ignore', ModuleState} -> {'noreply', State#state{module_state=ModuleState}};

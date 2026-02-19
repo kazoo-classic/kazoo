@@ -8,9 +8,9 @@
 -define(CONFIG_CAT, ?APP_NAME).
 
 -record(callback, {callback_number       :: kz_term:api_binary()
-                   ,is_callback_disabled  :: boolean()
-                   ,call_timeout          :: pos_integer()
-                   ,schedule              :: pos_integers()
+                  ,is_callback_disabled  :: boolean()
+                  ,call_timeout          :: pos_integer()
+                  ,schedule              :: pos_integers()
                   }).
 
 -record(args, {account_id            :: kz_term:api_binary()

@@ -91,12 +91,12 @@ handle_outbound_cnam(Number) ->
         NewCNAM when IsDryRun ->
             lager:debug("dry run: cnam display name changed to ~s", [NewCNAM]),
             FeatureData = kz_json:from_list([{?CNAM_DISPLAY_NAME, NewCNAM}]),
-            knm_providers:activate_feature(Number, {?FEATURE_CNAM_OUTBOUND, FeatureData});    
+            knm_providers:activate_feature(Number, {?FEATURE_CNAM_OUTBOUND, FeatureData});
         NewCNAM ->
             FeatureData = kz_json:from_list([{?CNAM_DISPLAY_NAME, NewCNAM}]),
             case assign_cnam(Number, NewCNAM) of
                 {'error', _}=E -> E;
-                {'ok', Number1} -> 
+                {'ok', Number1} ->
                     Number2 = knm_providers:activate_feature(Number1, {?FEATURE_CNAM_OUTBOUND, FeatureData}),
                     _ = publish_cnam_update(Number2),
                     Number2
@@ -181,14 +181,14 @@ assign_cnam(Number, CNam) ->
     AuthBy = knm_phone_number:auth_by(PhoneNumber),
     Props = [{'CustomerOrderId', [kz_term:to_list(AuthBy)]}
             ,{'LidbTnGroups',
-              [{'LidbTnGroup', 
-                    [
-                        {'TelephoneNumbers', [{'TelephoneNumber', [binary_to_list(Num)]}]},
-                        {'SubscriberInformation', [binary_to_list(CNam)] },
-                        {'UseType', ["BUSINESS"]},
-                        {'Visibility', ["PUBLIC"]}
-                    ]
-              }]
+              [{'LidbTnGroup',
+                [
+                 {'TelephoneNumbers', [{'TelephoneNumber', [binary_to_list(Num)]}]},
+                 {'SubscriberInformation', [binary_to_list(CNam)] },
+                 {'UseType', ["BUSINESS"]},
+                 {'Visibility', ["PUBLIC"]}
+                ]
+               }]
              }
             ],
     Body = xmerl:export_simple([{'LidbOrder', Props}], 'xmerl_xml'),
@@ -209,7 +209,7 @@ assign_cnam(Number, CNam) ->
           {'error', kz_term:ne_binary()}.
 remove_cnam(Number) ->
     assign_cnam(Number, ?CNAM_PRIVATE).
-    
+
 -spec url([nonempty_string()], knm_search:options()) -> nonempty_string().
 url(RelativePath, Options) ->
     lists:flatten(
@@ -301,7 +301,7 @@ handle_response({'error', _}=E) ->
     E.
 
 -spec verify_response(kz_types:xml_el()) -> {'ok', kz_types:xml_el()} |
-                                            {'error', any()}.
+          {'error', any()}.
 verify_response(Xml) ->
     TNs = "count(//LidbTnGroups/LidbTnGroup/TelephoneNumbers/TelephoneNumber)",
     case validate_xpath_value(xmerl_xpath:string(TNs, Xml))
@@ -328,10 +328,10 @@ validate_xpath_value(_) -> 'true'.
 
 
 -spec check_order(kz_term:api_binary(), kz_term:ne_binary(), kz_types:xml_el(), knm_phone_number:knm_phone_number(), knm_number:knm_number(), list()) -> knm_number:knm_number().
-check_order(_OrderId, OrderStatus, Response, PhoneNumber, Number, _Options) 
-            when OrderStatus =:= <<"RECEIVED">>
-                 orelse OrderStatus =:= <<"PROCESSING">>
-                 orelse OrderStatus =:= <<"COMPLETE">> ->
+check_order(_OrderId, OrderStatus, Response, PhoneNumber, Number, _Options)
+  when OrderStatus =:= <<"RECEIVED">>
+       orelse OrderStatus =:= <<"PROCESSING">>
+       orelse OrderStatus =:= <<"COMPLETE">> ->
     OrderData = order_response_to_json(Response),
     PN = knm_phone_number:update_carrier_data(PhoneNumber, OrderData),
     {'ok', knm_number:set_phone_number(Number, PN)};
@@ -356,8 +356,8 @@ from_bandwidth2(Number) -> <<"+1", Number/binary>>.
 options(Number) ->
     {'ok', AccountId, ResellerId} = knm_thinq_util:get_account_and_reseller_id(Number),
     [{account_id, AccountId}
-     ,{reseller_id, ResellerId}
-     ].
+    ,{reseller_id, ResellerId}
+    ].
 
 -spec order_response_to_json(kz_types:xml_els() | kz_types:xml_el()) -> kz_json:object().
 order_response_to_json([]) ->

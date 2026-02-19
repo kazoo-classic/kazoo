@@ -1,6 +1,6 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2022, 2600Hz
-%%% @doc
+%%% @copyright (C) 2010-2026, 2600Hz
+%%% @doc Accessors for `caller_id' document.
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kzd_caller_id).
@@ -9,16 +9,20 @@
 -export([asserted/1, asserted/2, set_asserted/2]).
 -export([asserted_name/1, asserted_name/2, set_asserted_name/2]).
 -export([asserted_number/1, asserted_number/2, set_asserted_number/2]).
+-export([asserted_passthrough/1, asserted_passthrough/2, set_asserted_passthrough/2]).
 -export([asserted_realm/1, asserted_realm/2, set_asserted_realm/2]).
 -export([emergency/1, emergency/2, set_emergency/2]).
 -export([emergency_name/1, emergency_name/2, set_emergency_name/2]).
 -export([emergency_number/1, emergency_number/2, set_emergency_number/2]).
+-export([emergency_passthrough/1, emergency_passthrough/2, set_emergency_passthrough/2]).
 -export([external/1, external/2, set_external/2]).
 -export([external_name/1, external_name/2, set_external_name/2]).
 -export([external_number/1, external_number/2, set_external_number/2]).
+-export([external_passthrough/1, external_passthrough/2, set_external_passthrough/2]).
 -export([internal/1, internal/2, set_internal/2]).
 -export([internal_name/1, internal_name/2, set_internal_name/2]).
 -export([internal_number/1, internal_number/2, set_internal_number/2]).
+-export([internal_passthrough/1, internal_passthrough/2, set_internal_passthrough/2]).
 
 
 -include("kz_documents.hrl").
@@ -48,7 +52,7 @@ set_asserted(Doc, Asserted) ->
 asserted_name(Doc) ->
     asserted_name(Doc, 'undefined').
 
--spec asserted_name(doc(), Default) -> binary() | Default.
+-spec asserted_name(doc(), Default) -> kz_term:api_ne_binary() | Default.
 asserted_name(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"asserted">>, <<"name">>], Doc, Default).
 
@@ -60,7 +64,7 @@ set_asserted_name(Doc, AssertedName) ->
 asserted_number(Doc) ->
     asserted_number(Doc, 'undefined').
 
--spec asserted_number(doc(), Default) -> binary() | Default.
+-spec asserted_number(doc(), Default) -> kz_term:api_ne_binary() | Default.
 asserted_number(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"asserted">>, <<"number">>], Doc, Default).
 
@@ -68,11 +72,23 @@ asserted_number(Doc, Default) ->
 set_asserted_number(Doc, AssertedNumber) ->
     kz_json:set_value([<<"asserted">>, <<"number">>], AssertedNumber, Doc).
 
+-spec asserted_passthrough(doc()) -> kz_term:api_boolean().
+asserted_passthrough(Doc) ->
+    asserted_passthrough(Doc, 'undefined').
+
+-spec asserted_passthrough(doc(), Default) -> kz_term:api_boolean() | Default.
+asserted_passthrough(Doc, Default) ->
+    kz_json:get_boolean_value([<<"asserted">>, <<"passthrough">>], Doc, Default).
+
+-spec set_asserted_passthrough(doc(), boolean()) -> doc().
+set_asserted_passthrough(Doc, AssertedPassthrough) ->
+    kz_json:set_value([<<"asserted">>, <<"passthrough">>], AssertedPassthrough, Doc).
+
 -spec asserted_realm(doc()) -> kz_term:api_binary().
 asserted_realm(Doc) ->
     asserted_realm(Doc, 'undefined').
 
--spec asserted_realm(doc(), Default) -> binary() | Default.
+-spec asserted_realm(doc(), Default) -> kz_term:api_ne_binary() | Default.
 asserted_realm(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"asserted">>, <<"realm">>], Doc, Default).
 
@@ -96,7 +112,7 @@ set_emergency(Doc, Emergency) ->
 emergency_name(Doc) ->
     emergency_name(Doc, 'undefined').
 
--spec emergency_name(doc(), Default) -> binary() | Default.
+-spec emergency_name(doc(), Default) -> kz_term:api_ne_binary() | Default.
 emergency_name(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"emergency">>, <<"name">>], Doc, Default).
 
@@ -108,13 +124,25 @@ set_emergency_name(Doc, EmergencyName) ->
 emergency_number(Doc) ->
     emergency_number(Doc, 'undefined').
 
--spec emergency_number(doc(), Default) -> binary() | Default.
+-spec emergency_number(doc(), Default) -> kz_term:api_ne_binary() | Default.
 emergency_number(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"emergency">>, <<"number">>], Doc, Default).
 
 -spec set_emergency_number(doc(), binary()) -> doc().
 set_emergency_number(Doc, EmergencyNumber) ->
     kz_json:set_value([<<"emergency">>, <<"number">>], EmergencyNumber, Doc).
+
+-spec emergency_passthrough(doc()) -> kz_term:api_boolean().
+emergency_passthrough(Doc) ->
+    emergency_passthrough(Doc, 'undefined').
+
+-spec emergency_passthrough(doc(), Default) -> kz_term:api_boolean() | Default.
+emergency_passthrough(Doc, Default) ->
+    kz_json:get_boolean_value([<<"emergency">>, <<"passthrough">>], Doc, Default).
+
+-spec set_emergency_passthrough(doc(), boolean()) -> doc().
+set_emergency_passthrough(Doc, EmergencyPassthrough) ->
+    kz_json:set_value([<<"emergency">>, <<"passthrough">>], EmergencyPassthrough, Doc).
 
 -spec external(doc()) -> kz_term:api_object().
 external(Doc) ->
@@ -132,7 +160,7 @@ set_external(Doc, External) ->
 external_name(Doc) ->
     external_name(Doc, 'undefined').
 
--spec external_name(doc(), Default) -> binary() | Default.
+-spec external_name(doc(), Default) -> kz_term:api_ne_binary() | Default.
 external_name(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"external">>, <<"name">>], Doc, Default).
 
@@ -144,13 +172,25 @@ set_external_name(Doc, ExternalName) ->
 external_number(Doc) ->
     external_number(Doc, 'undefined').
 
--spec external_number(doc(), Default) -> binary() | Default.
+-spec external_number(doc(), Default) -> kz_term:api_ne_binary() | Default.
 external_number(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"external">>, <<"number">>], Doc, Default).
 
 -spec set_external_number(doc(), binary()) -> doc().
 set_external_number(Doc, ExternalNumber) ->
     kz_json:set_value([<<"external">>, <<"number">>], ExternalNumber, Doc).
+
+-spec external_passthrough(doc()) -> kz_term:api_boolean().
+external_passthrough(Doc) ->
+    external_passthrough(Doc, 'undefined').
+
+-spec external_passthrough(doc(), Default) -> kz_term:api_boolean() | Default.
+external_passthrough(Doc, Default) ->
+    kz_json:get_boolean_value([<<"external">>, <<"passthrough">>], Doc, Default).
+
+-spec set_external_passthrough(doc(), boolean()) -> doc().
+set_external_passthrough(Doc, ExternalPassthrough) ->
+    kz_json:set_value([<<"external">>, <<"passthrough">>], ExternalPassthrough, Doc).
 
 -spec internal(doc()) -> kz_term:api_object().
 internal(Doc) ->
@@ -168,7 +208,7 @@ set_internal(Doc, Internal) ->
 internal_name(Doc) ->
     internal_name(Doc, 'undefined').
 
--spec internal_name(doc(), Default) -> binary() | Default.
+-spec internal_name(doc(), Default) -> kz_term:api_ne_binary() | Default.
 internal_name(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"internal">>, <<"name">>], Doc, Default).
 
@@ -180,10 +220,22 @@ set_internal_name(Doc, InternalName) ->
 internal_number(Doc) ->
     internal_number(Doc, 'undefined').
 
--spec internal_number(doc(), Default) -> binary() | Default.
+-spec internal_number(doc(), Default) -> kz_term:api_ne_binary() | Default.
 internal_number(Doc, Default) ->
     kz_json:get_ne_binary_value([<<"internal">>, <<"number">>], Doc, Default).
 
 -spec set_internal_number(doc(), binary()) -> doc().
 set_internal_number(Doc, InternalNumber) ->
     kz_json:set_value([<<"internal">>, <<"number">>], InternalNumber, Doc).
+
+-spec internal_passthrough(doc()) -> kz_term:api_boolean().
+internal_passthrough(Doc) ->
+    internal_passthrough(Doc, 'undefined').
+
+-spec internal_passthrough(doc(), Default) -> kz_term:api_boolean() | Default.
+internal_passthrough(Doc, Default) ->
+    kz_json:get_boolean_value([<<"internal">>, <<"passthrough">>], Doc, Default).
+
+-spec set_internal_passthrough(doc(), boolean()) -> doc().
+set_internal_passthrough(Doc, InternalPassthrough) ->
+    kz_json:set_value([<<"internal">>, <<"passthrough">>], InternalPassthrough, Doc).

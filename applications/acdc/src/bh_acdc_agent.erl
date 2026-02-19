@@ -14,11 +14,11 @@
 -include_lib("../blackhole/src/blackhole.hrl").
 
 -define(BINDING(),
-       [
-        <<"acdc.agent.action.*">>
-       ,<<"acdc.agent.change.*">>
-       ,<<"acdc_stats.status.*">>
-       ]).
+        [
+         <<"acdc.agent.action.*">>
+        ,<<"acdc.agent.change.*">>
+        ,<<"acdc_stats.status.*">>
+        ]).
 
 -spec init() -> any().
 init() ->
@@ -26,7 +26,7 @@ init() ->
     _ = blackhole_bindings:bind(<<"blackhole.events.validate.acdc">>, ?MODULE, 'validate'),
     _ = blackhole_bindings:bind(<<"blackhole.events.bindings.acdc">>, ?MODULE, 'bindings'),
     _ = blackhole_bindings:bind(<<"blackhole.events.validate.acdc_stats">>, ?MODULE, 'validate'),
-        blackhole_bindings:bind(<<"blackhole.events.bindings.acdc_stats">>, ?MODULE, 'bindings').
+    blackhole_bindings:bind(<<"blackhole.events.bindings.acdc_stats">>, ?MODULE, 'bindings').
 
 init_bindings() ->
     Bindings = ?BINDING(),

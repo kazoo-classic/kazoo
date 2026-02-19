@@ -15,7 +15,7 @@
 %%% /agents/{agent_id}
 %%%   GET: agent details
 %%% /agents/{agent_id}}/stats
-%%%   GET: call stats for  agent_id 
+%%%   GET: call stats for agent_id
 %%% /agents/{agent_id}}/stats_summary
 %%%   GET: aggregate call stats for agent_id
 %%% /agents/{agent_id}/queue_status
@@ -188,11 +188,11 @@ content_types_provided(Context, _, ?RESTART_PATH_TOKEN) -> Context.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) ->
-                      cb_context:context().
+          cb_context:context().
 -spec validate(cb_context:context(), path_token()) ->
-                      cb_context:context().
+          cb_context:context().
 -spec validate(cb_context:context(), path_token(), path_token()) ->
-                      cb_context:context().
+          cb_context:context().
 validate(Context) ->
     summary(Context).
 
@@ -318,11 +318,11 @@ publish_update(Context, AgentId, PubFun) ->
 -spec publish_queue_update(kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary(), function()) -> 'ok'.
 publish_queue_update(AccountId, AgentId, QueueId, PubFun) ->
     Update = props:filter_undefined(
-             [{<<"Account-ID">>, AccountId}
-              ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Queue-ID">>, QueueId}
-              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-             ]),
+               [{<<"Account-ID">>, AccountId}
+               ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Queue-ID">>, QueueId}
+                | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+               ]),
     kz_amqp_worker:cast(Update, PubFun).
 
 -spec publish_restart(cb_context:context(), kz_term:ne_binary()) -> 'ok'.
@@ -349,13 +349,13 @@ fetch_all_agent_statuses(Context) ->
     case kz_term:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
             fetch_current_status(Context
-                                 ,'undefined'
-                                 ,cb_context:req_value(Context, <<"status">>) 
+                                ,'undefined'
+                                ,cb_context:req_value(Context, <<"status">>)
                                 );
         'true' ->
             fetch_all_statuses(Context
-                               ,'undefined'
-                               ,cb_context:req_value(Context, <<"status">>)
+                              ,'undefined'
+                              ,cb_context:req_value(Context, <<"status">>)
                               )
     end.
 
@@ -364,13 +364,13 @@ fetch_agent_status(AgentId, Context) ->
     case kz_term:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
             fetch_current_status(Context
-                                 ,AgentId
-                                 ,cb_context:req_value(Context, <<"status">>)
-                                 );
+                                ,AgentId
+                                ,cb_context:req_value(Context, <<"status">>)
+                                );
         'true' ->
             fetch_all_statuses(Context
-                               ,AgentId
-                               ,cb_context:req_value(Context, <<"status">>)
+                              ,AgentId
+                              ,cb_context:req_value(Context, <<"status">>)
                               )
     end.
 
@@ -384,16 +384,16 @@ fetch_agent_stats(AgentId, Context, Summarize) ->
 -spec fetch_stats_summary_from_amqp(cb_context:context(), kz_term:kz_proplist()) -> cb_context:context().
 fetch_stats_summary_from_amqp(Context, Req) ->
     case kz_amqp_worker:call(Req
-                                     ,fun kapi_acdc_stats:publish_agent_calls_req/1
-                                     ,fun kapi_acdc_stats:agent_calls_resp_v/1
-                                     )
+                            ,fun kapi_acdc_stats:publish_agent_calls_req/1
+                            ,fun kapi_acdc_stats:agent_calls_resp_v/1
+                            )
     of
         {'error', Resp} -> format_stats_summary_error(Context, Resp);
         {'ok', Resp} -> format_stats_summary_response(Context, Resp)
     end.
 
 -spec format_stats_summary_response(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_stats_summary_response(Context, Resp) ->
     case kz_json:get_value(<<"Event-Name">>, Resp) of
         <<"agent_calls_err">> -> format_stats_summary_error(Context, Resp);
@@ -401,12 +401,12 @@ format_stats_summary_response(Context, Resp) ->
     end.
 
 -spec format_stats_summary_error(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_stats_summary_error(Context, Resp) ->
     crossbar_util:response('error', <<"stat request had errors">>, 400
-                            ,kz_json:get_value(<<"Error-Reason">>, Resp)
-                            ,Context
-    ).
+                          ,kz_json:get_value(<<"Error-Reason">>, Resp)
+                          ,Context
+                          ).
 
 -spec fetch_current_agent_stats(kz_term:api_binary() | 'all', cb_context:context() , boolean()) -> cb_context:context().
 fetch_current_agent_stats(AgentId, Context, Summarize) ->
@@ -416,8 +416,8 @@ fetch_current_agent_stats(AgentId, Context, Summarize) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Agent-ID">>, case AgentId of
-                                        'all' -> cb_context:req_value(Context, <<"agent_id">>);
-                                        Else -> Else
+                                  'all' -> cb_context:req_value(Context, <<"agent_id">>);
+                                  Else -> Else
                               end}
             ,{<<"Start-Range">>, Yday}
             ,{<<"End-Range">>, Now}
@@ -429,8 +429,8 @@ fetch_current_agent_stats(AgentId, Context, Summarize) ->
 fetch_current_status(Context, AgentId, Status) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
-             ,{<<"Status">>, Status}
-             ,{<<"Agent-ID">>, AgentId}
+            ,{<<"Status">>, Status}
+            ,{<<"Agent-ID">>, AgentId}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case kz_amqp_worker:call(Req
@@ -443,7 +443,7 @@ fetch_current_status(Context, AgentId, Status) ->
     end.
 
 -spec format_current_status_response(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_current_status_response(Context, Resp) ->
     case kz_json:get_value(<<"Event-Name">>, Resp) of
         <<"agent_cur_status_err">> -> format_current_status_error(Context, Resp);
@@ -451,20 +451,20 @@ format_current_status_response(Context, Resp) ->
     end.
 
 -spec format_current_status_error(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_current_status_error(Context, Resp) ->
     crossbar_util:response('error', <<"stat request had errors">>, 400
-                            ,kz_json:get_value(<<"Error-Reason">>, Resp)
-                            ,Context
-    ).
+                          ,kz_json:get_value(<<"Error-Reason">>, Resp)
+                          ,Context
+                          ).
 
 -spec format_current_status_stats(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_current_status_stats(Context, Resp) ->
     crossbar_util:response(kz_json:get_value(<<"Agents">>, Resp, kz_json:new()), Context).
 
 -spec fetch_all_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
-                                        cb_context:context().
+          cb_context:context().
 fetch_all_statuses(Context, AgentId, Status) ->
     Now = kz_time:now_s(),
     From = Now - min(?SECONDS_IN_DAY, ?ACDC_CLEANUP_WINDOW),
@@ -508,15 +508,15 @@ fetch_ranged_agent_stats(AgentId, Context, StartRange, Summarize) ->
     end.
 
 -spec fetch_ranged_agent_stats(kz_term:api_binary(), cb_context:context(), pos_integer(), pos_integer(), boolean(), boolean) ->
-                                      cb_context:context().
+          cb_context:context().
 fetch_ranged_agent_stats(AgentId, Context, From, To, 'true', Summarize) ->
     lager:debug("ranged query from ~b to ~b(~b) of current stats (now ~b)", [From, To, To-From, kz_time:current_tstamp()]),
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
             ,{<<"Agent-ID">>, case AgentId of
-                                        'all' -> cb_context:req_value(Context, <<"agent_id">>);
-                                        Else -> Else
+                                  'all' -> cb_context:req_value(Context, <<"agent_id">>);
+                                  Else -> Else
                               end}
             ,{<<"Start-Range">>, From}
             ,{<<"End-Range">>, To}
@@ -541,31 +541,31 @@ fetch_stats_from_amqp(Context, Req, Summarize) ->
     end.
 
 -spec format_error(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_error(Context, Resp) ->
     crossbar_util:response('error', <<"stat request had errors">>, 400
-                            ,kz_json:get_value(<<"Error-Reason">>, Resp)
-                            ,Context
-    ).
+                          ,kz_json:get_value(<<"Error-Reason">>, Resp)
+                          ,Context
+                          ).
 
 
 -spec format_stats_summary(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_stats_summary(Context, Resp) ->
     Stats = kz_json:get_value(<<"Handled">>, Resp, [])
-    ++ kz_json:get_value(<<"Abandoned">>, Resp, [])
-    ++ kz_json:get_value(<<"Waiting">>, Resp, [])
-    ++ kz_json:get_value(<<"Processed">>, Resp, [])
-    ++ kz_json:get_value(<<"Missed">>, Resp, []),
+        ++ kz_json:get_value(<<"Abandoned">>, Resp, [])
+        ++ kz_json:get_value(<<"Waiting">>, Resp, [])
+        ++ kz_json:get_value(<<"Processed">>, Resp, [])
+        ++ kz_json:get_value(<<"Missed">>, Resp, []),
     crossbar_util:response(
-            lists:foldl(fun format_stats_fold/2
-                     ,kz_json:new()
-                     ,Stats 
-            )
-            ,Context).    
+      lists:foldl(fun format_stats_fold/2
+                 ,kz_json:new()
+                 ,Stats
+                 )
+     ,Context).
 
 -spec format_stats(cb_context:context(), kz_json:object()) ->
-                          cb_context:context().
+          cb_context:context().
 format_stats(Context, Resp) ->
     Stats = kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))
         ++ kz_doc:public_fields(kz_json:get_value(<<"Abandoned">>, Resp, []))
@@ -575,7 +575,7 @@ format_stats(Context, Resp) ->
 
 
 -spec format_stats_fold(kz_json:object(), kz_json:object()) ->
-                               kz_json:object().
+          kz_json:object().
 format_stats_fold(Stat, Acc) ->
     QueueId = kz_json:get_value(<<"queue_id">>, Stat),
 
@@ -591,17 +591,17 @@ format_stats_fold(Stat, Acc) ->
             AnsweredData = maybe_add_answered(Stat, Acc),
             MissedData = maybe_add_missed(Stat, Acc),
             kz_json:set_values([{TotalsK, Totals + 1}
-                                ,{QTotalsK, QTotals + 1}]
-                                ++ AnsweredData
-                                ++ MissedData
-                               ,Acc
-                               )
+                               ,{QTotalsK, QTotals + 1}]
+                               ++ AnsweredData
+                               ++ MissedData
+                              ,Acc
+                              )
     end.
 
 -spec maybe_add_answered(kz_json:object(), kz_json:object()) ->
-                                [{kz_json:path(), non_neg_integer()}].
+          [{kz_json:path(), non_neg_integer()}].
 -spec maybe_add_answered(kz_json:object(), kz_json:object(), kz_term:api_binary()) ->
-                                [{kz_json:path(), non_neg_integer()}].
+          [{kz_json:path(), non_neg_integer()}].
 maybe_add_answered(Stat, Acc) ->
     maybe_add_answered(Stat, Acc, kz_json:get_value(<<"status">>, Stat)).
 maybe_add_answered(Stat, Acc, <<"handled">>) ->
@@ -613,7 +613,7 @@ maybe_add_answered(_, _, _S) ->
     [].
 
 -spec add_answered(kz_json:object(), kz_json:object()) ->
-                          [{kz_json:path(), non_neg_integer()},...].
+          [{kz_json:path(), non_neg_integer()},...].
 add_answered(Stat, Acc) ->
     AgentId = kz_json:get_value(<<"agent_id">>, Stat),
     QueueId = kz_json:get_value(<<"queue_id">>, Stat),
@@ -621,7 +621,7 @@ add_answered(Stat, Acc) ->
 
     AnsweredK = [AgentId, <<"answered_calls">>],
     QAnsweredK = [AgentId, <<"queues">>, QueueId, <<"answered_calls">>],
- 
+
     TalkTimeK = [AgentId, <<"talk_time">>],
     QTalkTimeK = [AgentId, <<"queues">>, QueueId, <<"talk_time">>],
 
@@ -638,9 +638,9 @@ add_answered(Stat, Acc) ->
     ].
 
 -spec maybe_add_missed(kz_json:object(), kz_json:object()) ->
-                                [{kz_json:path(), non_neg_integer()}].
+          [{kz_json:path(), non_neg_integer()}].
 -spec maybe_add_missed(kz_json:object(), kz_json:object(), kz_term:api_binary()) ->
-                                [{kz_json:path(), non_neg_integer()}].
+          [{kz_json:path(), non_neg_integer()}].
 maybe_add_missed(Stat, Acc) ->
     maybe_add_missed(Stat, Acc, kz_json:get_value(<<"status">>, Stat)).
 maybe_add_missed(Stat, Acc, <<"missed">>) ->
@@ -650,14 +650,14 @@ maybe_add_missed(_, _, _S) ->
     [].
 
 -spec add_missed(kz_json:object(), kz_json:object()) ->
-                          [{kz_json:path(), non_neg_integer()},...].
+          [{kz_json:path(), non_neg_integer()},...].
 add_missed(Stat, Acc) ->
     AgentId = kz_json:get_value(<<"agent_id">>, Stat),
     QueueId = kz_json:get_value(<<"queue_id">>, Stat),
 
     MissedK = [AgentId, <<"missed_calls">>],
     QMissedK = [AgentId, <<"queues">>, QueueId, <<"missed_calls">>],
- 
+
     Missed = kz_json:get_integer_value(MissedK, Acc, 0),
     QMissed = kz_json:get_integer_value(QMissedK, Acc, 0),
 
@@ -683,41 +683,41 @@ add_missed(Stat, Acc) ->
 %%         {'ok', Resp} -> format_stats_summary_response(Context, {Resp0, Resp})
 %%     end.
 
-%add_misses_to_resp(Data, Acc) ->
-%    case kz_json:recursive_to_proplist(kz_json:get_value(<<"Missed">>, Data, [])) of
-%        [] -> Acc;
-%        Misses ->
-%            lists:foldl(fun(Miss, AccJObj) ->
-%                                add_miss(Miss, AccJObj)
-%                        end
-%                       ,Acc
-%                       ,Misses
-%                       )
-%    end.
-%
-%-spec add_miss(list(), kz_json:object()) -> kz_json:object().
-%add_miss(Miss, Acc) ->
-%    AgentId = props:get_value(<<"agent_id">>, Miss),
-%    QueueId = props:get_value(<<"queue_id">>, Miss),
-%    MissesK = [AgentId, <<"missed_calls">>],
-%    QMissesK = [AgentId, <<"queues">>, QueueId, <<"missed_calls">>],
-%
-%    Misses = kz_json:get_integer_value(MissesK, Acc, 0),
-%    QMisses = kz_json:get_integer_value(QMissesK, Acc, 0),
-%
-%    TotalsK = [AgentId, <<"total_calls">>],
-%    QTotalsK = [AgentId, <<"queues">>, QueueId, <<"total_calls">>],
-%
-%    Totals = kz_json:get_integer_value(TotalsK, Acc, 0),
-%    QTotals = kz_json:get_integer_value(QTotalsK, Acc, 0),
-%
-%    kz_json:set_values([{MissesK, Misses + 1}
-%                       ,{QMissesK, QMisses + 1}
-%                       ,{TotalsK, Totals + 1}
-%                       ,{QTotalsK, QTotals + 1}
-%                       ]
-%                      ,Acc
-%                      ).
+%%add_misses_to_resp(Data, Acc) ->
+%%    case kz_json:recursive_to_proplist(kz_json:get_value(<<"Missed">>, Data, [])) of
+%%        [] -> Acc;
+%%        Misses ->
+%%            lists:foldl(fun(Miss, AccJObj) ->
+%%                                add_miss(Miss, AccJObj)
+%%                        end
+%%                       ,Acc
+%%                       ,Misses
+%%                       )
+%%    end.
+%%
+%%-spec add_miss(list(), kz_json:object()) -> kz_json:object().
+%%add_miss(Miss, Acc) ->
+%%    AgentId = props:get_value(<<"agent_id">>, Miss),
+%%    QueueId = props:get_value(<<"queue_id">>, Miss),
+%%    MissesK = [AgentId, <<"missed_calls">>],
+%%    QMissesK = [AgentId, <<"queues">>, QueueId, <<"missed_calls">>],
+%%
+%%    Misses = kz_json:get_integer_value(MissesK, Acc, 0),
+%%    QMisses = kz_json:get_integer_value(QMissesK, Acc, 0),
+%%
+%%    TotalsK = [AgentId, <<"total_calls">>],
+%%    QTotalsK = [AgentId, <<"queues">>, QueueId, <<"total_calls">>],
+%%
+%%    Totals = kz_json:get_integer_value(TotalsK, Acc, 0),
+%%    QTotals = kz_json:get_integer_value(QTotalsK, Acc, 0),
+%%
+%%    kz_json:set_values([{MissesK, Misses + 1}
+%%                       ,{QMissesK, QMisses + 1}
+%%                       ,{TotalsK, Totals + 1}
+%%                       ,{QTotalsK, QTotals + 1}
+%%                       ]
+%%                      ,Acc
+%%                      ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -737,7 +737,7 @@ summary(Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) ->
-                                    kz_json:objects().
+          kz_json:objects().
 normalize_view_results(JObj, Acc) ->
     [kz_json:set_value(<<"id">>
                       ,kz_doc:id(JObj)
@@ -759,58 +759,54 @@ validate_status_change(Context) ->
 
 -define(STATUS_CHANGES, [<<"login">>, <<"queue_login">>, <<"logout">>, <<"queue_logout">>, <<"pause">>, <<"resume">>, <<"end_wrapup">>]).
 -spec validate_status_change(cb_context:context(), kz_term:api_binary()) ->
-                                    cb_context:context().
+          cb_context:context().
 validate_status_change(Context, S) ->
     case lists:member(S, ?STATUS_CHANGES) of
         'true' -> validate_status_change_params(Context, S);
         'false' ->
             lager:debug("status ~s not valid", [S]),
-            cb_context:add_validation_error(
-              <<"status">>
+            cb_context:add_validation_error(<<"status">>
                                            ,<<"enum">>
                                            ,kz_json:from_list(
                                               [{<<"message">>, <<"value is not a valid status">>}
                                               ,{<<"cause">>, S}
                                               ])
                                            ,Context
-             )
+                                           )
     end.
 
 -spec check_for_status_error(cb_context:context(), kz_term:api_binary()) ->
-                                    cb_context:context().
+          cb_context:context().
 check_for_status_error(Context, S) ->
     case lists:member(S, ?STATUS_CHANGES) of
         'true' -> Context;
         'false' ->
             lager:debug("status ~s not found", [S]),
-            cb_context:add_validation_error(
-              <<"status">>
+            cb_context:add_validation_error(<<"status">>
                                            ,<<"enum">>
                                            ,kz_json:from_list(
                                               [{<<"message">>, <<"value is not a valid status">>}
                                               ,{<<"cause">>, S}
                                               ])
                                            ,Context
-             )
+                                           )
     end.
 
 -spec validate_status_change_params(cb_context:context(), kz_term:ne_binary()) ->
-                                           cb_context:context().
+          cb_context:context().
 validate_status_change_params(Context, <<"pause">>) ->
     Value = cb_context:req_value(Context, <<"timeout">>),
     try kz_term:to_integer(Value) of
         N when N >= 0 -> cb_context:set_resp_status(Context, 'success');
         N ->
             lager:debug("bad int for pause: ~p", [N]),
-            cb_context:add_validation_error(
-              <<"timeout">>
+            cb_context:add_validation_error(<<"timeout">>
                                            ,<<"minimum">>
-                                           ,kz_json:from_list(
-                                              [{<<"message">>, <<"value must be at least greater than or equal to 0">>}
-                                              ,{<<"cause">>, N}
-                                              ])
+                                           ,kz_json:from_list([{<<"message">>, <<"value must be at least greater than or equal to 0">>}
+                                                              ,{<<"cause">>, N}
+                                                              ])
                                            ,Context
-             )
+                                           )
     catch
         _E:_R -> cb_context:set_resp_status(Context, 'success')
     end;

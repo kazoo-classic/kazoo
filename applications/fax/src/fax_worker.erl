@@ -55,7 +55,7 @@
 
 -define(ORIGINATE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 2).
 -define(NEGOTIATE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 2).
--define(PAGE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 5).
+-define(PAGE_TIMEOUT, kapps_config:get_integer(?CONFIG_CAT, <<"page_timeout_s">>, 480) * ?MILLISECONDS_IN_SECOND).
 
 -define(BINDINGS(CallId), [{'self', []}
                           ,{'fax', [{'restrict_to', ['query_status']}]}
@@ -356,12 +356,12 @@ handle_cast('move_doc', #state{account_id=AccountId
                               ,job_id=JobId
                               ,job=JObj
                               ,move_retry=?MAX_MOVE_RETRY
-                              } = State) ->
+                              }=State) ->
     Props = kz_json:to_proplist(JObj),
     kz_notify:detailed_alert(?MAX_MOVE_NOTIFY_MSG, [JobId, AccountId], Props),
     gen_listener:cast(self(), 'notify'),
     {'noreply', State};
-handle_cast('move_doc', #state{job=JObj, move_retry=Tries} = State) ->
+handle_cast('move_doc', #state{job=JObj, move_retry=Tries}=State) ->
     case maybe_move_doc(JObj, kzd_fax:job_status(JObj)) of
         {'ok', Doc} ->
             gen_listener:cast(self(), 'notify'),
@@ -372,7 +372,7 @@ handle_cast('move_doc', #state{job=JObj, move_retry=Tries} = State) ->
             gen_listener:cast(self(), 'move_doc'),
             {'noreply', State#state{move_retry=Tries + 1}}
     end;
-handle_cast('notify', #state{job=JObj, resp=Resp} = State) ->
+handle_cast('notify', #state{job=JObj, resp=Resp}=State) ->
     maybe_notify(JObj, Resp, kzd_fax:job_status(JObj)),
     {'stop', 'normal', State};
 handle_cast(_Msg, State) ->
@@ -881,13 +881,10 @@ send_fax(JobId, JObj, Q, ToDID) ->
     lager:debug("sending fax originate request ~s with call-id ~s", [JobId, CallId]),
     kapi_offnet_resource:publish_req(Request).
 
-
-
+%% search up the carrier hunt account tree (if any) until we hit one that doesn't have a hunt parent---and use that one:
 -spec get_hunt_account_id(kz_term:ne_binary()) -> kz_term:api_binary().
 get_hunt_account_id(AccountId) ->
-    {ok, HuntFlow, 'true'} = cf_flow:lookup(<<"no_match">>, AccountId),
-    HuntAccountId = kz_json:get_ne_value([<<"flow">>, <<"data">>, <<"hunt_account_id">>], HuntFlow, 'undefined'),
-    get_hunt_account_id(AccountId, HuntAccountId).
+    get_hunt_account_id('undefined', AccountId).
 
 -spec get_hunt_account_id(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:api_binary().
 get_hunt_account_id(AccountId, 'undefined') ->
@@ -895,9 +892,36 @@ get_hunt_account_id(AccountId, 'undefined') ->
 get_hunt_account_id(AccountId, AccountId) ->
     AccountId;
 get_hunt_account_id(_AccountId, HuntAccountId) ->
-    {ok, HuntFlow, 'true'} = cf_flow:lookup(<<"no_match">>, HuntAccountId),
-    NextHuntAccountId = kz_json:get_ne_value([<<"flow">>, <<"data">>, <<"hunt_account_id">>], HuntFlow, 'undefined'),
-    get_hunt_account_id(HuntAccountId, NextHuntAccountId).
+    HuntFlow = get_hunt_flow(HuntAccountId),
+    LocalResources = kz_json:is_true([<<"data">>, <<"use_local_resources">>], HuntFlow, 'true'),
+    case kz_json:get_value(<<"module">>, HuntFlow) of
+        <<"offnet">> ->
+            'undefined'; %% hunted account uses global carriers
+        <<"resources">> when LocalResources ->
+            NextHuntAccountId = kz_json:get_ne_binary_value([<<"data">>, <<"hunt_account_id">>], HuntFlow),
+            get_hunt_account_id(HuntAccountId, NextHuntAccountId);
+        <<"resources">> ->
+            'undefined'; %% use_local_resources is false, so use global
+        _ ->
+            HuntAccountId %% if no_match callflow is nonexistent or malformed, use local resources
+    end.
+
+%% get the flow in the no_match callflow that actually contains the resource or offnet module:
+-spec get_hunt_flow(kz_term:api_binary() | kz_json:object()) -> kz_json:object().
+get_hunt_flow(<<>>) -> kz_json:new();
+get_hunt_flow('undefined') -> kz_json:new();
+get_hunt_flow(AccountId) when is_binary(AccountId) ->
+    case cf_flow:lookup(<<"no_match">>, AccountId) of
+        {ok, Callflow, 'true'} -> kz_json:get_ne_json_value(<<"flow">>, Callflow);
+        _ -> kz_json:new()
+    end;
+get_hunt_flow(Flow) ->
+    case kz_json:get_ne_binary_value(<<"module">>, Flow) of
+        <<"offnet">> -> Flow;
+        <<"resources">> -> Flow;
+        'undefined' -> kz_json:new();
+        _ -> get_hunt_flow(kz_json:get_ne_json_value([<<"children">>, <<"_">>], Flow))
+    end.
 
 -spec resource_ccvs(kz_term:ne_binary()) -> kz_json:object().
 resource_ccvs(JobId) ->

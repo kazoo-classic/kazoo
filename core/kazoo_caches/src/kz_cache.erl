@@ -65,7 +65,7 @@ stop_local(Pid) when is_pid(Pid) ->
 store_local(Srv, K, V) -> store_local(Srv, K, V, []).
 
 -spec store_local(kz_types:server_ref(), any(), any(), store_options()) -> 'ok' | 'error'.
-store_local(Srv, K, V, Props)  ->
+store_local(Srv, K, V, Props) ->
     kz_cache_ets:store(Srv, K, V, Props).
 
 -spec store_local_async(kz_typs:server_ref(), any(), any()) -> 'ok'.

@@ -81,9 +81,12 @@
 -define(FEATURE_RENAME_CARRIER, <<"carrier_name">>).
 -define(FEATURE_RINGBACK, <<"ringback">>).
 -define(FEATURE_SMS, <<"sms">>).
+-define(FEATURE_MMS, <<"mms">>).
 -define(FEATURE_ATTRIBUTES, <<"attributes">>).
 
 -define(PROVIDER_ATTRIBUTES, <<"knm_", (?FEATURE_ATTRIBUTES)/binary>>).
+-define(PROVIDER_SMS, <<"knm_", (?FEATURE_SMS)/binary>>).
+-define(PROVIDER_MMS, <<"knm_", (?FEATURE_MMS)/binary>>).
 -define(PROVIDER_RENAME_CARRIER, <<"knm_rename_carrier">>).
 -define(PROVIDER_FORCE_OUTBOUND, <<"knm_", (?FEATURE_FORCE_OUTBOUND)/binary>>).
 
@@ -103,6 +106,8 @@
                                   ,?FEATURE_CNAM_OUTBOUND
                                   ,?FEATURE_E911
                                   ,?FEATURE_PORT
+                                  ,?FEATURE_SMS
+                                  ,?FEATURE_MMS
                                   ]).
 
 -define(ADMIN_ONLY_FEATURES, [?FEATURE_RENAME_CARRIER
@@ -121,6 +126,8 @@
                             ,?FEATURE_PREPEND
                             ,?FEATURE_RENAME_CARRIER
                             ,?FEATURE_RINGBACK
+                            ,?FEATURE_SMS
+                            ,?FEATURE_MMS
                             ]).
 
 -define(CNAM_DISPLAY_NAME, <<"display_name">>).
@@ -150,6 +157,9 @@
 
 -define(FAILOVER_E164, <<"e164">>).
 -define(FAILOVER_SIP, <<"sip">>).
+
+-define(FEATURE_ACTIVATION, <<"activation">>).
+-define(FEATURE_ACTIVATION_NOTIFY_TO, <<"activation_notify_to">>).
 
 -define(KNM_NUMBER_MANAGER_HRL, 'true').
 -endif.

@@ -14,11 +14,11 @@
 -include_lib("../blackhole/src/blackhole.hrl").
 
 -define(BINDING(),
-       [
-        <<"acdc_queue.doc_created">>
-       ,<<"acdc_queue.doc_edited">>
-       ,<<"acdc_queue.doc_deleted">>
-       ]).
+        [
+         <<"acdc_queue.doc_created">>
+        ,<<"acdc_queue.doc_edited">>
+        ,<<"acdc_queue.doc_deleted">>
+        ]).
 
 -spec init() -> any().
 init() ->
@@ -35,8 +35,8 @@ init_bindings() ->
 
 -spec validate(bh_context:context(), map()) -> bh_context:context().
 validate(Context, #{keys := [Action]
-                   }) when Action =:= <<"doc_created">> 
-                           ; Action =:= <<"doc_edited">> 
+                   }) when Action =:= <<"doc_created">>
+                           ; Action =:= <<"doc_edited">>
                            ; Action =:= <<"doc_deleted">> ->
     Context;
 validate(Context, #{keys := Keys}) ->

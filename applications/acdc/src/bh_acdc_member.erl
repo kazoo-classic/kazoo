@@ -14,10 +14,10 @@
 -include_lib("../blackhole/src/blackhole.hrl").
 
 -define(BINDING(),
-       [
-        <<"acdc.member.call.*.*">>
-       ,<<"acdc.member.call_result.#">>
-    ]).
+        [
+         <<"acdc.member.call.*.*">>
+        ,<<"acdc.member.call_result.#">>
+        ]).
 
 -spec init() -> any().
 init() ->

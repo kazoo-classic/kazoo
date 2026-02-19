@@ -118,40 +118,40 @@ log_current_agent(QueueSup) ->
     QueueM = acdc_queue_sup:manager(QueueSup),
     {_AccountId, QueueId, Strategy} = acdc_queue_manager:config(QueueM),
     io:format(" ~35s | ~5s~s~n~n", [QueueId
-                              ,Strategy
-                              ,agents(Strategy, QueueM)
-                              ]).
+                                   ,Strategy
+                                   ,agents(Strategy, QueueM)
+                                   ]).
 
 agents(S, QueueM) when S =:= 'rr' orelse S =:= 'all' ->
-    lists:foldr( fun({P, Agents}, Acc) ->
-            <<" | ", ((P * -1) + 16#30), " | ", (kz_binary:join(Agents, io_lib:format("~n~51s", [" "])))/binary, (list_to_binary(io_lib:format("~n~44s", [" "])))/binary, Acc/binary>> 
-        end, 
-        <<>>, 
-        acdc_queue_manager:agents(QueueM));
+    lists:foldr(fun({P, Agents}, Acc) ->
+                        <<" | ", ((P * -1) + 16#30), " | ", (kz_binary:join(Agents, io_lib:format("~n~51s", [" "])))/binary, (list_to_binary(io_lib:format("~n~44s", [" "])))/binary, Acc/binary>>
+                end,
+                <<>>,
+                acdc_queue_manager:agents(QueueM));
 agents(S, QueueM) when S =:= 'sbrr' ->
-    lists:foldr( fun({P, Agents}, Acc) ->
-            <<" | ", ((P * -1) + 16#30), " | ", (agents_with_skills(Agents, QueueM))/binary, (list_to_binary(io_lib:format("~n~44s", [" "])))/binary, Acc/binary>> 
-        end, 
-        <<>>, 
-        acdc_queue_manager:agents(QueueM)).
+    lists:foldr(fun({P, Agents}, Acc) ->
+                        <<" | ", ((P * -1) + 16#30), " | ", (agents_with_skills(Agents, QueueM))/binary, (list_to_binary(io_lib:format("~n~44s", [" "])))/binary, Acc/binary>>
+                end,
+                <<>>,
+                acdc_queue_manager:agents(QueueM)).
 
 agents_with_skills(Agents, QueueM) ->
     SkillMap = acdc_queue_manager:skill_map(QueueM),
 
-    lists:foldl(fun(Agent, Acc) -> 
-            <<Agent/binary, " | ", (agent_skills(Agent, SkillMap))/binary, (list_to_binary(io_lib:format("~n~51s", [" "])))/binary, Acc/binary>>
-        end, 
-        <<>>,
-         Agents).
+    lists:foldl(fun(Agent, Acc) ->
+                        <<Agent/binary, " | ", (agent_skills(Agent, SkillMap))/binary, (list_to_binary(io_lib:format("~n~51s", [" "])))/binary, Acc/binary>>
+                end,
+                <<>>,
+                Agents).
 
 agent_skills(Agent, SkillMap) ->
     kz_binary:join(
-        lists:usort(
-            lists:flatten(
-                maps:keys(maps:filter(fun(_, V) -> sets:is_element(Agent, V) end, SkillMap))
-            )
-        )
-    , $,).
+      lists:usort(
+        lists:flatten(
+          maps:keys(maps:filter(fun(_, V) -> sets:is_element(Agent, V) end, SkillMap))
+         )
+       )
+     , $,).
 
 -spec current_calls(kz_term:ne_binary()) -> 'ok'.
 current_calls(AccountId) ->
@@ -176,9 +176,9 @@ current_calls(AccountId, Props) ->
 get_and_show(AccountId, QueueId, Req) ->
     kz_util:put_callid(<<"acdc_maint.", AccountId/binary, ".", QueueId/binary>>),
     case kz_amqp_worker:call(Req
-                                    ,fun kapi_acdc_stats:publish_current_calls_req/1
-                                    ,fun kapi_acdc_stats:current_calls_resp_v/1
-                                    )
+                            ,fun kapi_acdc_stats:publish_current_calls_req/1
+                            ,fun kapi_acdc_stats:current_calls_resp_v/1
+                            )
     of
         {_, []} ->
             io:format("no call stats returned for account ~s (queue ~s)~n", [AccountId, QueueId]);
@@ -207,24 +207,24 @@ show_stats([S|Ss]) ->
     ?PRINT("~s", [lists:foldr(fun(F, Acc) -> print_value(F) ++ Acc end, [], Vs)]),
     show_stats(Ss).
 
-print_value({_, []})  ->
+print_value({_, []}) ->
     io_lib:format(" ~20s |", [" "]);
-print_value({<<"entered_timestamp">>, V})  ->
+print_value({<<"entered_timestamp">>, V}) ->
     io_lib:format(" ~20s |", [kz_time:pretty_print_datetime(V)]);
-print_value({<<"queue_id">>, V})  ->
+print_value({<<"queue_id">>, V}) ->
     io_lib:format(" ~32s |", [V]);
-print_value({<<"call_id">>, V})  ->
+print_value({<<"call_id">>, V}) ->
     io_lib:format(" ~32s |", [V]);
 print_value({_, V}) when is_binary(V) ->
     io_lib:format(" ~20s |", [V]);
 print_value({_, V}) ->
     io_lib:format(" ~20.B |", [V]).
 
-print_field(<<"agent_id">> = V)  ->
+print_field(<<"agent_id">> = V) ->
     io_lib:format(" ~32s |", [V]);
-print_field(<<"queue_id">> = V)  ->
+print_field(<<"queue_id">> = V) ->
     io_lib:format(" ~32s |", [V]);
-print_field(<<"call_id">> = V)  ->
+print_field(<<"call_id">> = V) ->
     io_lib:format(" ~32s |", [V]);
 print_field(Else) ->
     io_lib:format(" ~20s |", [Else]).

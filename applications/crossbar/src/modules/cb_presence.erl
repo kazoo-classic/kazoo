@@ -338,13 +338,13 @@ post(Context, Extension) ->
     ReqData = cb_context:req_data(Context),
     Action = kz_json:get_value(<<"action">>, ReqData),
     case Action of
-    <<"reset">> -> 
-        publish_presence_reset(Context, Extension),
-        crossbar_util:response_202(<<"reset command sent for extension ", Extension/binary>>, Context);
-    <<"set">> ->
-        State = kz_json:get_value(<<"state">>, ReqData),
-        publish_presence_update(Context, Extension, State),
-        crossbar_util:response_202(<<State/binary ," command sent for extension ", Extension/binary>>, Context)
+        <<"reset">> ->
+            publish_presence_reset(Context, Extension),
+            crossbar_util:response_202(<<"reset command sent for extension ", Extension/binary>>, Context);
+        <<"set">> ->
+            State = kz_json:get_value(<<"state">>, ReqData),
+            publish_presence_update(Context, Extension, State),
+            crossbar_util:response_202(<<State/binary ," command sent for extension ", Extension/binary>>, Context)
     end.
 
 -spec post_things(cb_context:context(), kz_json:object() | kz_json:objects(), kz_term:ne_binary()) ->

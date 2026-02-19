@@ -131,19 +131,20 @@ get_endpoints(Call, ?NE_BINARY = AgentId) ->
                                          ),
     case ReqResp of
         {'error', _} -> [];
-        {_, JObjs} -> 
+        {_, JObjs} ->
             AuthIDs =
+                [
+                 kz_json:get_value(<<"Authorizing-ID">>, F) ||
+                    J <- JObjs,
+                    <<"reg_query_resp">> == kz_json:get_value(<<"Event-Name">>, J),
+                    F <- kz_json:get_value(<<"Fields">>, J)
+                ],
             [
-                kz_json:get_value(<<"Authorizing-ID">>, F) ||
-                J <- JObjs,
-                <<"reg_query_resp">> == kz_json:get_value(<<"Event-Name">>, J),
-                F <- kz_json:get_value(<<"Fields">>, J)
-            ],
-            [
-                EP ||
+             EP ||
                 EP <- EPs,
-                lists:member(kz_json:get_value(<<"Endpoint-ID">>, EP),
-                      AuthIDs)
+                lists:member(kz_json:get_value(<<"Endpoint-ID">>, EP)
+                            ,AuthIDs
+                            )
             ]
     end.
 

@@ -90,7 +90,7 @@ init_acct_queues(AccountDb, AccountId) ->
 init_acct_agents(AccountDb, AccountId) ->
     init_agents(AccountId
                ,kz_datamgr:get_results(AccountDb, ?CB_AGENTS_LIST
-                    ,[{'reduce', 'false'}])
+                                      ,[{'reduce', 'false'}])
                ).
 
 -spec init_queues(kz_term:ne_binary(), kazoo_data:get_results_return()) -> any().

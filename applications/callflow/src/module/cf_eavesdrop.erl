@@ -159,11 +159,11 @@ find_sip_endpoints(Data, Call) ->
 -spec find_sip_endpoints(map(), kapps_call:call(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 find_sip_endpoints(#{<<"user_id">> := UserId} = Data, Call, Acc) ->
     SipUsers = sip_users_from_endpoints(
-                  cf_util:find_user_endpoints([UserId], [], Call), Call),
+                 cf_util:find_user_endpoints([UserId], [], Call), Call),
     find_sip_endpoints(maps:remove(<<"user_id">>, Data), Call, lists:append(SipUsers, Acc));
 find_sip_endpoints(#{<<"user_ids">> := UserIds} = Data, Call, Acc) ->
     SipUsers = sip_users_from_endpoints(
-                  cf_util:find_user_endpoints(UserIds, [], Call), Call),
+                 cf_util:find_user_endpoints(UserIds, [], Call), Call),
     find_sip_endpoints(maps:remove(<<"user_ids">>, Data), Call, lists:append(SipUsers, Acc));
 find_sip_endpoints(#{<<"device_id">> := DeviceId} = Data, Call, Acc) ->
     SipUsers = sip_users_from_endpoints([DeviceId], Call),

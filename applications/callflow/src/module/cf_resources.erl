@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2022, 2600Hz
+%%% @copyright (C) 2011-2026, 2600Hz
 %%% @doc Callflow resource.
 %%%
 %%% <h4>Data options:</h4>
@@ -55,6 +55,7 @@
 %%%
 %%% @author Karl Anderson
 %%% @author Sponsored by Raffel Internet B.V. Implemented by Voyager Internet Ltd.
+%%% @author Ruel Tmeizeh (www.ruhnet.co)
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(cf_resources).
@@ -279,6 +280,23 @@ get_caller_id(Data, Call) ->
     Type = kz_json:get_value(<<"caller_id_type">>, Data, <<"external">>),
     kz_attributes:caller_id(Type, Call).
 
+%%------------------------------------------------------------------------------
+%% @doc get_asserted_identity/2 will check several things and return a tuple
+%% with asserted number/name/realm (any of which may be undefined).
+%% If the system_config/callflow.resources.default_asserted_identity_privacy
+%% is true and number privacy is enabled (either permanently or from a user
+%% dialing *67) then asserted identity will be used for CLI. (This is required
+%% for anonymous calls in Australia and potentially elsewhere.) If this call is
+%% not private, then the caller_id object will be checked for the passthrough
+%% setting, and if it's enabled (AND allowed from system_config), the asserted
+%% identity will be set from the CLI that the endpoint originally sent.
+%% Otherwise, system_config/callflow.resources.default_asserted_identity will
+%% be checked to determine whether or not to set asserted identity from the
+%% external CLI.
+%% If none of these conditions are matched, asserted identity will be undefined,
+%% meaning that no P-Asserted-Identity header will be used on this call.
+%% @end
+%%------------------------------------------------------------------------------
 -spec get_asserted_identity(kz_json:object(), kapps_call:call()) ->
           {kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()}.
 get_asserted_identity(_Data, Call) ->
@@ -286,9 +304,32 @@ get_asserted_identity(_Data, Call) ->
         {'error', _E} ->
             {'undefined', 'undefined', 'undefined'};
         {'ok', Endpoint} ->
-            CallerId = kzd_devices:caller_id(Endpoint),
-            {DefaultNumber, DefaultName, DefaultRealm} =
-                maybe_default_asserted_identity(Endpoint, Call),
+            PrivacyFlags = get_privacy_flags(Call),
+            AssertedFun =
+                case kapps_config:get_is_true(?RES_CONFIG_CAT, <<"default_asserted_identity_privacy">>, 'false')
+                    andalso props:get_is_true(?KEY_PRIVACY_HIDE_NUMBER, PrivacyFlags, 'false')
+                of
+                    'true' -> fun fallback_asserted_identity/2; %% returns asserted identity
+                    'false' -> fun maybe_default_asserted_identity/2 %% might return undefined
+                end,
+            maybe_asserted_identity(Endpoint, Call, AssertedFun) %% might return undefined
+    end.
+
+-spec maybe_asserted_identity(kz_endpoint:endpoint(), kapps_call:call(), fun()) ->
+          {kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()}.
+maybe_asserted_identity(Endpoint, Call, AssertedFun) ->
+    CallerId = kzd_devices:caller_id(Endpoint),
+    case kzd_caller_id:asserted_passthrough(CallerId, 'false')
+        andalso kapps_config:get_is_true(<<"kazoo_endpoint">>, <<"allow_passthrough_caller_id">>, 'true')
+    of
+        'true' ->
+            CCVs = kapps_call:custom_channel_vars(Call),
+            {kz_json:get_binary_value(<<"Original-Caller-ID-Number">>, CCVs)
+            ,kz_json:get_binary_value(<<"Original-Caller-ID-Name">>, CCVs)
+            ,kapps_call:account_realm(Call)
+            };
+        'false' ->
+            {DefaultNumber, DefaultName, DefaultRealm} = AssertedFun(Endpoint, Call),
             {kzd_caller_id:asserted_number(CallerId, DefaultNumber)
             ,kzd_caller_id:asserted_name(CallerId, DefaultName)
             ,kzd_caller_id:asserted_realm(CallerId, DefaultRealm)
@@ -298,15 +339,20 @@ get_asserted_identity(_Data, Call) ->
 -spec maybe_default_asserted_identity(kz_endpoint:endpoint(), kapps_call:call()) ->
           {kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()}.
 maybe_default_asserted_identity(Endpoint, Call) ->
-    CallerId = kzd_devices:caller_id(Endpoint),
     case kapps_config:get_is_true(?RES_CONFIG_CAT, <<"default_asserted_identity">>, 'false') of
         'false' -> {'undefined', 'undefined', 'undefined'};
-        'true' ->
-            {kzd_caller_id:external_number(CallerId)
-            ,get_asserted_default_name(CallerId, Call)
-            ,kapps_call:account_realm(Call)
-            }
+        'true' -> fallback_asserted_identity(Endpoint, Call)
     end.
+
+%% gets number/name/realm from caller_id.external and account
+-spec fallback_asserted_identity(kz_endpoint:endpoint(), kapps_call:call()) ->
+          {kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()}.
+fallback_asserted_identity(Endpoint, Call) ->
+    CallerId = kzd_devices:caller_id(Endpoint),
+    {kzd_caller_id:external_number(CallerId)
+    ,get_asserted_default_name(CallerId, Call)
+    ,kapps_call:account_realm(Call)
+    }.
 
 -spec get_asserted_default_name(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 get_asserted_default_name(CallerId, Call) ->
@@ -428,8 +474,13 @@ get_ignore_early_media(Data) ->
 -spec get_t38_enabled(kapps_call:call()) -> kz_term:api_boolean().
 get_t38_enabled(Call) ->
     case kz_endpoint:get(Call) of
-        {'ok', JObj} -> cf_util:determine_t38(Call, JObj);
-        {'error', _} -> 'undefined'
+        {'ok', JObj} ->
+            cf_util:determine_t38(Call, JObj);
+        {'error', _} ->
+            case cf_util:determine_t38(Call) of
+                'true' -> 'true';
+                'false' -> 'undefined'
+            end
     end.
 
 -spec get_flags(kz_json:object(), kapps_call:call()) -> kz_term:api_binaries().
@@ -437,6 +488,7 @@ get_flags(Data, Call) ->
     Flags = kz_attributes:get_flags(?APP_NAME, Call),
     Routines = [fun get_flow_flags/3
                ,fun get_flow_dynamic_flags/3
+               ,fun maybe_get_fax_flag/3
                ],
     lists:foldl(fun(F, A) -> F(Data, Call, A) end, Flags, Routines).
 
@@ -454,6 +506,14 @@ get_flow_dynamic_flags(Data, Call, Flags) ->
     case kz_json:get_list_value(<<"dynamic_flags">>, Data) of
         'undefined' -> Flags;
         DynamicFlags -> kz_attributes:process_dynamic_flags(DynamicFlags, Flags, Call)
+    end.
+
+-spec maybe_get_fax_flag(kz_json:object(), kapps_call:call(), kz_term:ne_binaries()) ->
+          kz_term:ne_binaries().
+maybe_get_fax_flag(_Data, Call, Flags) ->
+    case cf_util:determine_t38(Call) of
+        'true' -> lists:usort([<<"fax">> | Flags]);
+        'false' -> Flags
     end.
 
 -spec get_inception(kapps_call:call()) -> kz_term:api_binary().

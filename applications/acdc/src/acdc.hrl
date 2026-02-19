@@ -69,7 +69,7 @@
                                            )).
 
 -define(CALL_INFO_FIELDS, kapps_config:get(?CONFIG_CAT, <<"call_info_fields">>
-                                           ,[<<"call_id">>, <<"queue_id">>, <<"entered_timestamp">>, <<"entered_position">>, <<"caller_id_name">>, <<"caller_id_number">>, <<"required_skills">>]
-                                           )).
+                                          ,[<<"call_id">>, <<"queue_id">>, <<"entered_timestamp">>, <<"entered_position">>, <<"caller_id_name">>, <<"caller_id_number">>, <<"required_skills">>]
+                                          )).
 -define(ACDC_HRL, 'true').
 -endif.

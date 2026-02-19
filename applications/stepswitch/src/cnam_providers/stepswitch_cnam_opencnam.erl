@@ -22,7 +22,7 @@
        ,kapps_config:get_string(?CNAM_CONFIG_CAT, <<"http_content_type_header">>, ?DEFAULT_CONTENT_TYPE_HDR)
        ).
 -define(GET_CONFIG_STRING(AccountId, Param, Default)
-        ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, Param, Default))
+       ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, Param, Default))
        ).
 
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
@@ -101,7 +101,7 @@ maybe_enable_ssl("https://" ++ _, Props) ->
 maybe_enable_ssl(_Url, Props) -> Props.
 
 -spec maybe_enable_auth([{nonempty_string(), nonempty_string()}], kz_term:ne_binary()) ->
-                               [{nonempty_string(), nonempty_string()}].
+          [{nonempty_string(), nonempty_string()}].
 maybe_enable_auth(Props, AccountId) ->
     Username = get_config_param(AccountId, <<"http_basic_auth_username">>, <<>>),
     Password = get_config_param(AccountId, <<"http_basic_auth_password">>, <<>>),
@@ -113,13 +113,13 @@ maybe_enable_auth(Props, AccountId) ->
     end.
 
 -spec get_config_param(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                            kz_term:ne_binary().
-get_config_param(AccountId, Param, Default) -> 
+          kz_term:ne_binary().
+get_config_param(AccountId, Param, Default) ->
     ResellerId = kz_services_reseller:get_id(AccountId),
-    Value = ?GET_CONFIG_STRING(AccountId, 
-                               Param, 
+    Value = ?GET_CONFIG_STRING(AccountId,
+                               Param,
                                ?GET_CONFIG_STRING(ResellerId, Param, Default)),
-    
+
     Deny = kzd_accounts:deny_system_cnam_credentials(ResellerId),
     case Value of
         [] when Deny =:= 'true' -> Default;

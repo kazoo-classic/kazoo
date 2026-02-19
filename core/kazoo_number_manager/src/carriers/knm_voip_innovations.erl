@@ -17,7 +17,7 @@
 -export([check_numbers/1]).
 
 -ifdef(TEST).
--export([soap_request/2]).  %% Only to pass compilation
+-export([soap_request/2]). %% Only to pass compilation
 -endif.
 
 -include("knm.hrl").
@@ -57,10 +57,10 @@
        ,kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"enable_provisioning">>, 'true')
        ).
 
-% -define(VI_LOGIN, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, <<>>)).
+%% -define(VI_LOGIN, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, <<>>)).
 -define(LOGIN(Props)
-        ,?VI_LOGIN(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
-        ).
+       ,?VI_LOGIN(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
+       ).
 -define(DEFAULT_VI_LOGIN, "").
 
 -define(VI_LOGIN(AccountId, ResellerId)
@@ -77,8 +77,8 @@
 
 %% -define(VI_PASSWORD, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"password">>, <<>>)).
 -define(PASSWORD(Props)
-        , ?VI_PASSWORD(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
-        ).
+       ,?VI_PASSWORD(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
+       ).
 -define(DEFAULT_VI_PASSWORD, "").
 
 -define(VI_PASSWORD(AccountId, ResellerId)
@@ -93,8 +93,8 @@
 
 %%-define(VI_ENDPOINT_GROUP, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, <<>>)).
 -define(ENDPOINT_GROUP(Props)
-        , ?VI_ENDPOINT_GROUP(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
-        ).
+       ,?VI_ENDPOINT_GROUP(knm_carriers:account_id(Props), knm_carriers:reseller_id(Props))
+       ).
 -define(DEFAULT_VI_ENDPOINT_GROUP, <<>>).
 
 -define(VI_ENDPOINT_GROUP(AccountId, ResellerId)
@@ -148,7 +148,7 @@ is_number_billable(_Number) -> 'true'.
 %% @end
 %%------------------------------------------------------------------------------
 -spec check_numbers(kz_term:ne_binaries()) -> {ok, kz_json:object()} |
-                                              {error, any()}.
+          {error, any()}.
 check_numbers(_Numbers) -> {error, not_implemented}.
 
 
@@ -157,8 +157,8 @@ check_numbers(_Numbers) -> {error, not_implemented}.
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_search:options()) ->
-                          {'ok', list()} |
-                          {'error', any()}.
+          {'ok', list()} |
+          {'error', any()}.
 find_numbers(<<"+", Rest/binary>>, Quantity, Options) ->
     find_numbers(Rest, Quantity, Options);
 find_numbers(<<"1", Rest/binary>>, Quantity, Options) ->
@@ -207,7 +207,7 @@ acquire_number(Number, Options) ->
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) ->
     disconnect_number(Number, []).
-    
+
 -spec disconnect_number(knm_number:knm_number(), list()) -> knm_number:knm_number().
 disconnect_number(Number, Options) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
@@ -243,8 +243,8 @@ should_lookup_cnam() -> 'true'.
     Else.
 
 -spec to_numbers(to_json_ret(), kz_term:ne_binary()) ->
-                        {'ok', [tuple()]} |
-                        {'error', any()}.
+          {'ok', [tuple()]} |
+          {'error', any()}.
 to_numbers({'error',_R}=Error, _) ->
     Error;
 to_numbers({'ok',JObjs}, QID) ->
@@ -255,7 +255,7 @@ to_numbers({'ok',JObjs}, QID) ->
     {'ok', Numbers}.
 
 -spec maybe_return(to_json_ret(), knm_number:knm_number()) ->
-                          knm_number:knm_number().
+          knm_number:knm_number().
 maybe_return({'error', Reason}, N) ->
     knm_errors:by_carrier(?MODULE, Reason, N);
 maybe_return({'ok', JObj}, N) ->

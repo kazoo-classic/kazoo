@@ -498,7 +498,7 @@ open_channel(#kz_amqp_connection{connection=Pid}) ->
             lager:warning("amqp connection ~p is no longer valid...", [P]),
             {'error', 'not_connected'};
         _Exc:_Err ->
-            lager:warning("amqp exception opening channel : ~p , ~p", [_Exc, _Err]),
+            lager:warning("amqp exception opening channel: ~p, ~p", [_Exc, _Err]),
             {'error', 'not_connected'}
     end.
 

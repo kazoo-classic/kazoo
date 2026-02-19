@@ -54,8 +54,11 @@ moh(MOH, Call) ->
     {'ok', AccountDoc} = kzd_accounts:fetch(AccountID),
     AccountMOH = kzd_accounts:music_on_hold_media_id(AccountDoc),
 
-    {'ok', UserDoc} = kzd_users:fetch(AccountID, kapps_call:owner_id(Call)),
-    AccountOrUserMOH = kzd_users:music_on_hold_media_id(UserDoc, AccountMOH),
+    AccountOrUserMOH =
+        case kzd_users:fetch(AccountID, kapps_call:owner_id(Call)) of
+            {'ok', UserDoc} -> kzd_users:music_on_hold_media_id(UserDoc, AccountMOH);
+            _ -> AccountMOH
+        end,
 
     DefaultMOH = case AccountOrUserMOH of
                      'undefined' -> ?SILENCE;

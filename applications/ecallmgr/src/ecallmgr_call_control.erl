@@ -323,11 +323,11 @@ handle_info(?LOOPBACK_BOWOUT_MSG(Node, Props), #state{call_id=ResigningUUID
             lager:debug("ignoring bowout for ~s", [_UUID]),
             {'noreply', State}
     end;
-handle_info({'usurp_control', CallId, FetchId, _JObj}, #state{call_id = CallId
-                                                             ,fetch_id = FetchId
-                                                             } = State) ->
+handle_info({'usurp_control', CallId, FetchId, _JObj}, #state{call_id=CallId
+                                                             ,fetch_id=FetchId
+                                                             }=State) ->
     {'noreply', State};
-handle_info({'usurp_control', CallId, _FetchId, _JObj}, #state{call_id = CallId} = State) ->
+handle_info({'usurp_control', CallId, _FetchId, _JObj}, #state{call_id=CallId}=State) ->
     lager:debug("the call has been usurped by an external process"),
     {'stop', 'normal', State};
 handle_info({'usurp_control', _CallId, _FetchId, _JObj}, State) ->

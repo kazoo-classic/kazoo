@@ -38,8 +38,8 @@
 -define(ACCOUNT_ID, "eunit_testing_account").
 -else.
 -define(ACCOUNT_ID(Options)
-        ,?BW2_ACCOUNT_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
-        ).
+       ,?BW2_ACCOUNT_ID(knm_carriers:account_id(Options), knm_carriers:reseller_id(Options))
+       ).
 -endif.
 
 -define(IS_SANDBOX_PROVISIONING_TRUE

@@ -50,7 +50,7 @@ api_get(Url, _) ->
 -spec api_post(nonempty_string(), binary()) -> api_res().
 api_post(Url, Body) ->
     api_post(Url, Body, []).
-    
+
 -spec api_post(nonempty_string(), binary(), knm_search:options()) -> api_res().
 -ifndef(TEST).
 api_post(Url, Body, Options) ->

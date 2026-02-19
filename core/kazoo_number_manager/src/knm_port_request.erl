@@ -643,7 +643,7 @@ reconcile_app_used_by(Numbers, JObj) ->
                   Nums -> knm_numbers:assign_to_app(Nums, App)
               end
       end
-     , NumAppUsage
+     ,NumAppUsage
      ).
 
 -spec log_wrong_app_in_portin(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.

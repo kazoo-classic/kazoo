@@ -26,7 +26,11 @@ Key | Description | Type | Default | Required | Support Level
 `call_restriction` | Account level call restrictions for each available number classification | `object()` | `{}` | `false` |  
 `call_waiting` | Parameters for server-side call waiting | [#/definitions/call_waiting](#call_waiting) |   | `false` |  
 `caller_id` | The account default caller ID parameters | [#/definitions/caller_id](#caller_id) |   | `false` |  
+`caller_id_options.ensure_valid` | Ensure caller id is valid (must match a DID on the account) | `boolean()` |   | `false` |  
+`caller_id_options.ensure_valid_owner` | Ensure caller id is valid (must match a DID assigned to the user) | `boolean()` |   | `false` |  
 `caller_id_options.outbound_privacy` | Determines what appears as caller id for offnet outbound calls. Values: full - hides name and number; name - hides only name; number - hides only number; none - hides nothing | `string('full' | 'name' | 'number' | 'none')` |   | `false` |  
+`caller_id_options.passthrough_ensure_valid` | Ensure passthrough caller id is valid (must match a DID on the account) | `boolean()` |   | `false` |  
+`caller_id_options.passthrough_ensure_valid_owner` | Ensure passthrough caller id is valid (must match a DID assigned to the user) | `boolean()` |   | `false` |  
 `caller_id_options.show_rate` | Whether to show the rate | `boolean()` |   | `false` |  
 `caller_id_options` | custom properties for configuring caller_id | `object()` |   | `false` |  
 `dial_plan` | A list of default rules used to modify dialed numbers | [#/definitions/dialplans](#dialplans) |   | `false` |  
@@ -116,16 +120,20 @@ Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `asserted.name` | The asserted identity name for the object type | `string(0..35)` |   | `false` |  
 `asserted.number` | The asserted identity number for the object type | `string(0..35)` |   | `false` |  
+`asserted.passthrough` | Whether to pass through CLI from the endpoint | `boolean()` |   | `false` |  
 `asserted.realm` | The asserted identity realm for the object type | `string()` |   | `false` |  
 `asserted` | Used to convey the proven identity of the originator of a request within a trusted network. | `object()` |   | `false` |  
 `emergency.name` | The caller id name for the object type | `string(0..35)` |   | `false` |  
 `emergency.number` | The caller id number for the object type | `string(0..35)` |   | `false` |  
+`emergency.passthrough` | Whether to pass through CLI from the endpoint | `boolean()` |   | `false` |  
 `emergency` | The caller ID used when a resource is flagged as 'emergency' | `object()` |   | `false` |  
 `external.name` | The caller id name for the object type | `string(0..35)` |   | `false` |  
 `external.number` | The caller id number for the object type | `string(0..35)` |   | `false` |  
+`external.passthrough` | Whether to pass through CLI from the endpoint | `boolean()` |   | `false` |  
 `external` | The default caller ID used when dialing external numbers | `object()` |   | `false` |  
 `internal.name` | The caller id name for the object type | `string(0..35)` |   | `false` |  
 `internal.number` | The caller id number for the object type | `string(0..35)` |   | `false` |  
+`internal.passthrough` | Whether to pass through CLI from the endpoint | `boolean()` |   | `false` |  
 `internal` | The default caller ID used when dialing internal extensions | `object()` |   | `false` |  
 
 ### dialplans

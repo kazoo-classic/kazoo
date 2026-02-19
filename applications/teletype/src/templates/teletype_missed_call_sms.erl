@@ -75,20 +75,20 @@ process_req(DataJObj) ->
 
     Data = kz_json:get_value([<<"notify">>, <<"data">>], DataJObj),
     From_user = kz_json:get_value(<<"from_user">>, Data),
-    To_users = 
-    case kz_json:get_value(<<"to_users">>, Data) of
-        X when X == []; X =:= 'undefined' ->
-            [kz_json:get_value(<<"from_user">>, DataJObj)];
-         Else -> Else
-    end,
+    To_users =
+        case kz_json:get_value(<<"to_users">>, Data) of
+            X when X == []; X =:= 'undefined' ->
+                [kz_json:get_value(<<"from_user">>, DataJObj)];
+            Else -> Else
+        end,
     Message = kz_json:get_value(<<"message">>, Data),
     Macros = props:filter_undefined(
-                 [{<<"system">>, teletype_util:system_params()}
-                 ,{<<"account">>, teletype_util:account_params(DataJObj)}
-                 ,{<<"missed_call">>,  build_missed_call_data(DataJObj)}
-                 ,{<<"message">>,  Message}
-                 | teletype_util:build_call_data(DataJObj, 'undefined')
-                 ]),
+               [{<<"system">>, teletype_util:system_params()}
+               ,{<<"account">>, teletype_util:account_params(DataJObj)}
+               ,{<<"missed_call">>,  build_missed_call_data(DataJObj)}
+               ,{<<"message">>,  Message}
+                | teletype_util:build_call_data(DataJObj, 'undefined')
+               ]),
 
     %% Populate templates
     RenderedTemplates = teletype_templates:render(?TEMPLATE_ID, Macros, DataJObj),
@@ -133,10 +133,10 @@ send_sms([], _From, _AccountId, _Url, _RenderedTemplates, Acc) ->
 send_sms([To|Others], From, AccountId, Url, RenderedTemplates, Acc) ->
     Msg = props:get_value(<<"text/plain">>, RenderedTemplates),
     Payload = kz_json:set_values([{<<"to">>, To}
-                                  ,{<<"from">>, From}
-                                  ,{<<"account_id">>, AccountId}
-                                  ,{<<"message">>, Msg}]
-                                  ,kz_json:new()),
+                                 ,{<<"from">>, From}
+                                 ,{<<"account_id">>, AccountId}
+                                 ,{<<"message">>, Msg}]
+                                ,kz_json:new()),
     Data = kz_json:set_value(<<"data">>, Payload, kz_json:new()),
     Response = kz_http:put(Url, req_headers(), kz_json:encode(Data)),
     send_sms(Others, From, AccountId, Url, RenderedTemplates, [handle_resp(Response)|Acc]).

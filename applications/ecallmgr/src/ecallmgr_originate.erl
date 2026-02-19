@@ -478,7 +478,7 @@ get_eavesdrop_action(JObj) ->
     end.
 
 -spec build_originate_args(kz_term:ne_binary(), state(), kz_json:object(), kz_term:ne_binary()) -> kz_term:api_binary().
-build_originate_args(Action, #state{control_pid=CtrlPid} = State, JObj, FetchId) ->
+build_originate_args(Action, #state{control_pid=CtrlPid}=State, JObj, FetchId) ->
     case kz_json:get_value(<<"Endpoints">>, JObj, []) of
         [] ->
             lager:warning("no endpoints defined in originate request"),
@@ -854,14 +854,14 @@ update_endpoint(Endpoint, #state{node=Node
 maybe_add_member_cid(EP, JObj) ->
     case member_call_id(JObj) of
         undefined -> EP;
-        MemberCallId -> 
+        MemberCallId ->
             maybe_add_aleg_callid(EP, MemberCallId)
     end.
 
 maybe_add_aleg_callid(EP, MemberCallId) ->
     case ?ALEG_CALLID_HEADER of
         'undefined' -> EP;
-        HeaderName -> 
+        HeaderName ->
             add_aleg_callid(HeaderName, MemberCallId, EP)
     end.
 

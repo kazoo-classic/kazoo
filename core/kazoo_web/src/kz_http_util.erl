@@ -491,7 +491,7 @@ encode_multipart(Parts, Boundary) ->
 
 -spec encode_multipart(parts(), binary(), binary()) -> binary().
 encode_multipart([], Boundary, Encoded) ->
-    Close = <<"\r\n--" , Boundary/binary, "--">>,
+    Close = <<"\r\n--", Boundary/binary, "--">>,
     <<Encoded/binary, Close/binary>>;
 encode_multipart([{Body, Headers} | Parts], Boundary, Encoded) ->
     Delimiter = <<"\r\n--" ,Boundary/binary, "\r\n">>,

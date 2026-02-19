@@ -178,7 +178,7 @@ attachment_handler_jobj(Handler, Props) ->
     kz_json:set_value(kz_term:to_binary(Handler), JObj, kz_json:new()).
 
 -spec handle_put_attachment(att_map(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()
-                           , kz_term:proplist(), kz_term:proplist()) ->
+                           ,kz_term:proplist(), kz_term:proplist()) ->
           {'ok', kz_json:object()} |
           {'ok', kz_json:object(), kz_term:proplist()} |
           data_error().

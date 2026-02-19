@@ -723,7 +723,7 @@ build_query_spec_maybe_owner(Realm, JObj) ->
              ,{'=:=', '$2', {'const', Realm}}
              }
             };
-         Owner ->
+        Owner ->
             {#registration{owner_id = '$1', _ = '_'}
             ,{'=:=', '$1', {'const', Owner}}
             }

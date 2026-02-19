@@ -111,16 +111,16 @@ dump(#{}=_ExtraArgs, {AccountDb, NextStartKey}) ->
 
 dump_reseller_cdrs(ResellerId) ->
     {ok, JObjs} = kz_datamgr:get_results(<<"accounts">>, ?ACC_VIEW_DESCENDANTS
-                            ,[{'startkey', [ResellerId]}
-                              ,{'endkey', [ResellerId, kz_json:new()]}
-                             ]),
+                                        ,[{'startkey', [ResellerId]}
+                                         ,{'endkey', [ResellerId, kz_json:new()]}
+                                         ]),
     OutputPath = output_path(ResellerId),
     Header = [K || {K, _} <- kzd_cdrs:csv_headers('true')],
     'ok' = file:write_file(OutputPath, row_to_iolist(Header), ['append']),
     Descendants = [{OutputPath, kz_doc:id(JObj)} || JObj <- JObjs],
     lists:foreach(fun dump_descendant_cdrs/1, Descendants),
     maybe_post_process_csv(OutputPath).
- 
+
 dump_descendant_cdrs({OutputPath, AccountId}) ->
     {Yr,Mn,_Dy} = yesterday(),
     AccountDb = kz_util:format_account_mod_id(AccountId, Yr, Mn),
@@ -177,8 +177,8 @@ query(AccountDb, ViewOptions) ->
                | ViewOptions
               ],
     lager:debug("kz_datamgr:paginate_results(~p, ~p, ~p)."
-              ,[AccountDb, <<"cdrs/crossbar_listing">>, Options]
-              ),
+               ,[AccountDb, <<"cdrs/crossbar_listing">>, Options]
+               ),
     kz_datamgr:paginate_results(AccountDb
                                ,<<"cdrs/crossbar_listing">>
                                ,Options

@@ -96,7 +96,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
-handle_info('timeout', #state{counter = Counter} = State) ->
+handle_info('timeout', #state{counter=Counter}=State) ->
     _ = erlang:send_after(?REFRESH_TIMEOUT * ?MILLISECONDS_IN_SECOND, self(), 'timeout'),
     case ?REFRESH_ENABLED of
         'false' -> {'noreply', State};
@@ -108,7 +108,7 @@ handle_info(_Info, State) ->
     {'noreply', State}.
 
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
-handle_event(JObj, #state{counter = Counter} = State) ->
+handle_event(JObj, #state{counter=Counter}=State) ->
     case ?REFRESH_ENABLED of
         'false' -> {'reply', []};
         'true' ->

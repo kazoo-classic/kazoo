@@ -229,7 +229,7 @@ get_flags(DIDOptions, ServerOptions, AccountOptions, State) ->
 get_flags(_FaxNumber='false', DIDOptions, ServerOptions, AccountOptions, State) ->
     get_flags(DIDOptions, ServerOptions, AccountOptions, State);
 get_flags(_FaxNumber='true', DIDOptions, ServerOptions, AccountOptions, State) ->
-    lager:debug("trunkstore source DID is a fax number"),
+    lager:debug("trunkstore source DID is a fax number; adding 'fax' flag"),
     [<<"fax">>] ++ get_flags(DIDOptions, ServerOptions, AccountOptions, State).
 
 -spec get_offnet_flags(kz_json:object(), kz_json:object(), kz_json:object(), kapps_call:call(), kz_term:ne_binaries()) -> kz_term:ne_binaries().

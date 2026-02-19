@@ -153,7 +153,7 @@ process_specific_event(Event, Event, UUID, FSProps, Node) ->
 maybe_build_presence_event(Node, UUID, FSProps) ->
     Routines = [fun check_proto/3
                ,fun check_publish_state/3
-               ,fun check_restrict_presence/3 
+               ,fun check_restrict_presence/3
                ],
     case lists:all(fun(F) -> F(Node, UUID, FSProps) end, Routines) of
         'false' -> 'ok';

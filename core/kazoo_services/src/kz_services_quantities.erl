@@ -401,8 +401,8 @@ calculate_device_updates(JObj, Updates) ->
 -spec calculate_agent_updates(kz_json:object(), kz_term:proplist()) -> kz_term:proplist().
 calculate_agent_updates(JObj, Updates) ->
     case kz_doc:type(JObj) =:= <<"user">>
-         andalso
-         length(kz_json:get_list_value(<<"queues">>, JObj, [])) > 0 of
+        andalso
+        length(kz_json:get_list_value(<<"queues">>, JObj, [])) > 0 of
         'false' -> Updates;
         'true' ->
             PrivLevel = kzd_users:priv_level(JObj, <<"user">>),
@@ -421,12 +421,12 @@ calculate_call_recording_updates(JObj, Updates) ->
 calculate_call_recording_updates_user(JObj, Updates) ->
     CallRecording = kzd_users:call_recording(JObj),
     Enabled = kz_json:get_value([<<"outbound">>, <<"onnet">>, <<"enabled">>], CallRecording, 'false')
-              orelse
-              kz_json:get_value([<<"outbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false')
-              orelse
-              kz_json:get_value([<<"inbound">>, <<"onnet">>, <<"enabled">>], CallRecording, 'false')
-              orelse
-              kz_json:get_value([<<"inbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false'),
+        orelse
+        kz_json:get_value([<<"outbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false')
+        orelse
+        kz_json:get_value([<<"inbound">>, <<"onnet">>, <<"enabled">>], CallRecording, 'false')
+        orelse
+        kz_json:get_value([<<"inbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false'),
     case Enabled of
         'true' ->
             Key = [<<"call_recording">>, <<"user_enabled">>],
@@ -437,12 +437,12 @@ calculate_call_recording_updates_user(JObj, Updates) ->
 calculate_call_recording_updates_device(JObj, Updates) ->
     CallRecording = kzd_devices:call_recording(JObj),
     Enabled = kz_json:get_value([<<"outbound">>, <<"onnet">>, <<"enabled">>], CallRecording, 'false')
-              orelse
-              kz_json:get_value([<<"outbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false')
-              orelse
-              kz_json:get_value([<<"inbound">>, <<"onnet">>, <<"enabled">>], CallRecording, 'false')
-              orelse
-              kz_json:get_value([<<"inbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false'),
+        orelse
+        kz_json:get_value([<<"outbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false')
+        orelse
+        kz_json:get_value([<<"inbound">>, <<"onnet">>, <<"enabled">>], CallRecording, 'false')
+        orelse
+        kz_json:get_value([<<"inbound">>, <<"offnet">>, <<"enabled">>], CallRecording, 'false'),
     case Enabled of
         'true' ->
             Key = [<<"call_recording">>, <<"device_enabled">>],

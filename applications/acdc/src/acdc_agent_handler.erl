@@ -178,7 +178,7 @@ maybe_stop_agent(AccountId, AgentId, JObj) ->
 maybe_pause_agent(AccountId, AgentId, <<"infinity">>, Alias, JObj) ->
     maybe_pause_agent(AccountId, AgentId, 'infinity', Alias, JObj);
 maybe_pause_agent(AccountId, AgentId, Timeout, Alias, JObj) when is_integer(Timeout)
-                                                                orelse Timeout =:= 'infinity' ->
+                                                                 orelse Timeout =:= 'infinity' ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' -> lager:debug("agent ~s (~s) not found, nothing to do", [AgentId, AccountId]);
         Sup when is_pid(Sup) ->

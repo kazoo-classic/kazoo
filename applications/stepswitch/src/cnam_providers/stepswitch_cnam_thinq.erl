@@ -18,7 +18,7 @@
 -define(CNAM_HTTP_URL(AccountId, ResellerId)
        ,kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"http_url">>, ?CNAM_HTTP_URL(ResellerId))
        ).
-    
+
 -define(CNAM_HTTP_URL(AccountId)
        ,kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"http_url">>, ?DEFAULT_URL)
        ).
@@ -26,22 +26,22 @@
 -define(CNAM_AUTH_USERNAME(AccountId, ResellerId)
        ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"http_basic_auth_username">>, ?CNAM_AUTH_USERNAME(ResellerId)))
        ).
-    
+
 -define(CNAM_AUTH_USERNAME(AccountId)
        ,kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"http_basic_auth_username">>, <<>>)
        ).
-    
+
 -define(CNAM_AUTH_PASSWORD(AccountId, ResellerId)
        ,kz_term:to_list(kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"http_basic_auth_password">>, ?CNAM_AUTH_PASSWORD(ResellerId)))
        ).
-    
+
 -define(CNAM_AUTH_PASSWORD(AccountId)
        ,kapps_account_config:get_ne_binary(AccountId, ?CNAM_CONFIG_CAT, <<"http_basic_auth_password">>, <<>>)
        ).
 
 -spec request(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
 request(Number, JObj0) ->
-    
+
     Thinq_number = to_thinq_number(Number),
     JObj = set_phone_number(Thinq_number, JObj0),
     Url = kz_term:to_list(get_http_url(JObj)),
@@ -85,7 +85,7 @@ get_http_options() ->
     ].
 
 -spec maybe_enable_auth(kz_json:object(), [{nonempty_string(), nonempty_string()}]) ->
-                               [{nonempty_string(), nonempty_string()}].
+          [{nonempty_string(), nonempty_string()}].
 maybe_enable_auth(JObj, Props) ->
     AccountId = kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     Username = ?CNAM_AUTH_USERNAME(AccountId, kzd_accounts:reseller_id(AccountId)),
@@ -111,7 +111,7 @@ maybe_truncate(CallerInformation) when size(CallerInformation) > 18 ->
 maybe_truncate(CallerInformation) -> CallerInformation.
 
 -spec basic_auth(nonempty_string(), nonempty_string()) ->
-                        {nonempty_string(), nonempty_string()}.
+          {nonempty_string(), nonempty_string()}.
 basic_auth(Username, Password) ->
     Encoded = base64:encode_to_string(Username ++ [$: | Password]),
     {"Authorization", lists:flatten(["Basic ", Encoded])}.

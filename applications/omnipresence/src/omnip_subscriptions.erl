@@ -123,7 +123,7 @@ handle_call(_Request, _From, State) ->
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'sync', {<<"Start">>, Node}}, #state{sync_nodes=Nodes}=State) ->
     {'noreply', State#state{sync_nodes=[Node | Nodes]}};
-handle_cast({'sync', {<<"End">>, Node}}, #state{sync_nodes=Nodes} = State) ->
+handle_cast({'sync', {<<"End">>, Node}}, #state{sync_nodes=Nodes}=State) ->
     {'noreply', State#state{sync_nodes=Nodes -- [Node]}};
 
 handle_cast({'subscribe', #omnip_subscription{}=Sub},  State) ->
@@ -183,7 +183,7 @@ handle_info({'timeout', Ref, ?EXPIRE_MESSAGE}=_R, #state{expire_ref=Ref, ready='
 handle_info(?TABLE_READY(_Tbl), State) ->
     lager:debug("recv table_ready for ~p", [_Tbl]),
     {'noreply', State#state{ready='true'}, 'hibernate'};
-handle_info('check_sync', #state{sync_nodes=[]} = State) ->
+handle_info('check_sync', #state{sync_nodes=[]}=State) ->
     omnipresence_shared_listener:start_listener(),
     {'noreply', State};
 handle_info('check_sync', State) ->

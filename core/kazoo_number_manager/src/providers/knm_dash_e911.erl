@@ -18,8 +18,8 @@
 
 %% -define(AUTH_USERNAME(Number), kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_username">>, <<>>)).
 -define(AUTH_USERNAME(Number)
-        , ?DASH_AUTH_USERNAME(get_account_id(Number), get_reseller_id(Number))
-        ).
+       ,?DASH_AUTH_USERNAME(get_account_id(Number), get_reseller_id(Number))
+       ).
 
 -define(DEFAULT_DASH_AUTH_USERNAME, <<>>).
 
@@ -35,8 +35,8 @@
 
 %% -define(AUTH_PASSWORD, kapps_config:get_binary(?MOD_CONFIG_CAT, <<"auth_password">>, <<>>)).
 -define(AUTH_PASSWORD(Number)
-        ,?DASH_AUTH_PASSWORD(get_account_id(Number), get_reseller_id(Number))
-        ).
+       ,?DASH_AUTH_PASSWORD(get_account_id(Number), get_reseller_id(Number))
+       ).
 
 -define(DEFAULT_DASH_AUTH_PASSWORD, <<>>).
 -define(DASH_AUTH_PASSWORD(AccountId, ResellerId)
@@ -73,13 +73,13 @@
 %%------------------------------------------------------------------------------
 
 -spec save(knm_number:knm_number()) ->
-                  knm_number:knm_number().
+          knm_number:knm_number().
 save(Number) ->
     State = knm_phone_number:state(knm_number:phone_number(Number)),
     save(Number, State).
 
 -spec save(knm_number:knm_number(), kz_term:api_binary()) ->
-                  knm_number:knm_number().
+          knm_number:knm_number().
 save(Number, ?NUMBER_STATE_RESERVED) ->
     maybe_update_e911(Number);
 save(Number, ?NUMBER_STATE_IN_SERVICE) ->
@@ -95,7 +95,7 @@ save(Number, _State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete(knm_number:knm_number()) ->
-                    knm_number:knm_number().
+          knm_number:knm_number().
 delete(Number) ->
     case feature(Number) of
         'undefined' -> Number;

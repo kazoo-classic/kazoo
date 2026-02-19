@@ -61,7 +61,7 @@ allow_connection(Req, RemoteIP) ->
     lager:info("allowing connection from ~s", [SessionId]),
     {'cowboy_websocket', Req, {RemoteIP, SessionId}, #{idle_timeout => ?IDLE_TIMEOUT}}.
 
--spec terminate(any(), cowboy_req:req(), bh_context:context() | cowboy_websocket:opts())  -> 'ok'.
+-spec terminate(any(), cowboy_req:req(), bh_context:context() | cowboy_websocket:opts()) -> 'ok'.
 terminate(_Reason, Req, Opts) when is_list(Opts) ->
     lager:info("socket for session ~s down early: ~p", [session_id(Req), _Reason]);
 terminate(_Reason, Req, Context) ->

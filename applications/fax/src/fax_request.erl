@@ -200,7 +200,7 @@ handle_cast('success', State) ->
     notify_success(State),
     {'stop', 'normal', State};
 
-handle_cast('cancel', #state{fax_result='undefined'} = State) ->
+handle_cast('cancel', #state{fax_result='undefined'}=State) ->
     lager:warning("canceling active fax receiver"),
     {'stop', 'normal', State};
 
@@ -208,7 +208,7 @@ handle_cast('cancel', State) ->
     lager:warning("canceling fax receiver"),
     {'stop', 'normal', State};
 
-handle_cast({'channel_event', <<"CHANNEL_DESTROY">>, _JObj}, #state{monitor='undefined'} = State) ->
+handle_cast({'channel_event', <<"CHANNEL_DESTROY">>, _JObj}, #state{monitor='undefined'}=State) ->
     lager:warning("received channel destroy for fax receiver"),
     {'stop', 'normal', State};
 

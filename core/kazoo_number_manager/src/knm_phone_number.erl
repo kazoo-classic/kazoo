@@ -107,6 +107,8 @@
 
 -type knm_phone_numbers() :: [knm_phone_number(), ...].
 
+-type number_attribute() :: kz_term:api_ne_binary() | kz_json:object() | kz_term:api_ne_binaries().
+
 -export_type([knm_phone_number/0
              ,knm_phone_numbers/0
              ,set_function/0
@@ -188,8 +190,8 @@ from_number_with_options(DID, Options) ->
 %%------------------------------------------------------------------------------
 
 -spec fetch(kz_term:ne_binary() | knm_numbers:collection()) ->
-                   knm_phone_number_return() |
-                   knm_numbers:collection().
+          knm_phone_number_return() |
+          knm_numbers:collection().
 fetch(?NE_BINARY=Num) ->
     fetch(Num, knm_number_options:default());
 fetch(T0=#{todo := Nums, options := Options}) ->
@@ -437,8 +439,8 @@ fetch(Num=?NE_BINARY, Options) ->
     end.
 
 -spec fetch(kz_term:ne_binary(), kz_term:ne_binary(), knm_number_options:options()) ->
-                   {'ok', kz_json:object()} |
-                   {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 fetch(NumberDb, NormalizedNum, Options) ->
     case knm_number_options:batch_run(Options) of
         'true' -> kz_datamgr:open_doc(NumberDb, NormalizedNum);
@@ -447,7 +449,7 @@ fetch(NumberDb, NormalizedNum, Options) ->
 -endif.
 
 -spec handle_fetch(kz_json:object(), knm_number_options:options()) ->
-                          {'ok', knm_phone_number()}.
+          {'ok', knm_phone_number()}.
 handle_fetch(JObj, Options) ->
     PN = from_json_with_options(JObj, Options),
     case state(PN) =:= ?NUMBER_STATE_AVAILABLE
@@ -609,7 +611,7 @@ to_json(PN=#knm_phone_number{doc=JObj}) ->
           props:filter_empty(
             [{<<"_rev">>, rev(PN)}
             ,{?PVT_ASSIGNED_TO, assigned_to(PN)}
-%%            ,{?PVT_PREVIOUSLY_ASSIGNED_TO, prev_assigned_to(PN)}
+             %%,{?PVT_PREVIOUSLY_ASSIGNED_TO, prev_assigned_to(PN)}
             ,{?PVT_USED_BY, used_by(PN)}
             ,{?PVT_FEATURES, features(PN)}
             ,{?PVT_FEATURES_ALLOWED, features_allowed(PN)}
@@ -763,7 +765,7 @@ features_fold(FeatureKey, Acc, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec from_json_with_options(kz_json:object(), knm_phone_number() | knm_number_options:options()) ->
-                                    knm_phone_number().
+          knm_phone_number().
 from_json_with_options(JObj, #knm_phone_number{}=PN) ->
     Options = [{'dry_run', dry_run(PN)}
               ,{'batch_run', batch_run(PN)}
@@ -800,8 +802,8 @@ is_phone_number(_) -> 'false'.
 %% @end
 %%------------------------------------------------------------------------------
 -spec setters(knm_phone_number() | knm_numbers:collection(), set_functions()) ->
-                     knm_phone_number_return() |
-                     knm_numbers:collection().
+          knm_phone_number_return() |
+          knm_numbers:collection().
 
 setters(#knm_phone_number{}=PN, Routines) ->
     setters_pn(PN, Routines);
@@ -1657,49 +1659,45 @@ is_reserved_from_parent(_) -> 'false'.
 %% @doc Number attributes feature functions
 %% @end
 %%------------------------------------------------------------------------------
--spec number_attributes(kz_term:ne_binary() | knm_phone_number()) -> kz_json:object().
+-spec number_attributes(kz_term:api_binary() | knm_phone_number()) -> kz_json:object().
+number_attributes('undefined') -> kz_json:new();
+number_attributes(<<>>) -> kz_json:new();
 number_attributes(DID) when is_binary(DID) ->
     case fetch(DID) of
-        {'ok', Number} -> number_attributes(Number);
-        _Err -> lager:debug("failed to fetch number ~s: ~p", [DID, _Err])
+        {'ok', Number} ->
+            number_attributes(Number);
+        _Err ->
+            lager:debug("failed to fetch number ~s: ~p", [DID, _Err]),
+            kz_json:new()
     end;
 number_attributes(Number) ->
     feature(Number, ?FEATURE_ATTRIBUTES).
 
--spec number_attribute(kz_term:ne_binary() | knm_phone_number(), kz_term:ne_binary()) -> kz_term:api_ne_binary() | kz_json:object() | kz_term:api_ne_binaries().
-number_attribute(DID, Attribute) when is_binary(DID) ->
-    case fetch(DID) of
-        {'ok', Number} -> number_attribute(Number, Attribute);
-        _Err -> lager:debug("failed to fetch number ~s: ~p", [DID, _Err])
-    end;
+-spec number_attribute(kz_term:api_binary() | knm_phone_number(), kz_term:ne_binary()) -> number_attribute().
 number_attribute(Number, Attribute) ->
-    case feature(Number, ?FEATURE_ATTRIBUTES) of
-        'undefined' -> 'undefined';
-        Feature -> kz_json:get_value(Attribute, Feature)
-    end.
+    kz_json:get_value(Attribute, number_attributes(Number)).
 
--spec number_group(kz_term:ne_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
+-spec number_group(kz_term:api_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
 number_group(Number) ->
     number_attribute(Number, ?ATTRIBUTES_GROUP).
 
--spec number_class(kz_term:ne_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
+-spec number_class(kz_term:api_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
 number_class(Number) ->
     number_attribute(Number, ?ATTRIBUTES_CLASS).
 
--spec number_attribute_options(kz_term:ne_binary() | knm_phone_number()) -> kz_term:ne_binaries().
+-spec number_attribute_options(kz_term:api_binary() | knm_phone_number()) -> kz_term:ne_binaries().
 number_attribute_options(Number) ->
     OptsList = number_attribute(Number, ?ATTRIBUTES_OPTIONS),
     case OptsList of %% only non-empty binaries are returned
-        [_|_] ->
-            lists:filter(fun(X) -> is_binary(X) andalso X =/= <<>> end, OptsList);
+        [_|_] -> lists:filter(fun(X) -> is_binary(X) andalso X =/= <<>> end, OptsList);
         _ -> []
     end.
 
--spec number_traffic(kz_term:ne_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
+-spec number_traffic(kz_term:api_binary() | knm_phone_number()) -> kz_term:api_ne_binary().
 number_traffic(Number) ->
     number_attribute(Number, ?ATTRIBUTES_TRAFFIC).
 
--spec is_fax_number(kz_term:ne_binary() | knm_phone_number()) -> boolean().
+-spec is_fax_number(kz_term:api_binary() | knm_phone_number()) -> boolean().
 is_fax_number(Number) ->
     number_traffic(Number) =:= <<"fax">>.
 

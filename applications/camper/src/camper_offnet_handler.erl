@@ -119,7 +119,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
-handle_cast({'gen_listener', {'created_queue', Q}}, #state{queue = 'undefined'} = S) ->
+handle_cast({'gen_listener', {'created_queue', Q}}, #state{queue='undefined'}=S) ->
     gen_listener:cast(self(), 'count'),
     {'noreply', S#state{queue = Q}};
 handle_cast('count', #state{n_try=NTry
@@ -159,7 +159,7 @@ handle_cast('hangup_parked_call', #state{parked_call=ParkedCall
              ],
     kapi_dialplan:publish_command(CtrlQ, props:filter_undefined(Hangup)),
     {'noreply', State#state{parked_call = 'undefined'}};
-handle_cast({'parked', <<_/binary>> = CallId}, #state{moh=MOH
+handle_cast({'parked', <<_/binary>>=CallId}, #state{moh=MOH
                                                      ,queue=Queue
                                                      ,offnet_ctl_q=CtrlQ
                                                      ,stored_call=Call
@@ -175,14 +175,14 @@ handle_cast({'parked', <<_/binary>> = CallId}, #state{moh=MOH
     lager:debug("Publishing bridge request"),
     kapi_resource:publish_originate_req(Req),
     {'noreply', State#state{parked_call = CallId}};
-handle_cast('wait', #state{try_after = Time} = State) ->
+handle_cast('wait', #state{try_after=Time}=State) ->
     lager:debug("wait before next try"),
     {'ok', _TimerRef} = timer:apply_after(Time, 'gen_listener', 'cast', [self(), 'count']),
     {'noreply', State};
-handle_cast('stop_campering', #state{stop_timer = 'undefined'} = State) ->
+handle_cast('stop_campering', #state{stop_timer='undefined'}=State) ->
     lager:debug("stopping"),
     {'stop', 'normal', State};
-handle_cast('stop_campering', #state{stop_timer = Timer} = State) ->
+handle_cast('stop_campering', #state{stop_timer=Timer}=State) ->
     lager:debug("stopping"),
     _ = timer:cancel(Timer),
     {'stop', 'normal', State};

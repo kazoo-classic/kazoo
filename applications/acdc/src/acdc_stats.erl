@@ -406,7 +406,7 @@ agent_call_table_opts() ->
     ].
 
 -define(BINDINGS, [{'self', []}
-                   ,{?MODULE, ['federate']}
+                  ,{?MODULE, ['federate']}
                   ]).
 -define(RESPONDERS, [{{?MODULE, 'handle_call_stat'}
                      ,[{<<"acdc_call_stat">>, <<"waiting">>}

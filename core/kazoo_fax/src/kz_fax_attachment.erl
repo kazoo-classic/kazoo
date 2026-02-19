@@ -76,7 +76,7 @@ save_outbound(Db, Doc, Original, ContentType) ->
             store_attachments(Db, Doc, [Att])
     end.
 
--spec update_fax_props(kz_json:object(), kz_term:proplist())  -> kz_json:object().
+-spec update_fax_props(kz_json:object(), kz_term:proplist()) -> kz_json:object().
 update_fax_props(Doc, Props) ->
     kz_json:set_values([{<<"pvt_pages">>, props:get_value(<<"page_count">>, Props, 0)}
                        ,{<<"pvt_size">>, props:get_value(<<"size">>, Props, 0)}
@@ -412,7 +412,7 @@ fetch_url(Doc) ->
         'undefined' ->
             lager:info("no attachment found on doc ~s", [kz_doc:id(Doc)]),
             {'error', <<"no attachment found">>};
-        FetchRequest  ->
+        FetchRequest ->
             fetch_url(kzd_fax:document_url(Doc), FetchRequest)
     end.
 
