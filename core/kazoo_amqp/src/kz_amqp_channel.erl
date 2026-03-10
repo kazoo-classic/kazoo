@@ -220,7 +220,8 @@ basic_publish(#kz_amqp_assignment{channel=Channel
     MsgId = extract_msg_id(AmqpMsg#'amqp_msg'.payload),
     lager:debug("published(~s ~s) to ~s(~s) exchange (routing key ~s) via ~p"
                ,[MsgId, kz_util:pretty_print_bytes(iolist_size(AmqpMsg#'amqp_msg'.payload), 'truncated')
-                ,_Exchange, _Broker
+                ,_Exchange
+                ,kz_util:sanitize_uri(_Broker)
                 ,_RK
                 ,Channel
                 ]
