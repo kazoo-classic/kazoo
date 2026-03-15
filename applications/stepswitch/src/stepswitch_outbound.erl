@@ -119,7 +119,27 @@ maybe_correct_shortdial(Number, OffnetReq) ->
             publish_no_resources(OffnetReq);
         CorrectedNumber ->
             lager:debug("corrected shortdial from '~s' to '~s', trying routing again", [Number, CorrectedNumber]),
-            handle_audio_req(CorrectedNumber, OffnetReq)
+            case kz_json:get_ne_binary_value(<<"Resource-Type">>, OffnetReq) of
+                <<"originate">> -> handle_originate_req(CorrectedNumber, OffnetReq);
+                _ -> handle_audio_req(CorrectedNumber, OffnetReq)
+            end
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Check application type, and see if kapps_config says that shortdial
+%% correction should be performed for that application type. The most common
+%% use for this is for fax-to-email where lazy users want to use local numbers
+%% and have the country/area code automatically prepended, based on the CLI.
+%% In the case of fax, the boolean system_config/fax.shortdial_correction
+%% parameter will enable or disable this functionality.
+%% @end
+%%------------------------------------------------------------------------------
+-spec maybe_correct_shortdial_originate(kz_term:ne_binary(), kapi_offnet_resource:req()) -> any().
+maybe_correct_shortdial_originate(Number, OffnetReq) ->
+    AppName = kz_json:get_ne_binary_value(<<"Application-Name">>, OffnetReq),
+    case kapps_config:get_boolean(AppName, <<"shortdial_correction">>) of
+        'true' -> maybe_correct_shortdial(Number, OffnetReq);
+        _ -> publish_no_resources(OffnetReq)
     end.
 
 %%------------------------------------------------------------------------------
@@ -139,7 +159,7 @@ local_extension(Props, OffnetReq) ->
 maybe_originate(Number, OffnetReq) ->
     RouteBy = stepswitch_util:route_by(),
     case RouteBy:endpoints(Number, OffnetReq) of
-        [] -> publish_no_resources(OffnetReq);
+        [] -> maybe_correct_shortdial_originate(Number, OffnetReq);
         Endpoints -> stepswitch_request_sup:originate(Endpoints, OffnetReq)
     end.
 
